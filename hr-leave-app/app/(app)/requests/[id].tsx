@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { View, Text, ScrollView, Alert, Pressable, Image, Linking, Platform } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, Text, ScrollView, Alert, Pressable, Image, Linking, Platform, TextInput } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FileText, Download, ImageIcon } from 'lucide-react-native';
@@ -21,6 +21,7 @@ import { getStatusLabel, getStatusVariant, canTransition, getRemainingApprovalSt
 import { formatDateRange, formatHours, formatDaysHours, formatFileSize } from '@/lib/utils';
 import { computeBalanceImpact } from '@/lib/hours-calculator';
 import { LeaveStatus, LeaveType, ExcessDetermination, Role } from '@/types/enums';
+import { MAX_COMMENT_LENGTH } from '@/lib/constants';
 
 export default function RequestDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -29,6 +30,10 @@ export default function RequestDetailScreen() {
   const { currentRequest, fetchRequestById, cancelRequest } = useLeaveRequest();
   const { approve, reject, determineExcess } = useApprovals();
   const { balances, fetchBalance } = useBalance();
+
+  const [showCancelForm, setShowCancelForm] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     if (id) fetchRequestById(id);
@@ -65,18 +70,19 @@ export default function RequestDetailScreen() {
     fetchRequestById(req.id);
   };
 
-  const handleCancel = () => {
-    Alert.alert('Cancel Request', 'Are you sure you want to cancel this request?', [
-      { text: 'No', style: 'cancel' },
-      {
-        text: 'Yes, Cancel',
-        style: 'destructive',
-        onPress: async () => {
-          await cancelRequest(req.id, 'Cancelled by employee');
-          router.back();
-        },
-      },
-    ]);
+  const handleCancel = async () => {
+    if (!showCancelForm) {
+      setShowCancelForm(true);
+      return;
+    }
+    if (!cancelReason.trim()) return;
+    setCancelling(true);
+    try {
+      await cancelRequest(req.id, cancelReason.trim());
+      router.back();
+    } catch {
+      setCancelling(false);
+    }
   };
 
   const handleExcessDetermination = async (determination: ExcessDetermination, comment?: string) => {
@@ -203,12 +209,50 @@ export default function RequestDetailScreen() {
           <ApprovalActions onApprove={handleApprove} onReject={handleReject} />
         )}
 
-        {/* Cancel button */}
+        {/* Cancel section */}
         {isEmployee && canCancel && (
           <View className="mt-4 mb-8">
-            <Button variant="destructive" onPress={handleCancel} fullWidth>
-              Cancel Request
-            </Button>
+            {showCancelForm && (
+              <Card className="mb-3">
+                <Text className="text-sm font-semibold text-text-primary dark:text-white mb-2">
+                  Reason for Cancellation
+                </Text>
+                <TextInput
+                  value={cancelReason}
+                  onChangeText={setCancelReason}
+                  placeholder="Please provide a reason for cancelling..."
+                  placeholderTextColor="#94A3B8"
+                  multiline
+                  numberOfLines={3}
+                  maxLength={MAX_COMMENT_LENGTH}
+                  className="border border-border dark:border-slate-600 rounded-xl px-4 py-3 text-sm text-text-primary dark:text-white bg-surface dark:bg-slate-800 mb-2"
+                  style={{ minHeight: 80, textAlignVertical: 'top' }}
+                />
+                <Text className="text-xs text-text-muted dark:text-slate-400 mb-2">
+                  {cancelReason.length}/{MAX_COMMENT_LENGTH} characters
+                </Text>
+              </Card>
+            )}
+            <View className="flex-row gap-3">
+              {showCancelForm && (
+                <View className="flex-1">
+                  <Button variant="ghost" onPress={() => { setShowCancelForm(false); setCancelReason(''); }} fullWidth>
+                    Back
+                  </Button>
+                </View>
+              )}
+              <View className="flex-1">
+                <Button
+                  variant="destructive"
+                  onPress={handleCancel}
+                  loading={cancelling}
+                  disabled={showCancelForm && !cancelReason.trim()}
+                  fullWidth
+                >
+                  {showCancelForm ? 'Confirm Cancellation' : 'Cancel Request'}
+                </Button>
+              </View>
+            </View>
           </View>
         )}
       </ScrollView>
