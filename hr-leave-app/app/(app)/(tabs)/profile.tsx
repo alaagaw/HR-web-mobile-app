@@ -376,13 +376,11 @@ function WebThemeCard({
 function EditProfileDialog({
   open,
   user,
-  isDark,
   onClose,
   onSave,
 }: {
   open: boolean;
   user: any;
-  isDark: boolean;
   onClose: () => void;
   onSave: (data: { full_name: string; phone: string }) => void;
 }) {
@@ -410,23 +408,24 @@ function EditProfileDialog({
       PaperProps={{
         sx: {
           borderRadius: 3,
-          backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
           backgroundImage: 'none',
         },
       }}
     >
       <DialogTitle
         sx={{
+          pb: 1,
+          pt: 3,
+          px: 3,
           fontWeight: 700,
           fontSize: 18,
-          color: isDark ? '#FFFFFF' : '#0F172A',
-          borderBottom: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
-          pb: 2,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
         }}
       >
         Edit Profile
       </DialogTitle>
-      <DialogContent sx={{ pt: '24px !important', overflow: 'visible', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      <DialogContent sx={{ pt: '24px !important', pb: 1, px: 3, overflow: 'visible', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
         <MuiTextField
           label="Full Name"
           value={fullName}
@@ -467,15 +466,18 @@ function EditProfileDialog({
           helperText="Managed by HR admin"
         />
       </DialogContent>
-      <DialogActions sx={{ px: 3, py: 2, borderTop: `1px solid ${isDark ? '#334155' : '#E2E8F0'}` }}>
-        <MuiButton onClick={onClose} sx={{ textTransform: 'none', color: isDark ? '#94A3B8' : '#64748B' }}>
+      <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+        <MuiButton
+          onClick={onClose}
+          sx={{ textTransform: 'none', fontWeight: 600 }}
+        >
           Cancel
         </MuiButton>
         <MuiButton
           variant="contained"
           onClick={handleSave}
           disabled={!hasChanges || !fullName.trim() || saving}
-          sx={{ textTransform: 'none', fontWeight: 600, borderRadius: '10px' }}
+          sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, px: 3 }}
         >
           {saving ? 'Saving...' : 'Save Changes'}
         </MuiButton>
@@ -576,7 +578,6 @@ export default function ProfileScreen() {
             <EditProfileDialog
               open={editOpen}
               user={user}
-              isDark={isDark}
               onClose={() => setEditOpen(false)}
               onSave={handleSaveProfile}
             />
