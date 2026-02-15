@@ -8,6 +8,7 @@ import {
   Users,
   User,
   CalendarDays,
+  Settings,
 } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
 import { useAuth } from '@/hooks/use-auth';
@@ -20,21 +21,24 @@ import { notificationService, approvalService } from '@/services';
 const isWeb = Platform.OS === 'web';
 
 const NAV_ITEMS = [
-  { name: 'dashboard', title: 'Dashboard', Icon: LayoutDashboard, approverOnly: false },
-  { name: 'requests', title: 'My Requests', Icon: FileText, approverOnly: false },
-  { name: 'approvals', title: 'Approvals', Icon: CheckSquare, approverOnly: true },
-  { name: 'team', title: 'Team', Icon: Users, approverOnly: true },
-  { name: 'calendar', title: 'Calendar', Icon: CalendarDays, approverOnly: false },
-  { name: 'profile', title: 'Profile', Icon: User, approverOnly: false },
+  { name: 'dashboard', title: 'Dashboard', Icon: LayoutDashboard, approverOnly: false, hrOnly: false },
+  { name: 'requests', title: 'My Requests', Icon: FileText, approverOnly: false, hrOnly: false },
+  { name: 'approvals', title: 'Approvals', Icon: CheckSquare, approverOnly: true, hrOnly: false },
+  { name: 'team', title: 'Team', Icon: Users, approverOnly: true, hrOnly: false },
+  { name: 'calendar', title: 'Calendar', Icon: CalendarDays, approverOnly: false, hrOnly: false },
+  { name: 'admin', title: 'HR Admin', Icon: Settings, approverOnly: false, hrOnly: true },
+  { name: 'profile', title: 'Profile', Icon: User, approverOnly: false, hrOnly: false },
 ] as const;
 
-function WebSidebar({ isApprover, isDark, pendingCount }: { isApprover: boolean; isDark: boolean; pendingCount: number }) {
+function WebSidebar({ user, isApprover, isHR, isDark, pendingCount }: { user: any; isApprover: boolean; isHR: boolean; isDark: boolean; pendingCount: number }) {
   const router = useRouter();
   const pathname = usePathname();
 
   const activeTab = NAV_ITEMS.find((item) => pathname.includes(`/${item.name}`))?.name ?? 'dashboard';
 
-  const visibleItems = NAV_ITEMS.filter((item) => !item.approverOnly || isApprover);
+  const visibleItems = NAV_ITEMS.filter(
+    (item) => (!item.approverOnly || isApprover) && (!item.hrOnly || isHR)
+  );
 
   return (
     <View
@@ -47,9 +51,37 @@ function WebSidebar({ isApprover, isDark, pendingCount }: { isApprover: boolean;
       }}
     >
       {/* Branding */}
-      <View style={{ paddingHorizontal: 24, paddingBottom: 24, borderBottomWidth: 1, borderBottomColor: isDark ? '#1E293B' : '#F1F5F9', marginBottom: 8 }}>
+      <View style={{ paddingHorizontal: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: isDark ? '#1E293B' : '#F1F5F9', marginBottom: 8 }}>
         <Text style={{ fontSize: 20, fontWeight: '700', color: '#2563EB' }}>HR Leave</Text>
         <Text style={{ fontSize: 12, color: isDark ? '#64748B' : '#94A3B8', marginTop: 2 }}>Management System</Text>
+
+        {/* Logged-in user */}
+        {user && (
+          <View style={{ marginTop: 16, paddingTop: 14, borderTopWidth: 1, borderTopColor: isDark ? '#1E293B' : '#F1F5F9' }}>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: isDark ? '#E2E8F0' : '#0F172A' }} numberOfLines={1}>
+              {user.full_name}
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 6 }}>
+              <View
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: 4,
+                  backgroundColor: user.is_active !== false ? '#16A34A' : '#DC2626',
+                }}
+              />
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: '500',
+                  color: user.is_active !== false ? '#16A34A' : '#DC2626',
+                }}
+              >
+                {user.is_active !== false ? 'Active' : 'Inactive'}
+              </Text>
+            </View>
+          </View>
+        )}
       </View>
 
       {/* Nav items */}
@@ -137,6 +169,8 @@ export default function TabLayout() {
     role === Role.HR ||
     role === Role.HRDirector;
 
+  const isHR = role === Role.HR || role === Role.HRDirector;
+
   const tabs = (
     <Tabs
       tabBar={isWeb ? () => null : undefined}
@@ -212,6 +246,14 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="admin"
+        options={{
+          title: 'HR Admin',
+          tabBarIcon: ({ color, size }) => <Settings size={size} color={color} />,
+          href: isHR ? undefined : null,
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
@@ -224,7 +266,7 @@ export default function TabLayout() {
   if (isWeb) {
     return (
       <View style={{ flexDirection: 'row', flex: 1 }}>
-        <WebSidebar isApprover={isApprover} isDark={isDark} pendingCount={pendingCount} />
+        <WebSidebar user={user} isApprover={isApprover} isHR={isHR} isDark={isDark} pendingCount={pendingCount} />
         <View style={{ flex: 1 }}>{tabs}</View>
       </View>
     );

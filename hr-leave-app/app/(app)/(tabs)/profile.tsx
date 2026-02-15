@@ -1,7 +1,8 @@
-import { useCallback } from 'react';
-import { View, Text, ScrollView, Pressable } from 'react-native';
+import { useCallback, useState } from 'react';
+import { View, Text, ScrollView, Pressable, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import { useColorScheme } from 'nativewind';
 import {
   Mail,
   Phone,
@@ -12,6 +13,10 @@ import {
   Sun,
   Moon,
   Monitor,
+  Clock,
+  Users,
+  LogOut,
+  Pencil,
 } from 'lucide-react-native';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,13 +26,475 @@ import { useBalance } from '@/hooks/use-balance';
 import { useThemeStore } from '@/stores/theme-store';
 import { getRoleLabel, formatHours, formatDaysHours, getInitials } from '@/lib/utils';
 import { DEFAULT_WORKDAY_HOURS } from '@/lib/constants';
-import { Role } from '@/types/enums';
+import { userService } from '@/services';
+
+const isWeb = Platform.OS === 'web';
+
+let MuiButton: any;
+let Dialog: any;
+let DialogTitle: any;
+let DialogContent: any;
+let DialogActions: any;
+let MuiTextField: any;
+if (isWeb) {
+  MuiButton = require('@mui/material/Button').default;
+  Dialog = require('@mui/material/Dialog').default;
+  DialogTitle = require('@mui/material/DialogTitle').default;
+  DialogContent = require('@mui/material/DialogContent').default;
+  DialogActions = require('@mui/material/DialogActions').default;
+  MuiTextField = require('@mui/material/TextField').default;
+}
+
+// ─── Web Components ──────────────────────────────────────────────────
+
+function WebProfileCard({
+  user,
+  isDark,
+  onEdit,
+}: {
+  user: any;
+  isDark: boolean;
+  onEdit: () => void;
+}) {
+  const fields = [
+    { icon: Mail, label: 'Email', value: user.email },
+    { icon: Phone, label: 'Phone', value: user.phone || 'Not set' },
+    { icon: Building, label: 'Department', value: user.department || 'Not set' },
+    { icon: Shield, label: 'Role', value: getRoleLabel(user.role) },
+    { icon: Clock, label: 'Workday Hours', value: `${user.workday_hours || DEFAULT_WORKDAY_HOURS}h` },
+    {
+      icon: Users,
+      label: 'Status',
+      value: user.is_active !== false ? 'Active' : 'Inactive',
+      color: user.is_active !== false ? '#16A34A' : '#DC2626',
+    },
+  ];
+
+  return (
+    <div
+      style={{
+        backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
+        border: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
+        borderRadius: 20,
+        overflow: 'hidden',
+      }}
+    >
+      {/* Banner header — avatar + name + role + edit */}
+      <div
+        style={{
+          background: isDark
+            ? 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)'
+            : 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
+          padding: '28px 32px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 24,
+        }}
+      >
+        {/* Avatar */}
+        <div
+          style={{
+            width: 80,
+            height: 80,
+            borderRadius: 40,
+            background: 'linear-gradient(135deg, #2563EB, #1D4ED8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            boxShadow: '0 4px 14px rgba(37,99,235,0.3)',
+          }}
+        >
+          <span style={{ fontSize: 28, fontWeight: 700, color: '#FFFFFF' }}>
+            {getInitials(user.full_name)}
+          </span>
+        </div>
+
+        {/* Name + role + department */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: isDark ? '#FFFFFF' : '#0F172A', marginBottom: 4 }}>
+            {user.full_name}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: '#FFFFFF',
+                backgroundColor: '#2563EB',
+                borderRadius: 6,
+                padding: '3px 10px',
+              }}
+            >
+              {getRoleLabel(user.role)}
+            </span>
+            {user.department && (
+              <span style={{ fontSize: 14, color: isDark ? '#94A3B8' : '#64748B' }}>
+                {user.department}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Edit button */}
+        <MuiButton
+          variant="outlined"
+          size="small"
+          startIcon={<Pencil size={14} />}
+          onClick={onEdit}
+          sx={{
+            textTransform: 'none',
+            fontWeight: 600,
+            fontSize: 13,
+            borderRadius: '10px',
+            borderColor: isDark ? '#475569' : '#CBD5E1',
+            color: isDark ? '#CBD5E1' : '#475569',
+            '&:hover': { borderColor: '#2563EB', color: '#2563EB', backgroundColor: 'rgba(37,99,235,0.06)' },
+          }}
+        >
+          Edit
+        </MuiButton>
+      </div>
+
+      {/* Info grid */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 0,
+        }}
+      >
+        {fields.map((field, i) => (
+          <div
+            key={field.label}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '16px 24px',
+              borderTop: `1px solid ${isDark ? '#334155' : '#F1F5F9'}`,
+              borderRight: i % 2 === 0 ? `1px solid ${isDark ? '#334155' : '#F1F5F9'}` : 'none',
+            }}
+          >
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                backgroundColor: isDark ? 'rgba(37,99,235,0.1)' : '#EFF6FF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <field.icon size={16} color={isDark ? '#60A5FA' : '#2563EB'} />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 11, color: isDark ? '#94A3B8' : '#94A3B8', textTransform: 'uppercase' as const, letterSpacing: '0.04em', fontWeight: 600, marginBottom: 2 }}>
+                {field.label}
+              </div>
+              <div
+                style={{
+                  fontSize: 14,
+                  fontWeight: 500,
+                  color: (field as any).color || (isDark ? '#E2E8F0' : '#0F172A'),
+                }}
+              >
+                {field.value}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function WebLeaveCard({
+  ptoBalance,
+  emergencyCount,
+  workdayHours,
+  isDark,
+}: {
+  ptoBalance: any;
+  emergencyCount: number;
+  workdayHours: number;
+  isDark: boolean;
+}) {
+  return (
+    <div
+      style={{
+        backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
+        border: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
+        borderRadius: 16,
+        overflow: 'hidden',
+      }}
+    >
+      <div style={{ padding: '18px 24px 14px' }}>
+        <span style={{ fontSize: 15, fontWeight: 700, color: isDark ? '#FFFFFF' : '#0F172A' }}>
+          Leave Summary
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: 12, padding: '0 24px 20px' }}>
+        {/* PTO */}
+        <div
+          style={{
+            flex: 1,
+            borderRadius: 14,
+            padding: '18px 16px',
+            textAlign: 'center' as const,
+            backgroundColor: ptoBalance && ptoBalance.balance_hours <= 0
+              ? (isDark ? 'rgba(220,38,38,0.12)' : '#FEF2F2')
+              : (isDark ? 'rgba(37,99,235,0.1)' : '#EFF6FF'),
+            border: `1px solid ${ptoBalance && ptoBalance.balance_hours <= 0
+              ? (isDark ? 'rgba(220,38,38,0.25)' : '#FECACA')
+              : (isDark ? 'rgba(37,99,235,0.2)' : '#BFDBFE')}`,
+          }}
+        >
+          <CalendarDays
+            size={22}
+            color={ptoBalance && ptoBalance.balance_hours <= 0 ? '#DC2626' : '#2563EB'}
+            style={{ marginBottom: 6, alignSelf: 'center' } as any}
+          />
+          <div
+            style={{
+              fontSize: 22,
+              fontWeight: 700,
+              color: ptoBalance && ptoBalance.balance_hours <= 0 ? '#DC2626' : (isDark ? '#60A5FA' : '#2563EB'),
+            }}
+          >
+            {ptoBalance ? formatHours(ptoBalance.balance_hours) : '--'}
+          </div>
+          {ptoBalance && (
+            <div style={{ fontSize: 12, color: isDark ? '#94A3B8' : '#64748B', marginTop: 2 }}>
+              {formatDaysHours(ptoBalance.balance_hours, workdayHours)}
+            </div>
+          )}
+          <div style={{ fontSize: 11, color: isDark ? '#64748B' : '#94A3B8', marginTop: 4, fontWeight: 600, textTransform: 'uppercase' as const }}>
+            PTO Available
+          </div>
+        </div>
+
+        {/* Emergency */}
+        <div
+          style={{
+            flex: 1,
+            borderRadius: 14,
+            padding: '18px 16px',
+            textAlign: 'center' as const,
+            backgroundColor: isDark ? 'rgba(220,38,38,0.1)' : '#FEF2F2',
+            border: `1px solid ${isDark ? 'rgba(220,38,38,0.2)' : '#FECACA'}`,
+          }}
+        >
+          <Zap
+            size={22}
+            color="#DC2626"
+            style={{ marginBottom: 6, alignSelf: 'center' } as any}
+          />
+          <div style={{ fontSize: 22, fontWeight: 700, color: '#DC2626' }}>
+            {emergencyCount}/3
+          </div>
+          <div style={{ fontSize: 11, color: isDark ? '#64748B' : '#94A3B8', marginTop: 6, fontWeight: 600, textTransform: 'uppercase' as const }}>
+            Emergency / Month
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WebThemeCard({
+  theme,
+  setTheme,
+  isDark,
+}: {
+  theme: string;
+  setTheme: (t: 'light' | 'dark' | 'system') => void;
+  isDark: boolean;
+}) {
+  const options = [
+    { value: 'light' as const, label: 'Light', Icon: Sun },
+    { value: 'dark' as const, label: 'Dark', Icon: Moon },
+    { value: 'system' as const, label: 'System', Icon: Monitor },
+  ];
+
+  return (
+    <div
+      style={{
+        backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
+        border: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
+        borderRadius: 16,
+        padding: '18px 24px 20px',
+      }}
+    >
+      <div style={{ fontSize: 15, fontWeight: 700, color: isDark ? '#FFFFFF' : '#0F172A', marginBottom: 14 }}>
+        Appearance
+      </div>
+      <div style={{ display: 'flex', gap: 10 }}>
+        {options.map(({ value, label, Icon }) => {
+          const isActive = theme === value;
+          return (
+            <div
+              key={value}
+              onClick={() => setTheme(value)}
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 6,
+                padding: '14px 12px',
+                borderRadius: 12,
+                cursor: 'pointer',
+                border: `1.5px solid ${isActive ? '#2563EB' : (isDark ? '#334155' : '#E2E8F0')}`,
+                backgroundColor: isActive
+                  ? (isDark ? 'rgba(37,99,235,0.15)' : '#EFF6FF')
+                  : (isDark ? '#0F172A' : '#F8FAFC'),
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <Icon size={20} color={isActive ? '#2563EB' : (isDark ? '#64748B' : '#94A3B8')} />
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: isActive ? 600 : 500,
+                  color: isActive ? '#2563EB' : (isDark ? '#94A3B8' : '#64748B'),
+                }}
+              >
+                {label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Edit Profile Dialog */
+function EditProfileDialog({
+  open,
+  user,
+  isDark,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  user: any;
+  isDark: boolean;
+  onClose: () => void;
+  onSave: (data: { full_name: string; phone: string }) => void;
+}) {
+  const [fullName, setFullName] = useState(user.full_name || '');
+  const [phone, setPhone] = useState(user.phone || '');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onSave({ full_name: fullName, phone });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const hasChanges = fullName !== (user.full_name || '') || phone !== (user.phone || '');
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="xs"
+      fullWidth
+      PaperProps={{
+        sx: {
+          borderRadius: 3,
+          backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
+          backgroundImage: 'none',
+        },
+      }}
+    >
+      <DialogTitle
+        sx={{
+          fontWeight: 700,
+          fontSize: 18,
+          color: isDark ? '#FFFFFF' : '#0F172A',
+          borderBottom: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
+          pb: 2,
+        }}
+      >
+        Edit Profile
+      </DialogTitle>
+      <DialogContent sx={{ pt: '24px !important', overflow: 'visible', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+        <MuiTextField
+          label="Full Name"
+          value={fullName}
+          onChange={(e: any) => setFullName(e.target.value)}
+          fullWidth
+          size="small"
+        />
+        <MuiTextField
+          label="Phone"
+          value={phone}
+          onChange={(e: any) => setPhone(e.target.value)}
+          fullWidth
+          size="small"
+          placeholder="e.g. +971 50 123 4567"
+        />
+        <MuiTextField
+          label="Email"
+          value={user.email}
+          fullWidth
+          size="small"
+          disabled
+          helperText="Email cannot be changed"
+        />
+        <MuiTextField
+          label="Department"
+          value={user.department || ''}
+          fullWidth
+          size="small"
+          disabled
+          helperText="Managed by HR admin"
+        />
+        <MuiTextField
+          label="Role"
+          value={getRoleLabel(user.role)}
+          fullWidth
+          size="small"
+          disabled
+          helperText="Managed by HR admin"
+        />
+      </DialogContent>
+      <DialogActions sx={{ px: 3, py: 2, borderTop: `1px solid ${isDark ? '#334155' : '#E2E8F0'}` }}>
+        <MuiButton onClick={onClose} sx={{ textTransform: 'none', color: isDark ? '#94A3B8' : '#64748B' }}>
+          Cancel
+        </MuiButton>
+        <MuiButton
+          variant="contained"
+          onClick={handleSave}
+          disabled={!hasChanges || !fullName.trim() || saving}
+          sx={{ textTransform: 'none', fontWeight: 600, borderRadius: '10px' }}
+        >
+          {saving ? 'Saving...' : 'Save Changes'}
+        </MuiButton>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+// ─── Main Screen ─────────────────────────────────────────────────────
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, signOut } = useAuth();
+  const setUser = require('@/stores/auth-store').useAuthStore.getState().setUser;
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const { balances, emergencyCount, fetchBalance, fetchEmergencyCount } = useBalance();
   const { theme, setTheme } = useThemeStore();
+  const [editOpen, setEditOpen] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -41,7 +508,85 @@ export default function ProfileScreen() {
   if (!user) return null;
 
   const ptoBalance = balances.find((b) => b.leave_type === 'pto');
-  const isHR = user.role === Role.HR || user.role === Role.HRDirector;
+
+  const handleSaveProfile = async (data: { full_name: string; phone: string }) => {
+    const updated = await userService.updateProfile(user.id, data);
+    setUser(updated);
+    setEditOpen(false);
+  };
+
+  // ─── Web Layout ──────────────────────────────────────────────────
+
+  if (isWeb) {
+    return (
+      <div
+        style={{
+          padding: 28,
+          overflowY: 'auto' as const,
+          height: '100%',
+          backgroundColor: isDark ? '#0F172A' : '#F8FAFC',
+        }}
+      >
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+          {/* Two-column layout */}
+          <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 24, alignItems: 'stretch' }}>
+            {/* Left column */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              <WebProfileCard user={user} isDark={isDark} onEdit={() => setEditOpen(true)} />
+            </div>
+
+            {/* Right column */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <WebLeaveCard
+                ptoBalance={ptoBalance}
+                emergencyCount={emergencyCount}
+                workdayHours={user.workday_hours || DEFAULT_WORKDAY_HOURS}
+                isDark={isDark}
+              />
+              <WebThemeCard theme={theme} setTheme={setTheme} isDark={isDark} />
+              {/* Sign Out */}
+              <div
+                onClick={signOut}
+                style={{
+                  marginTop: 'auto',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  padding: '14px 24px',
+                  borderRadius: 14,
+                  cursor: 'pointer',
+                  border: `1px solid ${isDark ? 'rgba(220,38,38,0.3)' : '#FECACA'}`,
+                  backgroundColor: isDark ? 'rgba(220,38,38,0.08)' : '#FEF2F2',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={(e: any) => { e.currentTarget.style.backgroundColor = isDark ? 'rgba(220,38,38,0.15)' : '#FEE2E2'; }}
+                onMouseLeave={(e: any) => { e.currentTarget.style.backgroundColor = isDark ? 'rgba(220,38,38,0.08)' : '#FEF2F2'; }}
+              >
+                <LogOut size={18} color="#DC2626" />
+                <span style={{ fontSize: 14, fontWeight: 600, color: '#DC2626' }}>
+                  Sign Out
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Edit Profile Dialog (outside grid — it's a portal/modal) */}
+          {editOpen && (
+            <EditProfileDialog
+              open={editOpen}
+              user={user}
+              isDark={isDark}
+              onClose={() => setEditOpen(false)}
+              onSave={handleSaveProfile}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Mobile Layout (unchanged) ────────────────────────────────────
 
   return (
     <ScrollView className="flex-1 bg-background dark:bg-slate-900" contentContainerStyle={{ padding: 16 }}>
@@ -116,36 +661,6 @@ export default function ProfileScreen() {
           ))}
         </View>
       </Card>
-
-      {/* HR Admin links */}
-      {isHR && (
-        <Card className="mb-4">
-          <Text className="text-sm font-semibold text-text-primary dark:text-white mb-3">HR Admin</Text>
-          <Button
-            variant="secondary"
-            onPress={() => router.push('/(app)/admin/employees' as any)}
-            fullWidth
-            className="mb-2"
-          >
-            Manage Employees
-          </Button>
-          <Button
-            variant="secondary"
-            onPress={() => router.push('/(app)/admin/balances' as any)}
-            fullWidth
-            className="mb-2"
-          >
-            Manage Balances
-          </Button>
-          <Button
-            variant="secondary"
-            onPress={() => router.push('/(app)/admin/balance-ledger' as any)}
-            fullWidth
-          >
-            Balance Ledger
-          </Button>
-        </Card>
-      )}
 
       {/* Sign out */}
       <Button variant="destructive" onPress={signOut} fullWidth>
