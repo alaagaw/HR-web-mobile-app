@@ -5,6 +5,7 @@ import {
   Users,
   Wallet,
   BookOpen,
+  ClipboardList,
   ChevronRight,
   Settings,
 } from 'lucide-react-native';
@@ -110,6 +111,13 @@ export default function AdminScreen() {
       icon: BookOpen,
       iconColor: '#F59E0B',
       path: '/(app)/admin/balance-ledger',
+    },
+    {
+      title: 'Request History',
+      description: 'Complete history of all leave requests. Search, filter by date range, and review all transactions.',
+      icon: ClipboardList,
+      iconColor: '#8B5CF6',
+      path: '/(app)/admin/request-history',
     },
   ];
 

@@ -276,6 +276,19 @@ export const leaveService: LeaveService = {
     return (data ?? []) as LeaveRequest[];
   },
 
+  async getAllRequestsInRange(dateFrom, dateTo) {
+    const { data, error } = await supabase
+      .from('leave_requests')
+      .select('*, employee:profiles!employee_id(id, full_name, role, department), current_assignee:profiles!current_assignee_id(id, full_name, role)')
+      .gte('created_at', dateFrom)
+      .lte('created_at', dateTo)
+      .order('created_at', { ascending: false })
+      .limit(500);
+
+    if (error) throw new Error(error.message);
+    return (data ?? []) as LeaveRequest[];
+  },
+
   async reassignRequest(id, newAssigneeId, reason) {
     const { data: request } = await supabase
       .from('leave_requests')

@@ -34,6 +34,7 @@ export interface LeaveService {
   cancelRequest(id: string, reason: string): Promise<void>;
   // HR admin
   getAllRequests(filters?: RequestFilters): Promise<LeaveRequest[]>;
+  getAllRequestsInRange(dateFrom: string, dateTo: string): Promise<LeaveRequest[]>;
   reassignRequest(id: string, newAssigneeId: string, reason: string): Promise<void>;
   bypassApproval(id: string, reason: string): Promise<void>;
 }
