@@ -81,6 +81,8 @@ export default function SignInScreen() {
                 error={errors.password?.message}
                 secureTextEntry
                 autoComplete="password"
+                returnKeyType="go"
+                onSubmitEditing={handleSubmit(onSubmit)}
               />
             )}
           />

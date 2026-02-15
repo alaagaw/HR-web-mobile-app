@@ -13,6 +13,7 @@ import {
   XCircle,
   ArrowRight,
   ChevronRight,
+  Bell,
 } from 'lucide-react-native';
 import { StatsCard } from '@/components/dashboard/stats-card';
 import { RequestCard } from '@/components/leave/request-card';
@@ -532,6 +533,7 @@ export default function DashboardScreen() {
   const { pendingApprovals, fetchPendingApprovals, approve } = useApprovals();
   const setPendingCount = useApprovalStore((s) => s.setPendingCount);
   const { notifications, fetchNotifications } = useNotifications(user?.id);
+  const unreadCount = useNotificationStore((s) => s.unreadCount);
 
   useFocusEffect(
     useCallback(() => {
@@ -657,6 +659,37 @@ export default function DashboardScreen() {
                 </span>
                 <span style={{ fontSize: 12, color: isDark ? DT.warningText : '#92400E', fontWeight: 500 }}>
                   Awaiting your approval
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Notification bell */}
+          <div
+            onClick={() => router.push('/(app)/notifications' as any)}
+            style={{ position: 'relative', cursor: 'pointer', padding: 6 }}
+          >
+            <Bell size={20} color={isDark ? '#94A3B8' : '#64748B'} />
+            {unreadCount > 0 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 2,
+                  right: 2,
+                  backgroundColor: '#DC2626',
+                  borderRadius: 10,
+                  minWidth: 18,
+                  height: 18,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  paddingLeft: 4,
+                  paddingRight: 4,
+                  border: `2px solid ${isDark ? '#0b1220' : '#FFFFFF'}`,
+                }}
+              >
+                <span style={{ color: '#FFFFFF', fontSize: 10, fontWeight: 700, lineHeight: 1 }}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
               </div>
             )}

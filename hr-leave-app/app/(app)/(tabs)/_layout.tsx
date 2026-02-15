@@ -9,6 +9,7 @@ import {
   User,
   CalendarDays,
   Settings,
+  Bell,
 } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
 import { useAuth } from '@/hooks/use-auth';
@@ -26,11 +27,12 @@ const NAV_ITEMS = [
   { name: 'approvals', title: 'Approvals', Icon: CheckSquare, approverOnly: true, hrOnly: false },
   { name: 'team', title: 'Team', Icon: Users, approverOnly: true, hrOnly: false },
   { name: 'calendar', title: 'Calendar', Icon: CalendarDays, approverOnly: false, hrOnly: false },
+  { name: 'notifications', title: 'Notifications', Icon: Bell, approverOnly: false, hrOnly: false, route: '/(app)/notifications' },
   { name: 'admin', title: 'HR Admin', Icon: Settings, approverOnly: false, hrOnly: true },
   { name: 'profile', title: 'Profile', Icon: User, approverOnly: false, hrOnly: false },
 ] as const;
 
-function WebSidebar({ user, isApprover, isHR, isDark, pendingCount }: { user: any; isApprover: boolean; isHR: boolean; isDark: boolean; pendingCount: number }) {
+function WebSidebar({ user, isApprover, isHR, isDark, pendingCount, unreadCount }: { user: any; isApprover: boolean; isHR: boolean; isDark: boolean; pendingCount: number; unreadCount: number }) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -92,7 +94,7 @@ function WebSidebar({ user, isApprover, isHR, isDark, pendingCount }: { user: an
         return (
           <Pressable
             key={item.name}
-            onPress={() => router.push(`/(app)/(tabs)/${item.name}` as any)}
+            onPress={() => router.push(('route' in item && item.route ? item.route : `/(app)/(tabs)/${item.name}`) as any)}
             style={({ pressed }: { pressed: boolean }) => ({
               flexDirection: 'row',
               alignItems: 'center',
@@ -121,6 +123,23 @@ function WebSidebar({ user, isApprover, isHR, isDark, pendingCount }: { user: an
             >
               {item.title}
             </Text>
+            {item.name === 'notifications' && unreadCount > 0 && (
+              <View
+                style={{
+                  backgroundColor: '#DC2626',
+                  borderRadius: 10,
+                  minWidth: 20,
+                  height: 20,
+                  paddingHorizontal: 6,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
+                  {unreadCount}
+                </Text>
+              </View>
+            )}
             {item.name === 'approvals' && pendingCount > 0 && (
               <View
                 style={{
@@ -152,6 +171,7 @@ export default function TabLayout() {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
   const setUnreadCount = useNotificationStore((s) => s.setUnreadCount);
+  const unreadCount = useNotificationStore((s) => s.unreadCount);
   const pendingCount = useApprovalStore((s) => s.pendingCount);
   const setPendingCount = useApprovalStore((s) => s.setPendingCount);
 
@@ -267,7 +287,7 @@ export default function TabLayout() {
   if (isWeb) {
     return (
       <View style={{ flexDirection: 'row', flex: 1 }}>
-        <WebSidebar user={user} isApprover={isApprover} isHR={isHR} isDark={isDark} pendingCount={pendingCount} />
+        <WebSidebar user={user} isApprover={isApprover} isHR={isHR} isDark={isDark} pendingCount={pendingCount} unreadCount={unreadCount} />
         <View style={{ flex: 1 }}>{tabs}</View>
       </View>
     );
