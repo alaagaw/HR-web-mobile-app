@@ -1,0 +1,9 @@
+# Secrets
+supabase_database_pass.txt
+
+# Windows artifacts
+nul
+
+# Environment files
+.env
+.env.local
