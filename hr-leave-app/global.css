@@ -18,16 +18,50 @@
   }
 
   .dark {
-    --color-background: #0F172A;
-    --color-surface: #1E293B;
-    --color-border: #334155;
-    --color-text-primary: #F8FAFC;
+    /* Enterprise Background */
+    --color-background: #0b1220;
+    --color-surface: #111a2e;
+    --color-border: rgba(255, 255, 255, 0.06);
+
+    /* Text */
+    --color-text-primary: #FFFFFF;
     --color-text-muted: #94A3B8;
     --color-text-light: #64748B;
-    --color-primary-light: #172554;
-    --color-success-light: #14532D;
-    --color-warning-light: #422006;
-    --color-error-light: #450A0A;
-    --color-info-light: #0C4A6E;
+
+    /* Semantic: Info (blue) */
+    --color-info-500: #3b82f6;
+    --color-info-bg: rgba(59, 130, 246, 0.15);
+    --color-info-text: #93c5fd;
+    --color-primary-light: rgba(59, 130, 246, 0.15);
+
+    /* Semantic: Success (green) */
+    --color-success-500: #22c55e;
+    --color-success-bg: rgba(34, 197, 94, 0.15);
+    --color-success-text: #86efac;
+    --color-success-light: rgba(34, 197, 94, 0.15);
+
+    /* Semantic: Warning (yellow) */
+    --color-warning-500: #f59e0b;
+    --color-warning-bg: rgba(245, 158, 11, 0.15);
+    --color-warning-text: #fcd34d;
+    --color-warning-light: rgba(245, 158, 11, 0.15);
+
+    /* Semantic: Danger (red) */
+    --color-danger-500: #ef4444;
+    --color-danger-bg: rgba(239, 68, 68, 0.15);
+    --color-danger-text: #fca5a5;
+    --color-error-light: rgba(239, 68, 68, 0.15);
+    --color-info-light: rgba(59, 130, 246, 0.15);
+
+    /* Sub-widget */
+    --color-sub-bg: rgba(255, 255, 255, 0.03);
+    --color-sub-hover: rgba(255, 255, 255, 0.06);
+
+    /* Action panel */
+    --color-action-bg: #16213e;
+    --color-action-border: rgba(59, 130, 246, 0.25);
+
+    /* Card */
+    --color-card-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
   }
 }

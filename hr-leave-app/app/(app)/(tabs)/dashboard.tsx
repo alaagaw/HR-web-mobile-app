@@ -13,7 +13,6 @@ import {
   XCircle,
   ArrowRight,
   ChevronRight,
-  Users,
 } from 'lucide-react-native';
 import { StatsCard } from '@/components/dashboard/stats-card';
 import { RequestCard } from '@/components/leave/request-card';
@@ -45,7 +44,76 @@ if (isWeb) {
   MuiButton = require('@mui/material/Button').default;
 }
 
-// ─── Web Components ──────────────────────────────────────────────────
+// ─── Enterprise Design Tokens ────────────────────────────────────────
+// Semantic color system: blue=info, yellow=warning, red=danger, green=success
+
+const DT = {
+  // Background
+  bgMain: '#0b1220',
+  bgGradient: 'linear-gradient(180deg, #0b1220 0%, #0f172a 100%)',
+
+  // Card surface
+  cardBg: '#111a2e',
+  cardBorder: 'rgba(255,255,255,0.06)',
+  cardShadow: '0 10px 30px rgba(0,0,0,0.35)',
+
+  // Info (blue) — informational metrics
+  infoBg: 'rgba(59,130,246,0.15)',
+  infoBorder: '#3b82f6',
+  infoText: '#93c5fd',
+
+  // Danger (red) — risk / limit / alert
+  dangerBg: 'rgba(239,68,68,0.15)',
+  dangerBorder: '#ef4444',
+  dangerText: '#fca5a5',
+
+  // Warning (yellow) — requires attention
+  warningBg: 'rgba(245,158,11,0.15)',
+  warningBorder: '#f59e0b',
+  warningText: '#fcd34d',
+
+  // Success (green) — completed / approved
+  successBg: 'rgba(34,197,94,0.15)',
+  successBorder: '#22c55e',
+  successText: '#86efac',
+
+  // Sub-widget rows
+  subBg: 'rgba(255,255,255,0.03)',
+  subHover: 'rgba(255,255,255,0.06)',
+
+  // Action panel (highlighted container)
+  actionBg: '#16213e',
+  actionBorder: 'rgba(59,130,246,0.25)',
+
+  // Text
+  textPrimary: '#FFFFFF',
+  textSecondary: '#94A3B8',
+  textMuted: '#64748B',
+
+  // Accent
+  accent: '#3b82f6',
+};
+
+// Light-mode fallbacks
+const LT = {
+  bgMain: '#F8FAFC',
+  cardBg: '#FFFFFF',
+  cardBorder: '#E2E8F0',
+  cardShadow: '0 4px 12px rgba(0,0,0,0.06)',
+  textPrimary: '#0F172A',
+  textSecondary: '#64748B',
+  textMuted: '#94A3B8',
+  subBg: '#F8FAFC',
+  actionBg: '#FFFFFF',
+  actionBorder: '#E2E8F0',
+  accent: '#2563EB',
+};
+
+function t(isDark: boolean) {
+  return isDark ? DT : LT;
+}
+
+// ─── Status chip color map ──────────────────────────────────────────
 
 const STATUS_COLOR_MAP: Record<string, 'warning' | 'success' | 'error' | 'default' | 'info'> = {
   [LeaveStatus.PendingSupervisor]: 'warning',
@@ -59,66 +127,7 @@ const STATUS_COLOR_MAP: Record<string, 'warning' | 'success' | 'error' | 'defaul
   [LeaveStatus.Submitted]: 'info',
 };
 
-/** Compact stat card for the MY STATUS row */
-function CompactStatCard({
-  title,
-  value,
-  subtitle,
-  icon: Icon,
-  borderColor,
-  isDark,
-}: {
-  title: string;
-  value: string | number;
-  subtitle?: string;
-  icon: any;
-  borderColor: string;
-  isDark: boolean;
-}) {
-  return (
-    <div
-      style={{
-        flex: 1,
-        border: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
-        borderLeft: `3px solid ${borderColor}`,
-        borderRadius: 12,
-        padding: '14px 16px',
-        backgroundColor: isDark ? 'rgba(15,23,42,0.5)' : '#F8FAFC',
-        minWidth: 0,
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-        <Icon size={14} color={borderColor} />
-        <span
-          style={{
-            fontSize: 10,
-            color: isDark ? '#94A3B8' : '#64748B',
-            textTransform: 'uppercase' as const,
-            letterSpacing: '0.05em',
-            fontWeight: 600,
-          }}
-        >
-          {title}
-        </span>
-      </div>
-      <div
-        style={{
-          fontSize: 24,
-          fontWeight: 700,
-          color: isDark ? '#FFFFFF' : '#0F172A',
-          lineHeight: 1.1,
-        }}
-      >
-        {value}
-      </div>
-      {subtitle && (
-        <div style={{ fontSize: 12, color: isDark ? '#64748B' : '#94A3B8', marginTop: 2 }}>
-          {subtitle}
-        </div>
-      )}
-    </div>
-  );
-}
+// ─── Web Components ──────────────────────────────────────────────────
 
 /** Action Required Card — left column */
 function ActionRequiredCard({
@@ -140,6 +149,7 @@ function ActionRequiredCard({
   onViewAllNotifications: () => void;
   onViewAllApprovals: () => void;
 }) {
+  const tk = t(isDark);
   const unreadCount = useNotificationStore((s) => s.unreadCount);
   const totalCount = (isApprover ? pendingApprovals.length : 0) + (unreadCount || 0);
   const recent = notifications.slice(0, 3);
@@ -147,11 +157,11 @@ function ActionRequiredCard({
   return (
     <div
       style={{
-        backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
-        border: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
+        backgroundColor: isDark ? DT.actionBg : tk.cardBg,
+        border: `1px solid ${isDark ? DT.actionBorder : tk.cardBorder}`,
         borderRadius: 16,
         overflow: 'hidden',
-        borderLeft: `4px solid #2563EB`,
+        boxShadow: tk.cardShadow,
       }}
     >
       {/* Header */}
@@ -161,16 +171,16 @@ function ActionRequiredCard({
           justifyContent: 'space-between',
           alignItems: 'center',
           padding: '16px 20px',
-          borderBottom: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
+          borderBottom: `1px solid ${isDark ? DT.cardBorder : tk.cardBorder}`,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Zap size={20} color="#F59E0B" />
+          <Zap size={20} color={DT.warningBorder} />
           <span
             style={{
               fontSize: 15,
               fontWeight: 700,
-              color: isDark ? '#FFFFFF' : '#0F172A',
+              color: tk.textPrimary,
               textTransform: 'uppercase' as const,
               letterSpacing: '0.03em',
             }}
@@ -182,7 +192,7 @@ function ActionRequiredCard({
               style={{
                 fontSize: 12,
                 fontWeight: 600,
-                backgroundColor: '#2563EB',
+                backgroundColor: tk.accent,
                 color: '#FFFFFF',
                 borderRadius: 10,
                 padding: '2px 8px',
@@ -195,7 +205,7 @@ function ActionRequiredCard({
           )}
         </div>
         <span onClick={onViewAllApprovals} style={{ cursor: 'pointer', display: 'flex' }}>
-          <ChevronRight size={20} color={isDark ? '#64748B' : '#94A3B8'} />
+          <ChevronRight size={20} color={tk.textMuted} />
         </span>
       </div>
 
@@ -210,7 +220,7 @@ function ActionRequiredCard({
               style={{
                 fontSize: 11,
                 fontWeight: 600,
-                backgroundColor: '#F59E0B',
+                backgroundColor: DT.warningBorder,
                 color: '#FFFFFF',
                 borderRadius: 8,
                 padding: '1px 7px',
@@ -227,20 +237,20 @@ function ActionRequiredCard({
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 padding: '12px 20px',
-                borderBottom: `1px solid ${isDark ? '#334155' : '#F1F5F9'}`,
-                backgroundColor: isDark ? 'rgba(30,41,59,0.5)' : '#FAFBFC',
+                borderBottom: `1px solid ${isDark ? DT.cardBorder : '#F1F5F9'}`,
+                backgroundColor: isDark ? DT.subBg : '#FAFBFC',
               }}
             >
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: isDark ? '#FFFFFF' : '#0F172A' }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: tk.textPrimary }}>
                     {req.employee?.full_name || '—'}
                   </span>
-                  <span style={{ fontSize: 13, color: isDark ? '#94A3B8' : '#64748B' }}>
+                  <span style={{ fontSize: 13, color: tk.textSecondary }}>
                     {req.leave_type === LeaveType.Emergency ? 'Emergency' : 'PTO'}
                   </span>
                 </div>
-                <div style={{ fontSize: 13, color: isDark ? '#64748B' : '#94A3B8' }}>
+                <div style={{ fontSize: 13, color: tk.textMuted }}>
                   {formatDateRange(req.start_date, req.end_date)}
                 </div>
               </div>
@@ -291,15 +301,15 @@ function ActionRequiredCard({
         </div>
       )}
 
-      {/* No approvals fallback for non-approvers or empty */}
+      {/* No approvals fallback */}
       {(!isApprover || pendingApprovals.length === 0) && (
         <div
           style={{
             padding: '20px',
             textAlign: 'center' as const,
-            color: isDark ? '#64748B' : '#94A3B8',
+            color: tk.textMuted,
             fontSize: 13,
-            borderBottom: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
+            borderBottom: `1px solid ${isDark ? DT.cardBorder : tk.cardBorder}`,
           }}
         >
           No pending approvals
@@ -323,7 +333,7 @@ function ActionRequiredCard({
             onClick={onViewAllNotifications}
             style={{
               fontSize: 13,
-              color: '#2563EB',
+              color: tk.accent,
               cursor: 'pointer',
               fontWeight: 500,
               display: 'flex',
@@ -331,7 +341,7 @@ function ActionRequiredCard({
               gap: 4,
             }}
           >
-            View All <ArrowRight size={14} color="#2563EB" />
+            View All <ArrowRight size={14} color={tk.accent} />
           </span>
         </div>
         {recent.length === 0 ? (
@@ -339,7 +349,7 @@ function ActionRequiredCard({
             style={{
               padding: '16px 20px',
               fontSize: 13,
-              color: isDark ? '#64748B' : '#94A3B8',
+              color: tk.textMuted,
               textAlign: 'center' as const,
             }}
           >
@@ -358,7 +368,7 @@ function ActionRequiredCard({
                   borderRadius: 8,
                   backgroundColor: !n.is_read
                     ? isDark
-                      ? 'rgba(37,99,235,0.08)'
+                      ? 'rgba(59,130,246,0.08)'
                       : 'rgba(37,99,235,0.04)'
                     : 'transparent',
                 }}
@@ -368,7 +378,7 @@ function ActionRequiredCard({
                     width: 8,
                     height: 8,
                     borderRadius: 4,
-                    backgroundColor: !n.is_read ? '#2563EB' : 'transparent',
+                    backgroundColor: !n.is_read ? tk.accent : 'transparent',
                     flexShrink: 0,
                   }}
                 />
@@ -386,229 +396,13 @@ function ActionRequiredCard({
                     {n.title}
                   </div>
                 </div>
-                <div style={{ fontSize: 11, color: isDark ? '#64748B' : '#94A3B8', flexShrink: 0 }}>
+                <div style={{ fontSize: 11, color: tk.textMuted, flexShrink: 0 }}>
                   {formatPendingSince(n.created_at)}
                 </div>
               </div>
             ))}
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-/** My Status Card — right column */
-function MyStatusCard({
-  ptoBalance,
-  pendingCount,
-  awaitingCount,
-  emergencyCount,
-  requests,
-  isDark,
-  isApprover,
-  workdayHours,
-  onViewAllNotifications,
-}: {
-  ptoBalance: { balance_hours: number; used_hours: number } | undefined;
-  pendingCount: number;
-  awaitingCount: number;
-  emergencyCount: number;
-  requests: LeaveRequest[];
-  isDark: boolean;
-  isApprover: boolean;
-  workdayHours: number;
-  onViewAllNotifications: () => void;
-}) {
-  const unreadCount = useNotificationStore((s) => s.unreadCount);
-  const now = new Date();
-  const thisMonth = now.getMonth();
-  const thisYear = now.getFullYear();
-
-  const monthlyRequests = requests.filter((r) => {
-    const d = new Date(r.created_at);
-    return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
-  });
-
-  const approved = monthlyRequests.filter((r) => r.status === LeaveStatus.Approved).length;
-  const rejected = monthlyRequests.filter((r) => r.status === LeaveStatus.Rejected).length;
-  const currentlyPending = requests.filter((r) =>
-    ['submitted', 'pending_supervisor', 'pending_manager', 'pending_hr', 'pending_hr_director'].includes(r.status),
-  ).length;
-  const pendingHours = requests
-    .filter((r) =>
-      ['submitted', 'pending_supervisor', 'pending_manager', 'pending_hr', 'pending_hr_director'].includes(r.status),
-    )
-    .reduce((sum, r) => sum + r.requested_hours, 0);
-  const totalHoursUsed = requests
-    .filter((r) => r.status === LeaveStatus.Approved)
-    .reduce((sum, r) => sum + r.requested_hours, 0);
-
-  return (
-    <div
-      style={{
-        backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
-        border: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
-        borderRadius: 16,
-        overflow: 'hidden',
-      }}
-    >
-      {/* Header */}
-      <div style={{ padding: '16px 20px 14px' }}>
-        <span
-          style={{
-            fontSize: 15,
-            fontWeight: 700,
-            color: isDark ? '#FFFFFF' : '#0F172A',
-            textTransform: 'uppercase' as const,
-            letterSpacing: '0.03em',
-          }}
-        >
-          My Status
-        </span>
-      </div>
-
-      {/* Stat Cards Row */}
-      <div style={{ display: 'flex', gap: 10, padding: '0 20px 16px' }}>
-        <CompactStatCard
-          title="PTO Balance"
-          value={ptoBalance ? formatHours(ptoBalance.balance_hours) : '--'}
-          subtitle={ptoBalance ? formatDaysHours(ptoBalance.balance_hours, workdayHours) : undefined}
-          icon={CalendarDays}
-          borderColor={ptoBalance && ptoBalance.balance_hours <= 0 ? '#DC2626' : '#0EA5E9'}
-          isDark={isDark}
-        />
-        <CompactStatCard
-          title="Pending"
-          value={pendingCount}
-          subtitle={pendingCount === 1 ? 'request' : 'requests'}
-          icon={Clock}
-          borderColor="#F59E0B"
-          isDark={isDark}
-        />
-        {isApprover && (
-          <CompactStatCard
-            title="Awaiting You"
-            value={awaitingCount}
-            subtitle="to approve"
-            icon={AlertCircle}
-            borderColor="#2563EB"
-            isDark={isDark}
-          />
-        )}
-      </div>
-
-      {/* Urgent Notifications header */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '12px 20px 10px',
-          borderTop: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: isDark ? '#E2E8F0' : '#334155' }}>
-            Urgent Notifications
-          </span>
-          {unreadCount > 0 && (
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                backgroundColor: '#DC2626',
-                color: '#FFFFFF',
-                borderRadius: 8,
-                padding: '1px 7px',
-              }}
-            >
-              {unreadCount}
-            </span>
-          )}
-        </div>
-        <span
-          onClick={onViewAllNotifications}
-          style={{
-            fontSize: 13,
-            color: '#2563EB',
-            cursor: 'pointer',
-            fontWeight: 500,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-          }}
-        >
-          View All <ArrowRight size={14} color="#2563EB" />
-        </span>
-      </div>
-
-      {/* Stats Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, padding: '4px 20px 12px' }}>
-        {[
-          { icon: CheckCircle2, color: '#16A34A', label: 'Pending requests', value: formatHours(pendingHours) },
-          { icon: XCircle, color: '#DC2626', label: 'Emergencies used', value: emergencyCount },
-          { icon: Clock, color: '#F59E0B', label: 'Total hours used', value: formatHours(ptoBalance?.used_hours || 0) },
-          { icon: TrendingUp, color: '#2563EB', label: 'Total hours used', value: formatHours(totalHoursUsed) },
-        ].map((item, i) => (
-          <div
-            key={i}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '8px 10px',
-              borderRadius: 8,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div
-                style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 14,
-                  backgroundColor: `${item.color}18`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <item.icon size={14} color={item.color} />
-              </div>
-              <span style={{ fontSize: 12, color: isDark ? '#94A3B8' : '#64748B' }}>{item.label}</span>
-            </div>
-            <span style={{ fontSize: 14, fontWeight: 700, color: isDark ? '#FFFFFF' : '#0F172A' }}>
-              {item.value}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* Divider + Summary */}
-      <div style={{ borderTop: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`, padding: '12px 20px 16px' }}>
-        {[
-          { icon: Users, color: '#16A34A', label: 'Approved this month', value: approved },
-          { icon: XCircle, color: '#DC2626', label: 'Rejected this month', value: rejected },
-          { icon: TrendingUp, color: '#F59E0B', label: 'Currently pending', value: currentlyPending },
-        ].map((item) => (
-          <div
-            key={item.label}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '6px 10px',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <item.icon size={16} color={item.color} />
-              <span style={{ fontSize: 13, color: isDark ? '#94A3B8' : '#64748B' }}>{item.label}</span>
-            </div>
-            <span style={{ fontSize: 16, fontWeight: 700, color: isDark ? '#FFFFFF' : '#0F172A' }}>
-              {item.value}
-            </span>
-          </div>
-        ))}
       </div>
     </div>
   );
@@ -624,6 +418,8 @@ function WebRecentRequestsTable({
   isDark: boolean;
   onRowClick: (r: LeaveRequest) => void;
 }) {
+  const tk = t(isDark);
+
   const columns = [
     { field: 'case_number', headerName: 'CASE #', flex: 1, minWidth: 130 },
     {
@@ -681,7 +477,7 @@ function WebRecentRequestsTable({
       minWidth: 140,
       sortable: false,
       renderCell: (params: any) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: isDark ? '#64748B' : '#94A3B8', fontSize: 13 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: tk.textMuted, fontSize: 13 }}>
           <span>{formatPendingSince(params.row.created_at)}</span>
           <ChevronRight size={16} />
         </div>
@@ -706,16 +502,16 @@ function WebRecentRequestsTable({
             border: 'none',
             '& .MuiDataGrid-row': { cursor: 'pointer' },
             '& .MuiDataGrid-cell': {
-              borderBottom: `1px solid ${isDark ? '#334155' : '#F1F5F9'}`,
+              borderBottom: `1px solid ${isDark ? DT.cardBorder : '#F1F5F9'}`,
             },
             '& .MuiDataGrid-columnHeaders': {
-              borderBottom: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
+              borderBottom: `1px solid ${isDark ? DT.cardBorder : '#E2E8F0'}`,
             },
             '& .MuiDataGrid-columnHeaderTitle': {
               fontSize: 11,
               fontWeight: 700,
               letterSpacing: '0.05em',
-              color: isDark ? '#94A3B8' : '#64748B',
+              color: tk.textSecondary,
             },
           }}
         />
@@ -765,6 +561,18 @@ export default function DashboardScreen() {
 
   const isApprover = user && [Role.Supervisor, Role.Manager, Role.HR, Role.HRDirector].includes(user.role);
 
+  // Stats for header bar
+  const now = new Date();
+  const monthApproved = requests.filter((r) => {
+    const d = new Date(r.created_at);
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() && r.status === LeaveStatus.Approved;
+  }).length;
+  const monthRejected = requests.filter((r) => {
+    const d = new Date(r.created_at);
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() && r.status === LeaveStatus.Rejected;
+  }).length;
+  const pendingHoursTotal = pendingRequests.reduce((sum, r) => sum + r.requested_hours, 0);
+
   const handleRowPress = (request: LeaveRequest) => {
     router.push(`/(app)/requests/${request.id}` as any);
   };
@@ -773,7 +581,6 @@ export default function DashboardScreen() {
     if (!user) return;
     try {
       await approve(request.id, user.id);
-      // Re-fetch to update counts
       fetchPendingApprovals(user.id);
       fetchMyRequests(user.id);
     } catch {
@@ -784,61 +591,126 @@ export default function DashboardScreen() {
   // ─── Web Layout ──────────────────────────────────────────────────
 
   if (isWeb) {
+    const tk = t(isDark);
+
+    const headerChips: { icon: any; label: string; value: string | number; color: string; textColor: string; bg: string }[] = [
+      { icon: CalendarDays, label: 'PTO Balance', value: ptoBalance ? formatHours(ptoBalance.balance_hours) : '--', color: DT.infoBorder, textColor: isDark ? DT.infoText : '#2563EB', bg: isDark ? DT.infoBg : '#EFF6FF' },
+      { icon: CheckCircle2, label: 'Approved', value: monthApproved, color: DT.successBorder, textColor: isDark ? DT.successText : '#16A34A', bg: isDark ? DT.successBg : '#F0FDF4' },
+      { icon: XCircle, label: 'Rejected', value: monthRejected, color: DT.dangerBorder, textColor: isDark ? DT.dangerText : '#DC2626', bg: isDark ? DT.dangerBg : '#FEF2F2' },
+      { icon: TrendingUp, label: 'Pending', value: formatHours(pendingHoursTotal), color: DT.warningBorder, textColor: isDark ? DT.warningText : '#D97706', bg: isDark ? DT.warningBg : '#FFFBEB' },
+    ];
+
     return (
-      <div
-        style={{
-          padding: 28,
-          overflowY: 'auto' as const,
-          height: '100%',
-          backgroundColor: isDark ? '#0F172A' : '#F8FAFC',
-        }}
-      >
-        <div style={{ maxWidth: 1400, margin: '0 auto' }}>
-          {/* Header */}
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: 28,
-            }}
-          >
-            <div>
-              <div style={{ fontSize: 26, fontWeight: 700, color: isDark ? '#FFFFFF' : '#0F172A' }}>
-                Hello, {user?.full_name?.split(' ')[0]}
-              </div>
+      <div style={{ display: 'flex', flexDirection: 'column' as const, height: '100%' }}>
+        {/* ─── Sticky Header Bar ─── */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 16,
+            padding: '12px 28px',
+            backgroundColor: isDark ? '#0b1220' : '#FFFFFF',
+            borderBottom: `1px solid ${isDark ? DT.cardBorder : '#E2E8F0'}`,
+            flexShrink: 0,
+          }}
+        >
+          <span style={{ fontSize: 18, fontWeight: 700, color: tk.textPrimary, marginRight: 8 }}>
+            Dashboard
+          </span>
+
+          {/* Stat chips */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
+            {headerChips.map((chip) => (
               <div
+                key={chip.label}
                 style={{
-                  fontSize: 14,
-                  color: isDark ? '#94A3B8' : '#64748B',
-                  marginTop: 4,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 10,
+                  gap: 6,
+                  padding: '5px 12px',
+                  borderRadius: 8,
+                  backgroundColor: chip.bg,
+                  border: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'transparent'}`,
                 }}
               >
-                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: '#2563EB',
-                    backgroundColor: isDark ? 'rgba(37,99,235,0.15)' : '#EFF6FF',
-                    borderRadius: 6,
-                    padding: '2px 8px',
-                  }}
-                >
-                  {user ? getRoleLabel(user.role) : ''}
+                <chip.icon size={14} color={chip.color} />
+                <span style={{ fontSize: 12, color: tk.textSecondary, fontWeight: 500 }}>{chip.label}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: chip.textColor }}>{chip.value}</span>
+              </div>
+            ))}
+
+            {/* Awaiting you chip (approvers only) */}
+            {isApprover && pendingApprovals.length > 0 && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '5px 12px',
+                  borderRadius: 8,
+                  backgroundColor: isDark ? DT.warningBg : '#FFFBEB',
+                  border: `1px solid ${isDark ? 'rgba(245,158,11,0.25)' : '#FDE68A'}`,
+                }}
+              >
+                <span style={{ fontSize: 13, fontWeight: 700, color: isDark ? DT.warningText : '#D97706' }}>
+                  +{pendingApprovals.length}
+                </span>
+                <span style={{ fontSize: 12, color: isDark ? DT.warningText : '#92400E', fontWeight: 500 }}>
+                  Awaiting your approval
                 </span>
               </div>
-            </div>
-            <Button onPress={() => router.push('/(app)/requests/new' as any)}>
-              Request Time Off
-            </Button>
+            )}
           </div>
 
-          {/* Two-column: Action Required | My Status */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 28 }}>
+          {/* Request Time Off button */}
+          <Button size="sm" onPress={() => router.push('/(app)/requests/new' as any)}>
+            Request Time Off
+          </Button>
+        </div>
+
+        {/* ─── Scrollable Content ─── */}
+        <div
+          style={{
+            padding: 28,
+            overflowY: 'auto' as const,
+            flex: 1,
+            background: isDark ? DT.bgGradient : LT.bgMain,
+          }}
+        >
+        <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+          {/* Greeting */}
+          <div style={{ marginBottom: 28 }}>
+            <div style={{ fontSize: 26, fontWeight: 700, color: tk.textPrimary }}>
+              Hello, {user?.full_name?.split(' ')[0]}
+            </div>
+            <div
+              style={{
+                fontSize: 14,
+                color: tk.textSecondary,
+                marginTop: 4,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+              }}
+            >
+              {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: isDark ? DT.infoText : '#2563EB',
+                  backgroundColor: isDark ? DT.infoBg : '#EFF6FF',
+                  borderRadius: 6,
+                  padding: '2px 8px',
+                }}
+              >
+                {user ? getRoleLabel(user.role) : ''}
+              </span>
+            </div>
+          </div>
+
+          {/* Action Required — full width */}
+          <div style={{ marginBottom: 28 }}>
             <ActionRequiredCard
               pendingApprovals={pendingApprovals}
               notifications={notifications}
@@ -849,26 +721,16 @@ export default function DashboardScreen() {
               onViewAllNotifications={() => router.push('/(app)/notifications' as any)}
               onViewAllApprovals={() => router.push('/(app)/(tabs)/approvals' as any)}
             />
-            <MyStatusCard
-              ptoBalance={ptoBalance as any}
-              pendingCount={pendingRequests.length}
-              awaitingCount={pendingApprovals.length}
-              emergencyCount={emergencyCount}
-              requests={requests}
-              isDark={isDark}
-              isApprover={!!isApprover}
-              workdayHours={user?.workday_hours || 8}
-              onViewAllNotifications={() => router.push('/(app)/notifications' as any)}
-            />
           </div>
 
           {/* Recent Requests — full width */}
           <div
             style={{
-              backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
-              border: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
+              backgroundColor: tk.cardBg,
+              border: `1px solid ${isDark ? DT.cardBorder : tk.cardBorder}`,
               borderRadius: 16,
               overflow: 'hidden',
+              boxShadow: tk.cardShadow,
             }}
           >
             <div
@@ -883,7 +745,7 @@ export default function DashboardScreen() {
                 style={{
                   fontSize: 15,
                   fontWeight: 700,
-                  color: isDark ? '#FFFFFF' : '#0F172A',
+                  color: tk.textPrimary,
                   textTransform: 'uppercase' as const,
                   letterSpacing: '0.03em',
                 }}
@@ -894,7 +756,7 @@ export default function DashboardScreen() {
                 onClick={() => router.push('/(app)/(tabs)/requests' as any)}
                 style={{
                   fontSize: 13,
-                  color: '#2563EB',
+                  color: tk.accent,
                   cursor: 'pointer',
                   fontWeight: 500,
                   display: 'flex',
@@ -902,7 +764,7 @@ export default function DashboardScreen() {
                   gap: 4,
                 }}
               >
-                View All <ArrowRight size={14} color="#2563EB" />
+                View All <ArrowRight size={14} color={tk.accent} />
               </span>
             </div>
             {recentRequests.length > 0 ? (
@@ -912,7 +774,7 @@ export default function DashboardScreen() {
                 style={{
                   padding: '32px 20px',
                   textAlign: 'center' as const,
-                  color: isDark ? '#64748B' : '#94A3B8',
+                  color: tk.textMuted,
                   fontSize: 14,
                 }}
               >
@@ -920,6 +782,7 @@ export default function DashboardScreen() {
               </div>
             )}
           </div>
+        </div>
         </div>
       </div>
     );
