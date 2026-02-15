@@ -79,11 +79,11 @@ function CompactStatCard({
     <div
       style={{
         flex: 1,
-        border: `1px solid ${isDark ? '#475569' : '#E2E8F0'}`,
+        border: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
         borderLeft: `3px solid ${borderColor}`,
         borderRadius: 12,
         padding: '14px 16px',
-        backgroundColor: isDark ? '#0F172A' : '#F8FAFC',
+        backgroundColor: isDark ? 'rgba(15,23,42,0.5)' : '#F8FAFC',
         minWidth: 0,
       }}
     >
