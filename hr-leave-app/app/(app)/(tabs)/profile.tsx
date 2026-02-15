@@ -36,6 +36,9 @@ let DialogTitle: any;
 let DialogContent: any;
 let DialogActions: any;
 let MuiTextField: any;
+let MenuItem: any;
+let Autocomplete: any;
+let MuiThemeProvider: any;
 if (isWeb) {
   MuiButton = require('@mui/material/Button').default;
   Dialog = require('@mui/material/Dialog').default;
@@ -43,6 +46,9 @@ if (isWeb) {
   DialogContent = require('@mui/material/DialogContent').default;
   DialogActions = require('@mui/material/DialogActions').default;
   MuiTextField = require('@mui/material/TextField').default;
+  MenuItem = require('@mui/material/MenuItem').default;
+  Autocomplete = require('@mui/material/Autocomplete').default;
+  MuiThemeProvider = require('@/components/web/mui-theme-provider').MuiThemeProvider;
 }
 
 // ─── Web Components ──────────────────────────────────────────────────
@@ -376,28 +382,44 @@ function WebThemeCard({
 function EditProfileDialog({
   open,
   user,
+  departments,
   onClose,
   onSave,
 }: {
   open: boolean;
   user: any;
+  departments: string[];
   onClose: () => void;
-  onSave: (data: { full_name: string; phone: string }) => void;
+  onSave: (data: Record<string, string>) => void;
 }) {
+  const isHR = user.role === 'hr' || user.role === 'hr_director';
   const [fullName, setFullName] = useState(user.full_name || '');
   const [phone, setPhone] = useState(user.phone || '');
+  const [email, setEmail] = useState(user.email || '');
+  const [department, setDepartment] = useState(user.department || '');
+  const [role, setRole] = useState(user.role || '');
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await onSave({ full_name: fullName, phone });
+      const data: Record<string, string> = { full_name: fullName, phone, email };
+      if (isHR) {
+        data.department = department;
+        data.role = role;
+      }
+      await onSave(data);
     } finally {
       setSaving(false);
     }
   };
 
-  const hasChanges = fullName !== (user.full_name || '') || phone !== (user.phone || '');
+  const hasChanges =
+    fullName !== (user.full_name || '') ||
+    phone !== (user.phone || '') ||
+    email !== (user.email || '') ||
+    (isHR && department !== (user.department || '')) ||
+    (isHR && role !== (user.role || ''));
 
   return (
     <Dialog
@@ -443,28 +465,56 @@ function EditProfileDialog({
         />
         <MuiTextField
           label="Email"
-          value={user.email}
+          value={email}
+          onChange={(e: any) => setEmail(e.target.value)}
           fullWidth
           size="small"
-          disabled
-          helperText="Email cannot be changed"
+          type="email"
         />
-        <MuiTextField
-          label="Department"
-          value={user.department || ''}
-          fullWidth
-          size="small"
-          disabled
-          helperText="Managed by HR admin"
-        />
+        {isHR ? (
+          <Autocomplete
+            freeSolo
+            forcePopupIcon
+            options={departments}
+            value={department}
+            onChange={(_: any, val: string | null) => setDepartment(val || '')}
+            onInputChange={(_: any, val: string) => setDepartment(val)}
+            renderInput={(params: any) => (
+              <MuiTextField {...params} label="Department" size="small" placeholder="Search or type..." />
+            )}
+            fullWidth
+            size="small"
+          />
+        ) : (
+          <MuiTextField
+            label="Department"
+            value={user.department || ''}
+            fullWidth
+            size="small"
+            disabled
+            helperText="Managed by HR admin"
+          />
+        )}
         <MuiTextField
           label="Role"
-          value={getRoleLabel(user.role)}
+          value={isHR ? role : getRoleLabel(user.role)}
+          onChange={isHR ? (e: any) => setRole(e.target.value) : undefined}
           fullWidth
           size="small"
-          disabled
-          helperText="Managed by HR admin"
-        />
+          disabled={!isHR}
+          helperText={!isHR ? 'Managed by HR admin' : undefined}
+          {...(isHR ? { select: true } : {})}
+        >
+          {isHR && [
+            { value: 'employee', label: 'Employee' },
+            { value: 'supervisor', label: 'Supervisor' },
+            { value: 'manager', label: 'Manager' },
+            { value: 'hr', label: 'HR' },
+            { value: 'hr_director', label: 'HR Director' },
+          ].map((opt) => (
+            <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+          ))}
+        </MuiTextField>
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}>
         <MuiButton
@@ -497,6 +547,9 @@ export default function ProfileScreen() {
   const { balances, emergencyCount, fetchBalance, fetchEmergencyCount } = useBalance();
   const { theme, setTheme } = useThemeStore();
   const [editOpen, setEditOpen] = useState(false);
+  const [departments, setDepartments] = useState<string[]>([]);
+
+  const isHR = user?.role === 'hr' || user?.role === 'hr_director';
 
   useFocusEffect(
     useCallback(() => {
@@ -511,7 +564,18 @@ export default function ProfileScreen() {
 
   const ptoBalance = balances.find((b) => b.leave_type === 'pto');
 
-  const handleSaveProfile = async (data: { full_name: string; phone: string }) => {
+  const handleEditOpen = async () => {
+    setEditOpen(true);
+    if (isHR) {
+      try {
+        const employees = await userService.getEmployees();
+        const depts = [...new Set(employees.map((e: any) => e.department).filter(Boolean) as string[])];
+        setDepartments(depts);
+      } catch {}
+    }
+  };
+
+  const handleSaveProfile = async (data: Record<string, string>) => {
     const updated = await userService.updateProfile(user.id, data);
     setUser(updated);
     setEditOpen(false);
@@ -534,7 +598,7 @@ export default function ProfileScreen() {
           <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 24, alignItems: 'stretch' }}>
             {/* Left column */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-              <WebProfileCard user={user} isDark={isDark} onEdit={() => setEditOpen(true)} />
+              <WebProfileCard user={user} isDark={isDark} onEdit={handleEditOpen} />
             </div>
 
             {/* Right column */}
@@ -575,12 +639,15 @@ export default function ProfileScreen() {
 
           {/* Edit Profile Dialog (outside grid — it's a portal/modal) */}
           {editOpen && (
-            <EditProfileDialog
-              open={editOpen}
-              user={user}
-              onClose={() => setEditOpen(false)}
-              onSave={handleSaveProfile}
-            />
+            <MuiThemeProvider isDark={isDark}>
+              <EditProfileDialog
+                open={editOpen}
+                user={user}
+                departments={departments}
+                onClose={() => setEditOpen(false)}
+                onSave={handleSaveProfile}
+              />
+            </MuiThemeProvider>
           )}
         </div>
       </div>
