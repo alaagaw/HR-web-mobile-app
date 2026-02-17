@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { approvalService } from '@/services';
+import { leaveApprovalService } from '@/services';
 import type { LeaveRequest } from '@/types/models';
 import type { ExcessDetermination } from '@/types/enums';
 
@@ -14,7 +14,7 @@ export function useApprovals() {
     setLoading(true);
     setError(null);
     try {
-      const data = await approvalService.getMyPendingApprovals(userId);
+      const data = await leaveApprovalService.getMyPendingApprovals(userId);
       setPendingApprovals(data);
     } catch (err: any) {
       setError(err.message);
@@ -27,7 +27,7 @@ export function useApprovals() {
     setChainLoading(true);
     setError(null);
     try {
-      const data = await approvalService.getChainRequests(userId, role);
+      const data = await leaveApprovalService.getChainRequests(userId, role);
       setChainRequests(data);
     } catch (err: any) {
       setError(err.message);
@@ -39,7 +39,7 @@ export function useApprovals() {
   const approve = useCallback(async (requestId: string, userId: string, comment?: string) => {
     setLoading(true);
     try {
-      await approvalService.approveRequest(requestId, userId, comment);
+      await leaveApprovalService.approveRequest(requestId, userId, comment);
       setPendingApprovals((prev) => prev.filter((r) => r.id !== requestId));
     } catch (err: any) {
       setError(err.message);
@@ -52,7 +52,7 @@ export function useApprovals() {
   const reject = useCallback(async (requestId: string, userId: string, comment: string) => {
     setLoading(true);
     try {
-      await approvalService.rejectRequest(requestId, userId, comment);
+      await leaveApprovalService.rejectRequest(requestId, userId, comment);
       setPendingApprovals((prev) => prev.filter((r) => r.id !== requestId));
     } catch (err: any) {
       setError(err.message);
@@ -66,7 +66,7 @@ export function useApprovals() {
     async (requestId: string, userId: string, determination: ExcessDetermination, comment?: string) => {
       setLoading(true);
       try {
-        await approvalService.determineExcess(requestId, userId, determination, comment);
+        await leaveApprovalService.determineExcess(requestId, userId, determination, comment);
       } catch (err: any) {
         setError(err.message);
         throw err;

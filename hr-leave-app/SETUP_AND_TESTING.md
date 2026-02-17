@@ -1,4 +1,4 @@
-# HR Leave App — Setup & Testing Guide
+# HR App — Setup & Testing Guide
 
 ## Database Setup
 
@@ -31,9 +31,33 @@ This creates 6 test accounts (all use password `password123`):
 | `employee1@aqeel.com` | Employee | Ahmed Malik |
 | `employee2@aqeel.com` | Employee | Sara Noor |
 
-### Step 3: Verify
+### Step 3: Run Additional Migrations
 
-After running both scripts, go back to the app and sign in with `employee1@aqeel.com` / `password123`.
+1. Run `supabase/migrations/003_employee_documents.sql`
+2. Run `supabase/migrations/004_renewal_tasks.sql`
+3. Run `supabase/migrations/005_registration_system.sql`
+
+### Step 4: Seed Polytech Users
+
+1. In the **SQL Editor**, open a **New Query**
+2. Copy and paste the contents of `supabase/migrations/006_polytech_seed_users.sql`
+3. Click **Run**
+
+This creates 7 Polytech accounts (all use password `password123`):
+
+| Email | Role | Department | Name |
+|---|---|---|---|
+| `aqeel@polytech.com.sa` | HR Director | Management | Aqeel A Gaw |
+| `amani@polytech.com.sa` | HR | Human Resources | Amani Thiyab |
+| `maram@polytech.com.sa` | HR | Human Resources | Maram Al Muammar |
+| `projectadmin@polytech.com.sa` | HR | Human Resources | Venod |
+| `pylee@polytech.com.sa` | HR | Human Resources | Pylee K Iype |
+| `nouf@polytech.com.sa` | HR | Human Resources | Nouf Al Mutairi |
+| `shahad@polytech.com.sa` | Employee | Finance | Shahad Nasser AlShehri |
+
+### Step 5: Verify
+
+After running all scripts, go back to the app and sign in with any account using password `password123`.
 
 ---
 
@@ -49,16 +73,16 @@ The PTO approval chain is: **Employee → Supervisor → Manager → HR → Appr
    - The request should show status **Pending Supervisor** with "Waiting for Omar Yusuf"
 
 2. **Sign out, sign in as** `supervisor@aqeel.com` (Omar Yusuf)
-   - Go to **Approvals** tab → the request should appear under **Action Required**
+   - Go to **Tasks** tab → the request should appear under **Action Required**
    - Tap the request → **Approve**
    - Status moves to **Pending Manager** (Khalid Ibrahim)
 
 3. **Sign out, sign in as** `manager@aqeel.com` (Khalid Ibrahim)
-   - Go to **Approvals** tab → approve the request
+   - Go to **Tasks** tab → approve the request
    - Status moves to **Pending HR** (Fatima Hassan)
 
 4. **Sign out, sign in as** `hr@aqeel.com` (Fatima Hassan)
-   - Go to **Approvals** tab → approve the request
+   - Go to **Tasks** tab → approve the request
    - Status becomes **Approved**, employee's leave balance gets deducted
 
 5. **Sign back in as** `employee1@aqeel.com`
@@ -124,7 +148,7 @@ Emergency leave has tiered approval based on how many emergencies you've used in
 ### Test 6: Approval Chain Visibility
 
 1. **Sign in as** `supervisor@aqeel.com`
-   - Go to **Approvals** tab → **All Requests** tab
+   - Go to **Tasks** tab → **All Requests** tab
    - You should see all requests from your direct reports, even if they're pending with someone else
    - Cards show "Waiting for [name]" and remaining approval steps
 
@@ -142,7 +166,7 @@ Emergency leave has tiered approval based on how many emergencies you've used in
 2. Go to **Profile** tab → find the **Theme** section
 3. Switch between **Light**, **Dark**, and **System**
 4. Verify all screens render correctly in dark mode:
-   - Dashboard, Requests, Approvals, Profile
+   - Dashboard, Requests, Tasks, Profile
    - Request detail screen
    - New request form
    - Back arrow should be visible (light color on dark background)
@@ -151,6 +175,7 @@ Emergency leave has tiered approval based on how many emergencies you've used in
 
 ## Org Chart Reference
 
+### Test Users (@aqeel.com)
 ```
 Aqeel Al-Rashid (HR Director)
 ├── Fatima Hassan (HR Staff)
@@ -164,6 +189,19 @@ Khalid Ibrahim (Manager)
 - Ahmed & Sara report to Omar (Supervisor) and Khalid (Manager)
 - PTO flow: Omar → Khalid → Fatima (or any HR)
 - Emergency #3 flow: Khalid → Aqeel (HR Director)
+
+### Polytech Users (@polytech.com.sa)
+```
+Aqeel A Gaw (HR Director)
+├── Amani Thiyab (HR)
+├── Maram Al Muammar (HR)
+├── Venod (HR)
+├── Pylee K Iype (HR)
+├── Nouf Al Mutairi (HR)
+└── Shahad Nasser AlShehri (Employee, Finance)
+```
+
+- All Polytech staff report to Aqeel A Gaw
 
 ---
 

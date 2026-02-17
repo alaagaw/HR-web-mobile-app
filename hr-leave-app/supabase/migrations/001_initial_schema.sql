@@ -1,5 +1,5 @@
 -- ============================================================
--- HR LEAVE SYSTEM — Initial Schema
+-- HR SYSTEM — Initial Schema
 -- Run this in Supabase SQL Editor
 -- ============================================================
 

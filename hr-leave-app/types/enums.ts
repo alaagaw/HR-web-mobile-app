@@ -59,6 +59,21 @@ export enum NotificationType {
   RequestBypassed = 'request_bypassed',
   ExcessDetermined = 'excess_determined',
   EmergencyAutoApproved = 'emergency_auto_approved',
+  RenewalTaskAssigned = 'renewal_task_assigned',
+  RenewalTaskCompleted = 'renewal_task_completed',
+  // Registration events
+  RegistrationSubmitted = 'registration_submitted',
+  RegistrationApproved = 'registration_approved',
+  RegistrationRejected = 'registration_rejected',
+  EmployeeInvited = 'employee_invited',
+}
+
+export enum RegistrationStatus {
+  EmailUnverified = 'email_unverified',
+  PendingInfo = 'pending_info',
+  PendingApproval = 'pending_approval',
+  Active = 'active',
+  Rejected = 'rejected',
 }
 
 export enum EmergencyTier {
@@ -73,4 +88,23 @@ export enum LedgerReason {
   ApprovedDeduction = 'approved_deduction',
   ManualAdjustment = 'manual_adjustment',
   CancellationCredit = 'cancellation_credit',
+}
+
+// ============================================================
+// RENEWAL TASKS (Document expiry task assignment)
+// ============================================================
+
+export enum RenewalTaskStatus {
+  Pending = 'pending',
+  InProgress = 'in_progress',
+  Completed = 'completed',
+  Cancelled = 'cancelled',
+}
+
+export enum RenewalTaskAction {
+  Created = 'created',
+  Started = 'started',
+  Completed = 'completed',
+  Cancelled = 'cancelled',
+  Reassigned = 'reassigned',
 }

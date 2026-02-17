@@ -87,3 +87,47 @@ export const balanceAdjustmentSchema = z.object({
   hours: z.number().min(-1000).max(1000),
   reason: z.string().min(1, 'Reason is required for balance adjustment').max(MAX_COMMENT_LENGTH),
 });
+
+// ============================================================
+// REGISTRATION & AUTH SCHEMAS
+// ============================================================
+
+export const signUpSchema = z
+  .object({
+    email: z.string().email('Please enter a valid email address'),
+    password: z.string().min(8, 'Password must be at least 8 characters'),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  });
+
+export type SignUpFormData = z.infer<typeof signUpSchema>;
+
+export const changePasswordSchema = z
+  .object({
+    newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  });
+
+export type ChangePasswordFormData = z.infer<typeof changePasswordSchema>;
+
+export const registrationFormSchema = z.object({
+  full_name: z.string().min(2, 'Full name is required'),
+  phone: z.string().min(5, 'Phone number is required'),
+  iqama_number: z.string().min(1, 'Iqama number is required'),
+  iqama_expiry: z.string().min(1, 'Iqama expiry date is required'),
+  passport_number: z.string().min(1, 'Passport number is required'),
+  passport_expiry: z.string().min(1, 'Passport expiry date is required'),
+  insurance_number: z.string().min(1, 'Insurance number is required'),
+  insurance_expiry: z.string().min(1, 'Insurance expiry date is required'),
+  occupation: z.string().min(1, 'Occupation is required'),
+  birth_date: z.string().min(1, 'Date of birth is required'),
+});
+
+export type RegistrationFormSchemaData = z.infer<typeof registrationFormSchema>;

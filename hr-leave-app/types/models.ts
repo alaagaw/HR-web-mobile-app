@@ -6,6 +6,9 @@ import {
   ExcessDetermination,
   NotificationType,
   LedgerReason,
+  RenewalTaskStatus,
+  RenewalTaskAction,
+  RegistrationStatus,
 } from './enums';
 
 // ============================================================
@@ -24,6 +27,10 @@ export interface Profile {
   department: string | null;
   workday_hours: number;
   is_active: boolean;
+  registration_status: RegistrationStatus;
+  must_change_password: boolean;
+  invited_by: string | null;
+  registration_note: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -33,6 +40,42 @@ export interface ProfileSummary {
   full_name: string;
   role: Role;
   department: string | null;
+}
+
+// ============================================================
+// EMPLOYEE DOCUMENTS (Iqama, Passport, Insurance, etc.)
+// ============================================================
+
+export interface EmployeeDocument {
+  id: string;
+  employee_id: string;
+  emp_code: string;
+  iqama_number: string | null;
+  passport_number: string | null;
+  insurance_number: string | null;
+  occupation: string | null;
+  birth_date: string | null;
+  passport_expiry: string | null;
+  iqama_expiry: string | null;
+  insurance_expiry: string | null;
+  is_verified: boolean;
+  verified_by: string | null;
+  verified_at: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined relation
+  employee?: ProfileSummary;
+}
+
+export interface EmployeeDocumentDraft {
+  iqama_number?: string | null;
+  passport_number?: string | null;
+  insurance_number?: string | null;
+  occupation?: string | null;
+  birth_date?: string | null;
+  passport_expiry?: string | null;
+  iqama_expiry?: string | null;
+  insurance_expiry?: string | null;
 }
 
 // ============================================================
@@ -215,4 +258,91 @@ export interface EmployeeFilters {
   department?: string;
   is_active?: boolean;
   search?: string;
+}
+
+// ============================================================
+// RENEWAL TASKS (Document expiry task assignment)
+// ============================================================
+
+export interface RenewalTask {
+  id: string;
+  task_number: string;
+  employee_id: string;
+  document_id: string;
+  document_type: string;
+  expiry_date: string;
+  status: RenewalTaskStatus;
+  assigned_to_id: string | null;
+  assigned_by_id: string | null;
+  notes: string | null;
+  assigned_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined relations
+  employee?: ProfileSummary;
+  assigned_to?: ProfileSummary;
+  assigned_by?: ProfileSummary;
+  document?: EmployeeDocument;
+}
+
+export interface RenewalTaskHistory {
+  id: number;
+  task_id: string;
+  action: RenewalTaskAction;
+  performed_by: string;
+  performer_role: string;
+  comment: string | null;
+  from_status: string | null;
+  to_status: string | null;
+  metadata: Record<string, unknown> | null;
+  completed_by: string | null;
+  completed_at: string | null;
+  created_at: string;
+  performer?: ProfileSummary;
+}
+
+export interface RenewalTaskFilters {
+  status?: RenewalTaskStatus | RenewalTaskStatus[];
+  assigned_to_id?: string;
+  document_type?: string;
+}
+
+// ============================================================
+// REGISTRATION
+// ============================================================
+
+export interface RegistrationFormData {
+  full_name: string;
+  phone: string;
+  iqama_number: string;
+  iqama_expiry: string;
+  passport_number: string;
+  passport_expiry: string;
+  insurance_number: string;
+  insurance_expiry: string;
+  occupation: string;
+  birth_date: string;
+}
+
+export interface InviteEmployeeData {
+  email: string;
+  full_name: string;
+  role: Role;
+  department: string;
+  supervisor_id: string | null;
+  manager_id: string | null;
+}
+
+export interface PendingRegistration extends Profile {
+  employee_documents?: EmployeeDocument | null;
+}
+
+export interface ApproveRegistrationData {
+  emp_code: string;
+  role: Role;
+  department: string;
+  supervisor_id: string | null;
+  manager_id: string | null;
 }

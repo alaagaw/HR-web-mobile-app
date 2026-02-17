@@ -466,7 +466,7 @@ export default function RequestHistoryScreen() {
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 22, fontWeight: 700, color: isDark ? '#FFFFFF' : '#0F172A' }}>
-              Request History
+              Leave Request History
             </div>
             <div style={{ fontSize: 13, color: isDark ? '#94A3B8' : '#64748B', marginTop: 2 }}>
               All leave request transactions across employees
@@ -518,7 +518,7 @@ export default function RequestHistoryScreen() {
   // --------------- Mobile render ---------------
   return (
     <SafeAreaView className="flex-1 bg-background dark:bg-[#0F172A]" edges={['top']}>
-      <ScreenHeader title="Request History" />
+      <ScreenHeader title="Leave Request History" />
 
       {/* Mobile date filter */}
       <View className="px-4 pt-3 pb-1">

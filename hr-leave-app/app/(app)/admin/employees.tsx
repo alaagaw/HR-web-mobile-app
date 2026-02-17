@@ -9,7 +9,8 @@ import { ScreenHeader } from '@/components/layout/screen-header';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
-import { userService } from '@/services';
+import { userService, registrationService } from '@/services';
+import { useAuth } from '@/hooks/use-auth';
 import { getRoleLabel, getInitials } from '@/lib/utils';
 import { Role } from '@/types/enums';
 import type { Profile } from '@/types/models';
@@ -83,6 +84,32 @@ const ROLE_OPTIONS = [
   { value: Role.HR, label: 'HR' },
   { value: Role.HRDirector, label: 'HR Director' },
 ];
+
+// --------------- Invite Dialog State ---------------
+
+interface InviteDialogState {
+  open: boolean;
+  email: string;
+  full_name: string;
+  role: Role;
+  department: string;
+  supervisor_id: string | null;
+  manager_id: string | null;
+  submitting: boolean;
+  error: string;
+}
+
+const INITIAL_INVITE: InviteDialogState = {
+  open: false,
+  email: '',
+  full_name: '',
+  role: Role.Employee,
+  department: '',
+  supervisor_id: null,
+  manager_id: null,
+  submitting: false,
+  error: '',
+};
 
 // --------------- Web Components ---------------
 
@@ -412,6 +439,147 @@ function EditEmployeeDialog({
   );
 }
 
+// --------------- Invite Employee Dialog ---------------
+
+function InviteEmployeeDialog({
+  state,
+  onClose,
+  onChange,
+  onSubmit,
+  employees,
+  departments,
+}: {
+  state: InviteDialogState;
+  onClose: () => void;
+  onChange: (field: string, value: any) => void;
+  onSubmit: () => void;
+  employees: Profile[];
+  departments: string[];
+}) {
+  const supervisorOptions = employees.filter(
+    (e) => e.role === Role.Supervisor || e.role === Role.Manager || e.role === Role.HR || e.role === Role.HRDirector
+  );
+  const managerOptions = employees.filter(
+    (e) => e.role === Role.Manager || e.role === Role.HRDirector
+  );
+
+  const isValid =
+    state.email.trim().length > 0 &&
+    state.full_name.trim().length > 0 &&
+    state.department.trim().length > 0;
+
+  return (
+    <Dialog
+      open={state.open}
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{ sx: { borderRadius: 3, backgroundImage: 'none' } }}
+    >
+      <DialogTitle sx={{ pb: 1, pt: 3, px: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
+        <div style={{ fontSize: 18, fontWeight: 700 }}>Invite Employee</div>
+        <div style={{ fontSize: 13, fontWeight: 400, opacity: 0.6, marginTop: 2 }}>
+          Send an email with temporary credentials
+        </div>
+      </DialogTitle>
+      <DialogContent sx={{ pt: '24px !important', pb: 1, px: 3, display: 'flex', flexDirection: 'column', gap: 2, overflow: 'visible' }}>
+        {state.error && (
+          <MuiAlert severity="error" sx={{ mb: 1 }}>
+            {state.error}
+          </MuiAlert>
+        )}
+        <div style={{ display: 'flex', gap: 12 }}>
+          <MuiTextField
+            label="Full Name"
+            value={state.full_name}
+            onChange={(e: any) => onChange('full_name', e.target.value)}
+            fullWidth
+            size="small"
+            required
+          />
+          <MuiTextField
+            label="Email"
+            value={state.email}
+            onChange={(e: any) => onChange('email', e.target.value)}
+            fullWidth
+            size="small"
+            required
+            type="email"
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <Autocomplete
+            options={ROLE_OPTIONS}
+            value={ROLE_OPTIONS.find((o) => o.value === state.role) || null}
+            onChange={(_: any, val: any) => val && onChange('role', val.value)}
+            getOptionLabel={(opt: any) => opt.label}
+            isOptionEqualToValue={(opt: any, val: any) => opt.value === val.value}
+            renderInput={(params: any) => (
+              <MuiTextField {...params} label="Role" size="small" required />
+            )}
+            fullWidth
+            size="small"
+            disableClearable
+          />
+          <Autocomplete
+            options={departments}
+            value={state.department || null}
+            onChange={(_: any, val: string | null) => onChange('department', val || '')}
+            renderInput={(params: any) => (
+              <MuiTextField {...params} label="Department" size="small" required placeholder="Search department..." />
+            )}
+            fullWidth
+            size="small"
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <Autocomplete
+            options={supervisorOptions}
+            value={supervisorOptions.find((e) => e.id === state.supervisor_id) || null}
+            onChange={(_: any, val: Profile | null) => onChange('supervisor_id', val?.id || null)}
+            getOptionLabel={(opt: Profile) => `${opt.full_name} (${getRoleLabel(opt.role)})`}
+            isOptionEqualToValue={(opt: Profile, val: Profile) => opt.id === val.id}
+            renderInput={(params: any) => (
+              <MuiTextField {...params} label="Supervisor" size="small" placeholder="Select supervisor..." />
+            )}
+            fullWidth
+            size="small"
+          />
+          <Autocomplete
+            options={managerOptions}
+            value={managerOptions.find((e) => e.id === state.manager_id) || null}
+            onChange={(_: any, val: Profile | null) => onChange('manager_id', val?.id || null)}
+            getOptionLabel={(opt: Profile) => `${opt.full_name} (${getRoleLabel(opt.role)})`}
+            isOptionEqualToValue={(opt: Profile, val: Profile) => opt.id === val.id}
+            renderInput={(params: any) => (
+              <MuiTextField {...params} label="Manager" size="small" placeholder="Select manager..." />
+            )}
+            fullWidth
+            size="small"
+          />
+        </div>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+        <MuiButton
+          onClick={onClose}
+          disabled={state.submitting}
+          sx={{ textTransform: 'none', fontWeight: 600 }}
+        >
+          Cancel
+        </MuiButton>
+        <MuiButton
+          variant="contained"
+          onClick={onSubmit}
+          disabled={!isValid || state.submitting}
+          sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, px: 3 }}
+        >
+          {state.submitting ? 'Sending...' : 'Send Invite'}
+        </MuiButton>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 // --------------- Main Screen ---------------
 
 export default function EmployeesScreen() {
@@ -423,6 +591,8 @@ export default function EmployeesScreen() {
   const [loading, setLoading] = useState(false);
   const [dialog, setDialog] = useState<EditDialogState>(INITIAL_DIALOG);
   const [successMsg, setSuccessMsg] = useState('');
+  const [invite, setInvite] = useState<InviteDialogState>(INITIAL_INVITE);
+  const { user } = useAuth();
 
   const loadEmployees = useCallback(() => {
     setLoading(true);
@@ -486,6 +656,34 @@ export default function EmployeesScreen() {
     }
   };
 
+  // --- Invite handlers ---
+  const handleOpenInvite = () => setInvite({ ...INITIAL_INVITE, open: true });
+  const handleCloseInvite = () => { if (!invite.submitting) setInvite(INITIAL_INVITE); };
+  const handleInviteChange = (field: string, value: any) => {
+    setInvite((s) => ({ ...s, [field]: value, error: '' }));
+  };
+  const handleSubmitInvite = async () => {
+    setInvite((s) => ({ ...s, submitting: true, error: '' }));
+    try {
+      await registrationService.inviteEmployee(
+        {
+          email: invite.email.trim(),
+          full_name: invite.full_name.trim(),
+          role: invite.role,
+          department: invite.department.trim(),
+          supervisor_id: invite.supervisor_id,
+          manager_id: invite.manager_id,
+        },
+        user!.id
+      );
+      setInvite(INITIAL_INVITE);
+      setSuccessMsg(`Invitation sent to ${invite.email}`);
+      loadEmployees();
+    } catch (err: any) {
+      setInvite((s) => ({ ...s, submitting: false, error: err.message || 'Failed to send invite' }));
+    }
+  };
+
   // --------------- Web render ---------------
   if (isWeb) {
     return (
@@ -523,7 +721,7 @@ export default function EmployeesScreen() {
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
           </div>
-          <div>
+          <div style={{ flex: 1 }}>
             <div style={{ fontSize: 22, fontWeight: 700, color: isDark ? '#FFFFFF' : '#0F172A' }}>
               Employee Directory
             </div>
@@ -531,6 +729,31 @@ export default function EmployeesScreen() {
               Click on a row to edit employee information
             </div>
           </div>
+          <button
+            onClick={handleOpenInvite}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '10px 20px',
+              backgroundColor: '#2563EB',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: 10,
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <line x1="19" y1="8" x2="19" y2="14" />
+              <line x1="22" y1="11" x2="16" y2="11" />
+            </svg>
+            Invite Employee
+          </button>
         </div>
 
         {/* DataGrid */}
@@ -548,6 +771,14 @@ export default function EmployeesScreen() {
                   onClose={handleCloseDialog}
                   onChange={handleChange}
                   onSubmit={handleSubmitEdit}
+                  departments={[...new Set(employees.map((e) => e.department).filter(Boolean) as string[])]}
+                />
+                <InviteEmployeeDialog
+                  state={invite}
+                  onClose={handleCloseInvite}
+                  onChange={handleInviteChange}
+                  onSubmit={handleSubmitInvite}
+                  employees={employees}
                   departments={[...new Set(employees.map((e) => e.department).filter(Boolean) as string[])]}
                 />
                 <Snackbar

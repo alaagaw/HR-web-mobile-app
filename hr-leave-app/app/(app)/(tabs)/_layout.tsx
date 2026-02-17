@@ -13,18 +13,20 @@ import {
 } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
 import { useAuth } from '@/hooks/use-auth';
+import { useBalance } from '@/hooks/use-balance';
 import { Role } from '@/types/enums';
 import { NotificationBell } from '@/components/layout/notification-bell';
 import { useNotificationStore } from '@/stores/notification-store';
-import { useApprovalStore } from '@/stores/approval-store';
-import { notificationService, approvalService } from '@/services';
+import { useTaskStore } from '@/stores/task-store';
+import { notificationService, leaveApprovalService } from '@/services';
+import { formatHours } from '@/lib/utils';
 
 const isWeb = Platform.OS === 'web';
 
 const NAV_ITEMS = [
   { name: 'dashboard', title: 'Dashboard', Icon: LayoutDashboard, approverOnly: false, hrOnly: false },
   { name: 'requests', title: 'My Requests', Icon: FileText, approverOnly: false, hrOnly: false },
-  { name: 'approvals', title: 'Approvals', Icon: CheckSquare, approverOnly: true, hrOnly: false },
+  { name: 'tasks', title: 'Tasks', Icon: CheckSquare, approverOnly: true, hrOnly: false },
   { name: 'team', title: 'Team', Icon: Users, approverOnly: true, hrOnly: false },
   { name: 'calendar', title: 'Calendar', Icon: CalendarDays, approverOnly: false, hrOnly: false },
   { name: 'notifications', title: 'Notifications', Icon: Bell, approverOnly: false, hrOnly: false, route: '/(app)/notifications' },
@@ -35,6 +37,13 @@ const NAV_ITEMS = [
 function WebSidebar({ user, isApprover, isHR, isDark, pendingCount, unreadCount }: { user: any; isApprover: boolean; isHR: boolean; isDark: boolean; pendingCount: number; unreadCount: number }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { balances, fetchBalance } = useBalance();
+
+  useEffect(() => {
+    if (user?.id) fetchBalance(user.id);
+  }, [user?.id]);
+
+  const ptoBalance = balances.find((b) => b.leave_type === 'pto');
 
   const activeTab = NAV_ITEMS.find((item) => pathname.includes(`/${item.name}`))?.name ?? 'dashboard';
 
@@ -54,7 +63,7 @@ function WebSidebar({ user, isApprover, isHR, isDark, pendingCount, unreadCount 
     >
       {/* Branding */}
       <View style={{ paddingHorizontal: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: isDark ? '#1E293B' : '#F1F5F9', marginBottom: 8 }}>
-        <Text style={{ fontSize: 20, fontWeight: '700', color: '#2563EB' }}>HR Leave</Text>
+        <Text style={{ fontSize: 20, fontWeight: '700', color: '#2563EB' }}>HR</Text>
         <Text style={{ fontSize: 12, color: isDark ? '#64748B' : '#94A3B8', marginTop: 2 }}>Management System</Text>
 
         {/* Logged-in user */}
@@ -82,6 +91,28 @@ function WebSidebar({ user, isApprover, isHR, isDark, pendingCount, unreadCount 
                 {user.is_active !== false ? 'Active' : 'Inactive'}
               </Text>
             </View>
+            {/* PTO Balance */}
+            {ptoBalance && (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  marginTop: 10,
+                  backgroundColor: isDark ? 'rgba(59,130,246,0.12)' : '#EFF6FF',
+                  borderRadius: 8,
+                  paddingVertical: 6,
+                  paddingHorizontal: 10,
+                  gap: 6,
+                }}
+              >
+                <CalendarDays size={14} color={isDark ? '#93C5FD' : '#2563EB'} />
+                <Text style={{ fontSize: 11, color: isDark ? '#94A3B8' : '#64748B', fontWeight: '500' }}>PTO</Text>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: isDark ? '#93C5FD' : '#2563EB' }}>
+                  {formatHours(ptoBalance.balance_hours)}
+                </Text>
+              </View>
+            )}
+
           </View>
         )}
       </View>
@@ -140,7 +171,7 @@ function WebSidebar({ user, isApprover, isHR, isDark, pendingCount, unreadCount 
                 </Text>
               </View>
             )}
-            {item.name === 'approvals' && pendingCount > 0 && (
+            {item.name === 'tasks' && pendingCount > 0 && (
               <View
                 style={{
                   backgroundColor: '#DC2626',
@@ -172,14 +203,14 @@ export default function TabLayout() {
   const isDark = colorScheme === 'dark';
   const setUnreadCount = useNotificationStore((s) => s.setUnreadCount);
   const unreadCount = useNotificationStore((s) => s.unreadCount);
-  const pendingCount = useApprovalStore((s) => s.pendingCount);
-  const setPendingCount = useApprovalStore((s) => s.setPendingCount);
+  const pendingCount = useTaskStore((s) => s.pendingCount);
+  const setPendingCount = useTaskStore((s) => s.setPendingCount);
 
   // Fetch unread count on mount and when user changes
   useEffect(() => {
     if (user?.id) {
       notificationService.getUnreadCount(user.id).then(setUnreadCount);
-      approvalService.getMyPendingApprovals(user.id).then((data) => setPendingCount(data.length));
+      leaveApprovalService.getMyPendingApprovals(user.id).then((data) => setPendingCount(data.length));
     }
   }, [user?.id]);
 
@@ -242,9 +273,9 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="approvals"
+        name="tasks"
         options={{
-          title: 'Approvals',
+          title: 'Tasks',
           tabBarIcon: ({ color, size }) => <CheckSquare size={size} color={color} />,
           tabBarBadge: isApprover && pendingCount > 0 ? pendingCount : undefined,
           tabBarBadgeStyle: { backgroundColor: '#DC2626', fontSize: 10, fontWeight: '700' },

@@ -1,5 +1,5 @@
-import { useCallback, useEffect } from 'react';
-import { View, Text, ScrollView, Platform } from 'react-native';
+import { useState, useCallback, useEffect } from 'react';
+import { View, Text, ScrollView, Pressable, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
@@ -21,14 +21,15 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { useBalance } from '@/hooks/use-balance';
 import { useLeaveRequest } from '@/hooks/use-leave-request';
-import { useApprovals } from '@/hooks/use-approvals';
+import { useApprovals } from '@/hooks/use-leave-approvals';
+import { useRenewalTasks } from '@/hooks/use-renewal-tasks';
 import { useNotifications } from '@/hooks/use-notifications';
 import { useNotificationStore } from '@/stores/notification-store';
-import { useApprovalStore } from '@/stores/approval-store';
-import { Role, LeaveStatus, LeaveType } from '@/types/enums';
+import { useTaskStore } from '@/stores/task-store';
+import { Role, LeaveStatus, LeaveType, RenewalTaskStatus } from '@/types/enums';
 import { getStatusLabel } from '@/lib/state-machine';
 import { formatHours, formatDaysHours, formatDateRange, formatPendingSince, getRoleLabel } from '@/lib/utils';
-import type { LeaveRequest, AppNotification } from '@/types/models';
+import type { LeaveRequest, AppNotification, RenewalTask } from '@/types/models';
 
 const isWeb = Platform.OS === 'web';
 
@@ -37,12 +38,22 @@ let DataGrid: any;
 let MuiThemeProvider: any;
 let Chip: any;
 let MuiButton: any;
+let Dialog: any;
+let DialogTitle: any;
+let DialogContent: any;
+let DialogActions: any;
+let TextField: any;
 if (isWeb) {
   const dg = require('@mui/x-data-grid');
   DataGrid = dg.DataGrid;
   MuiThemeProvider = require('@/components/web/mui-theme-provider').MuiThemeProvider;
   Chip = require('@mui/material/Chip').default;
   MuiButton = require('@mui/material/Button').default;
+  Dialog = require('@mui/material/Dialog').default;
+  DialogTitle = require('@mui/material/DialogTitle').default;
+  DialogContent = require('@mui/material/DialogContent').default;
+  DialogActions = require('@mui/material/DialogActions').default;
+  TextField = require('@mui/material/TextField').default;
 }
 
 // ─── Enterprise Design Tokens ────────────────────────────────────────
@@ -133,26 +144,32 @@ const STATUS_COLOR_MAP: Record<string, 'warning' | 'success' | 'error' | 'defaul
 /** Action Required Card — left column */
 function ActionRequiredCard({
   pendingApprovals,
+  renewalTasks,
   notifications,
   isDark,
   isApprover,
   onApprove,
   onViewRequest,
+  onRenew,
   onViewAllNotifications,
   onViewAllApprovals,
+  onViewAllRenewals,
 }: {
   pendingApprovals: LeaveRequest[];
+  renewalTasks: RenewalTask[];
   notifications: AppNotification[];
   isDark: boolean;
   isApprover: boolean;
   onApprove: (request: LeaveRequest) => void;
   onViewRequest: (request: LeaveRequest) => void;
+  onRenew: (task: RenewalTask) => void;
   onViewAllNotifications: () => void;
   onViewAllApprovals: () => void;
+  onViewAllRenewals: () => void;
 }) {
   const tk = t(isDark);
   const unreadCount = useNotificationStore((s) => s.unreadCount);
-  const totalCount = (isApprover ? pendingApprovals.length : 0) + (unreadCount || 0);
+  const totalCount = (isApprover ? pendingApprovals.length : 0) + renewalTasks.length + (unreadCount || 0);
   const recent = notifications.slice(0, 3);
 
   return (
@@ -302,8 +319,87 @@ function ActionRequiredCard({
         </div>
       )}
 
-      {/* No approvals fallback */}
-      {(!isApprover || pendingApprovals.length === 0) && (
+      {/* Document Renewals */}
+      {renewalTasks.length > 0 && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px 10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: isDark ? '#E2E8F0' : '#334155' }}>
+                Document Renewals
+              </span>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  backgroundColor: '#DC2626',
+                  color: '#FFFFFF',
+                  borderRadius: 8,
+                  padding: '1px 7px',
+                }}
+              >
+                {renewalTasks.length}
+              </span>
+            </div>
+            {renewalTasks.length > 4 && (
+              <span
+                onClick={onViewAllRenewals}
+                style={{ fontSize: 12, fontWeight: 600, color: tk.accent, cursor: 'pointer' }}
+              >
+                View All
+              </span>
+            )}
+          </div>
+          {renewalTasks.slice(0, 4).map((task) => (
+            <div
+              key={task.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 20px',
+                borderBottom: `1px solid ${isDark ? DT.cardBorder : '#F1F5F9'}`,
+                backgroundColor: isDark ? DT.subBg : '#FAFBFC',
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: tk.textPrimary }}>
+                    {task.employee?.full_name || '—'}
+                  </span>
+                  <span style={{ fontSize: 13, color: tk.textSecondary }}>
+                    {task.document_type}
+                  </span>
+                </div>
+                <div style={{ fontSize: 13, color: tk.textMuted }}>
+                  Expires {task.expiry_date} · {task.task_number}
+                </div>
+              </div>
+              <MuiButton
+                variant="contained"
+                size="small"
+                onClick={(e: any) => {
+                  e.stopPropagation();
+                  onRenew(task);
+                }}
+                sx={{
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  fontSize: 13,
+                  borderRadius: '8px',
+                  px: 2,
+                  py: 0.5,
+                  minWidth: 0,
+                }}
+              >
+                Renew
+              </MuiButton>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* No action required fallback */}
+      {(!isApprover || pendingApprovals.length === 0) && renewalTasks.length === 0 && (
         <div
           style={{
             padding: '20px',
@@ -313,7 +409,7 @@ function ActionRequiredCard({
             borderBottom: `1px solid ${isDark ? DT.cardBorder : tk.cardBorder}`,
           }}
         >
-          No pending approvals
+          No action required
         </div>
       )}
 
@@ -371,7 +467,9 @@ function ActionRequiredCard({
                     ? isDark
                       ? 'rgba(59,130,246,0.08)'
                       : 'rgba(37,99,235,0.04)'
-                    : 'transparent',
+                    : isDark
+                      ? 'rgba(255,255,255,0.02)'
+                      : 'rgba(0,0,0,0.01)',
                 }}
               >
                 <div
@@ -379,7 +477,7 @@ function ActionRequiredCard({
                     width: 8,
                     height: 8,
                     borderRadius: 4,
-                    backgroundColor: !n.is_read ? tk.accent : 'transparent',
+                    backgroundColor: !n.is_read ? tk.accent : isDark ? '#334155' : '#CBD5E1',
                     flexShrink: 0,
                   }}
                 />
@@ -387,8 +485,10 @@ function ActionRequiredCard({
                   <div
                     style={{
                       fontSize: 13,
-                      color: isDark ? '#E2E8F0' : '#0F172A',
-                      fontWeight: n.is_read ? 400 : 600,
+                      color: !n.is_read
+                        ? isDark ? '#E2E8F0' : '#0F172A'
+                        : isDark ? '#94A3B8' : '#475569',
+                      fontWeight: n.is_read ? 500 : 600,
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap' as const,
@@ -396,6 +496,20 @@ function ActionRequiredCard({
                   >
                     {n.title}
                   </div>
+                  {n.body && (
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: tk.textMuted,
+                        marginTop: 2,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap' as const,
+                      }}
+                    >
+                      {n.body}
+                    </div>
+                  )}
                 </div>
                 <div style={{ fontSize: 11, color: tk.textMuted, flexShrink: 0 }}>
                   {formatPendingSince(n.created_at)}
@@ -531,7 +645,9 @@ export default function DashboardScreen() {
   const { balances, emergencyCount, fetchBalance, fetchEmergencyCount } = useBalance();
   const { requests, fetchMyRequests } = useLeaveRequest();
   const { pendingApprovals, fetchPendingApprovals, approve } = useApprovals();
-  const setPendingCount = useApprovalStore((s) => s.setPendingCount);
+  const { myTasks: renewalTasks, fetchMyTasks: fetchRenewalTasks, completeTask } = useRenewalTasks();
+  const setPendingCount = useTaskStore((s) => s.setPendingCount);
+  const setRenewalTaskCount = useTaskStore((s) => s.setRenewalTaskCount);
   const { notifications, fetchNotifications } = useNotifications(user?.id);
   const unreadCount = useNotificationStore((s) => s.unreadCount);
 
@@ -547,6 +663,8 @@ export default function DashboardScreen() {
       if (isApproverRole) {
         fetchPendingApprovals(user.id);
       }
+      // Fetch renewal tasks assigned to this user (HR staff)
+      fetchRenewalTasks(user.id);
     }, [user?.id]),
   );
 
@@ -554,6 +672,10 @@ export default function DashboardScreen() {
   useEffect(() => {
     setPendingCount(pendingApprovals.length);
   }, [pendingApprovals.length]);
+
+  useEffect(() => {
+    setRenewalTaskCount(renewalTasks.length);
+  }, [renewalTasks.length]);
 
   const ptoBalance = balances.find((b) => b.leave_type === 'pto');
   const pendingRequests = requests.filter((r) =>
@@ -590,13 +712,28 @@ export default function DashboardScreen() {
     }
   };
 
+  // Renew dialog state (web only)
+  const [renewDialog, setRenewDialog] = useState<{ open: boolean; task: RenewalTask | null }>({ open: false, task: null });
+  const [newExpiry, setNewExpiry] = useState('');
+
+  const handleRenew = async (taskId: string, newExpiryDate: string) => {
+    if (!user) return;
+    try {
+      await completeTask(taskId, user.id, newExpiryDate);
+      setRenewDialog({ open: false, task: null });
+      setNewExpiry('');
+      fetchRenewalTasks(user.id);
+    } catch {
+      // Error handled by hook
+    }
+  };
+
   // ─── Web Layout ──────────────────────────────────────────────────
 
   if (isWeb) {
     const tk = t(isDark);
 
     const headerChips: { icon: any; label: string; value: string | number; color: string; textColor: string; bg: string }[] = [
-      { icon: CalendarDays, label: 'PTO Balance', value: ptoBalance ? formatHours(ptoBalance.balance_hours) : '--', color: DT.infoBorder, textColor: isDark ? DT.infoText : '#2563EB', bg: isDark ? DT.infoBg : '#EFF6FF' },
       { icon: CheckCircle2, label: 'Approved', value: monthApproved, color: DT.successBorder, textColor: isDark ? DT.successText : '#16A34A', bg: isDark ? DT.successBg : '#F0FDF4' },
       { icon: XCircle, label: 'Rejected', value: monthRejected, color: DT.dangerBorder, textColor: isDark ? DT.dangerText : '#DC2626', bg: isDark ? DT.dangerBg : '#FEF2F2' },
       { icon: TrendingUp, label: 'Pending', value: formatHours(pendingHoursTotal), color: DT.warningBorder, textColor: isDark ? DT.warningText : '#D97706', bg: isDark ? DT.warningBg : '#FFFBEB' },
@@ -659,6 +796,29 @@ export default function DashboardScreen() {
                 </span>
                 <span style={{ fontSize: 12, color: isDark ? DT.warningText : '#92400E', fontWeight: 500 }}>
                   Awaiting your approval
+                </span>
+              </div>
+            )}
+
+            {/* Expired docs chip */}
+            {renewalTasks.length > 0 && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '5px 12px',
+                  borderRadius: 8,
+                  backgroundColor: isDark ? DT.dangerBg : '#FEF2F2',
+                  border: `1px solid ${isDark ? 'rgba(239,68,68,0.25)' : '#FECACA'}`,
+                }}
+              >
+                <AlertCircle size={14} color={isDark ? DT.dangerText : '#DC2626'} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: isDark ? DT.dangerText : '#DC2626' }}>
+                  +{renewalTasks.length}
+                </span>
+                <span style={{ fontSize: 12, color: isDark ? DT.dangerText : '#991B1B', fontWeight: 500 }}>
+                  Expired doc{renewalTasks.length > 1 ? 's' : ''} need renewal
                 </span>
               </div>
             )}
@@ -746,13 +906,16 @@ export default function DashboardScreen() {
           <div style={{ marginBottom: 28 }}>
             <ActionRequiredCard
               pendingApprovals={pendingApprovals}
+              renewalTasks={renewalTasks}
               notifications={notifications}
               isDark={isDark}
               isApprover={!!isApprover}
               onApprove={handleApprove}
               onViewRequest={handleRowPress}
+              onRenew={(task) => { setRenewDialog({ open: true, task }); setNewExpiry(''); }}
               onViewAllNotifications={() => router.push('/(app)/notifications' as any)}
-              onViewAllApprovals={() => router.push('/(app)/(tabs)/approvals' as any)}
+              onViewAllApprovals={() => router.push('/(app)/(tabs)/tasks' as any)}
+              onViewAllRenewals={() => router.push('/(app)/(tabs)/tasks' as any)}
             />
           </div>
 
@@ -817,6 +980,52 @@ export default function DashboardScreen() {
           </div>
         </div>
         </div>
+
+        {/* Renew Dialog */}
+        {renewDialog.task && (
+          <MuiThemeProvider isDark={isDark}>
+            <Dialog open={renewDialog.open} onClose={() => setRenewDialog({ open: false, task: null })} maxWidth="xs" fullWidth>
+              <DialogTitle sx={{ fontWeight: 700 }}>Renew Document</DialogTitle>
+              <DialogContent>
+                <div style={{ marginBottom: 16, fontSize: 14 }}>
+                  <div style={{ marginBottom: 8 }}>
+                    <strong>Employee:</strong> {renewDialog.task.employee?.full_name || '—'}
+                  </div>
+                  <div style={{ marginBottom: 8 }}>
+                    <strong>Document:</strong> {renewDialog.task.document_type.charAt(0).toUpperCase() + renewDialog.task.document_type.slice(1)}
+                  </div>
+                  <div style={{ marginBottom: 16 }}>
+                    <strong>Current Expiry:</strong>{' '}
+                    <span style={{ color: '#EF4444', fontWeight: 600 }}>{renewDialog.task.expiry_date}</span>
+                  </div>
+                </div>
+                <TextField
+                  label="New Expiry Date"
+                  type="date"
+                  value={newExpiry}
+                  onChange={(e: any) => setNewExpiry(e.target.value)}
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                  inputProps={{ min: new Date().toISOString().split('T')[0] }}
+                />
+              </DialogContent>
+              <DialogActions sx={{ px: 3, pb: 2 }}>
+                <MuiButton onClick={() => setRenewDialog({ open: false, task: null })} color="inherit">
+                  Cancel
+                </MuiButton>
+                <MuiButton
+                  onClick={() => renewDialog.task && newExpiry && handleRenew(renewDialog.task.id, newExpiry)}
+                  variant="contained"
+                  color="primary"
+                  disabled={!newExpiry}
+                  sx={{ fontWeight: 700 }}
+                >
+                  Confirm Renewal
+                </MuiButton>
+              </DialogActions>
+            </Dialog>
+          </MuiThemeProvider>
+        )}
       </div>
     );
   }
@@ -900,8 +1109,45 @@ export default function DashboardScreen() {
             />
           ))}
           {pendingApprovals.length > 3 && (
-            <Button variant="ghost" onPress={() => router.push('/(app)/(tabs)/approvals' as any)}>
+            <Button variant="ghost" onPress={() => router.push('/(app)/(tabs)/tasks' as any)}>
               {`View All (${pendingApprovals.length})`}
+            </Button>
+          )}
+        </View>
+      )}
+
+      {/* Document renewals (for HR with assigned tasks) */}
+      {renewalTasks.length > 0 && (
+        <View className="mb-5">
+          <Text className="text-base font-semibold text-text-primary dark:text-white mb-3">
+            Document Renewals
+          </Text>
+          {renewalTasks.slice(0, 3).map((task) => (
+            <Pressable
+              key={task.id}
+              onPress={() => router.push('/(app)/(tabs)/tasks' as any)}
+              className="bg-white dark:bg-slate-800 rounded-xl p-4 mb-2 border border-slate-100 dark:border-slate-700"
+            >
+              <View className="flex-row justify-between items-center">
+                <View className="flex-1 mr-3">
+                  <Text className="text-sm font-semibold text-text-primary dark:text-white">
+                    {task.employee?.full_name || '—'}
+                  </Text>
+                  <Text className="text-xs text-text-secondary dark:text-slate-400 mt-1">
+                    {task.document_type} · Expires {task.expiry_date}
+                  </Text>
+                </View>
+                <View className={`px-2 py-1 rounded-md ${task.status === RenewalTaskStatus.InProgress ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-violet-50 dark:bg-violet-900/20'}`}>
+                  <Text className={`text-xs font-semibold ${task.status === RenewalTaskStatus.InProgress ? 'text-amber-600' : 'text-violet-600'}`}>
+                    {task.status === RenewalTaskStatus.InProgress ? 'In Progress' : 'Pending'}
+                  </Text>
+                </View>
+              </View>
+            </Pressable>
+          ))}
+          {renewalTasks.length > 3 && (
+            <Button variant="ghost" onPress={() => router.push('/(app)/(tabs)/tasks' as any)}>
+              {`View All (${renewalTasks.length})`}
             </Button>
           )}
         </View>

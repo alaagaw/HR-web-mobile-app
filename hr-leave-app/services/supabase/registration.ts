@@ -1,0 +1,281 @@
+import { supabase } from './client';
+import type { RegistrationService } from '../types';
+import type { Profile, PendingRegistration } from '@/types/models';
+import { RegistrationStatus } from '@/types/enums';
+
+const EDGE_FUNCTION_URL =
+  process.env.EXPO_PUBLIC_SUPABASE_URL + '/functions/v1';
+
+async function callEdgeFunction(
+  name: string,
+  body: Record<string, unknown>
+): Promise<any> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) throw new Error('Not authenticated');
+
+  const response = await fetch(`${EDGE_FUNCTION_URL}/${name}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || `${name} failed`);
+  return result;
+}
+
+export const registrationService: RegistrationService = {
+  // ── Self-registration flow ───────────────────────────────────
+
+  async submitRegistration(userId, data) {
+    // 1. Update profile with name and phone
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({
+        full_name: data.full_name,
+        phone: data.phone,
+        registration_status: RegistrationStatus.PendingApproval,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', userId);
+
+    if (profileError) throw new Error(profileError.message);
+
+    // 2. Upsert employee_documents
+    const { error: docError } = await supabase
+      .from('employee_documents')
+      .upsert(
+        {
+          employee_id: userId,
+          emp_code: `PENDING-${Date.now()}`,
+          iqama_number: data.iqama_number,
+          iqama_expiry: data.iqama_expiry,
+          passport_number: data.passport_number,
+          passport_expiry: data.passport_expiry,
+          insurance_number: data.insurance_number,
+          insurance_expiry: data.insurance_expiry,
+          occupation: data.occupation,
+          birth_date: data.birth_date,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'employee_id' }
+      );
+
+    if (docError) throw new Error(docError.message);
+
+    // 3. Notify all HR users (in-app)
+    const { data: hrUsers } = await supabase
+      .from('profiles')
+      .select('id, email, full_name')
+      .in('role', ['hr', 'hr_director'])
+      .eq('registration_status', 'active');
+
+    if (hrUsers?.length) {
+      const notifications = hrUsers.map((hr) => ({
+        user_id: hr.id,
+        type: 'registration_submitted',
+        title: 'New Registration Pending',
+        body: `${data.full_name} has submitted a registration request.`,
+        reference_id: userId,
+      }));
+      await supabase.from('notifications').insert(notifications);
+
+      // Send email to each HR user
+      for (const hr of hrUsers) {
+        try {
+          await callEdgeFunction('send-registration-email', {
+            type: 'registration_submitted',
+            recipientEmail: hr.email,
+            recipientName: hr.full_name,
+            data: { employeeName: data.full_name },
+          });
+        } catch {
+          // Don't fail the registration if email fails
+        }
+      }
+    }
+
+    // 4. Return updated profile
+    const { data: profile, error: fetchError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (fetchError) throw new Error(fetchError.message);
+    return profile as Profile;
+  },
+
+  async getRegistrationStatus(userId) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('registration_status')
+      .eq('id', userId)
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data.registration_status as RegistrationStatus;
+  },
+
+  // ── HR admin ─────────────────────────────────────────────────
+
+  async getPendingRegistrations() {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .in('registration_status', ['pending_approval', 'pending_info'])
+      .order('created_at', { ascending: false });
+
+    if (error) throw new Error(error.message);
+
+    const profiles = data as Profile[];
+    const result: PendingRegistration[] = [];
+
+    for (const profile of profiles) {
+      const { data: doc } = await supabase
+        .from('employee_documents')
+        .select('*')
+        .eq('employee_id', profile.id)
+        .maybeSingle();
+
+      result.push({ ...profile, employee_documents: doc });
+    }
+
+    return result;
+  },
+
+  async approveRegistration(userId, data, approvedBy) {
+    // 1. Update profile with HR-assigned fields
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({
+        role: data.role,
+        department: data.department,
+        supervisor_id: data.supervisor_id,
+        manager_id: data.manager_id,
+        registration_status: RegistrationStatus.Active,
+        registration_note: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', userId);
+
+    if (profileError) throw new Error(profileError.message);
+
+    // 2. Update emp_code in employee_documents
+    await supabase
+      .from('employee_documents')
+      .update({
+        emp_code: data.emp_code,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('employee_id', userId);
+
+    // 3. Create default leave balances
+    const { error: rpcError } = await supabase.rpc(
+      'create_default_leave_balances',
+      { p_employee_id: userId }
+    );
+    if (rpcError) throw new Error(rpcError.message);
+
+    // 4. In-app notification
+    await supabase.from('notifications').insert({
+      user_id: userId,
+      type: 'registration_approved',
+      title: 'Registration Approved!',
+      body: 'Your registration has been approved. You now have full access to the HR System.',
+    });
+
+    // 5. Email notification
+    const { data: employeeProfile } = await supabase
+      .from('profiles')
+      .select('email, full_name')
+      .eq('id', userId)
+      .single();
+
+    if (employeeProfile) {
+      try {
+        await callEdgeFunction('send-registration-email', {
+          type: 'registration_approved',
+          recipientEmail: employeeProfile.email,
+          recipientName: employeeProfile.full_name,
+        });
+      } catch {
+        // Don't fail approval if email fails
+      }
+    }
+
+    // 6. Return updated profile
+    const { data: profile, error: fetchError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (fetchError) throw new Error(fetchError.message);
+    return profile as Profile;
+  },
+
+  async rejectRegistration(userId, reason, rejectedBy) {
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({
+        registration_status: RegistrationStatus.Rejected,
+        registration_note: reason,
+        is_active: false,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', userId);
+
+    if (profileError) throw new Error(profileError.message);
+
+    // In-app notification
+    await supabase.from('notifications').insert({
+      user_id: userId,
+      type: 'registration_rejected',
+      title: 'Registration Not Approved',
+      body: `Your registration was not approved. Reason: ${reason}`,
+    });
+
+    // Email notification
+    const { data: employeeProfile } = await supabase
+      .from('profiles')
+      .select('email, full_name')
+      .eq('id', userId)
+      .single();
+
+    if (employeeProfile) {
+      try {
+        await callEdgeFunction('send-registration-email', {
+          type: 'registration_rejected',
+          recipientEmail: employeeProfile.email,
+          recipientName: employeeProfile.full_name,
+          data: { reason },
+        });
+      } catch {
+        // Don't fail rejection if email fails
+      }
+    }
+
+    // Return updated profile
+    const { data: profile, error: fetchError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (fetchError) throw new Error(fetchError.message);
+    return profile as Profile;
+  },
+
+  async inviteEmployee(data, invitedBy) {
+    await callEdgeFunction('invite-employee', {
+      ...data,
+      invited_by: invitedBy,
+    });
+  },
+};

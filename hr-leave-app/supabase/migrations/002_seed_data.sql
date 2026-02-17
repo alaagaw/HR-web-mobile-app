@@ -1,5 +1,5 @@
 -- ============================================================
--- HR LEAVE SYSTEM — SEED DATA (Test Users + Balances)
+-- HR SYSTEM — SEED DATA (Test Users + Balances)
 -- Run this AFTER 001_initial_schema.sql
 -- ============================================================
 --

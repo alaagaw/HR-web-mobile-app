@@ -6,9 +6,12 @@
 
 export { authService } from './supabase/auth';
 export { leaveService } from './supabase/leave';
-export { approvalService } from './supabase/approval';
+export { leaveApprovalService } from './supabase/leave-approval';
 export { balanceService } from './supabase/balance';
 export { attachmentService } from './supabase/attachment';
 export { notificationService } from './supabase/notification';
 export { auditService } from './supabase/audit';
 export { userService } from './supabase/user';
+export { documentService } from './supabase/document';
+export { renewalTaskService } from './supabase/renewal-task';
+export { registrationService } from './supabase/registration';

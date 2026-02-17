@@ -8,11 +8,96 @@ import {
   ClipboardList,
   ChevronRight,
   Settings,
+  ShieldAlert,
+  UserPlus,
+  FileText,
+  RefreshCw,
 } from 'lucide-react-native';
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 
 const isWeb = Platform.OS === 'web';
+
+// ─── Types ───────────────────────────────────────────────────────────
+
+interface AdminPage {
+  title: string;
+  description: string;
+  icon: any;
+  iconColor: string;
+  path: string;
+}
+
+interface AdminGroup {
+  label: string;
+  description: string;
+  items: AdminPage[];
+}
+
+// ─── Data ────────────────────────────────────────────────────────────
+
+const ADMIN_GROUPS: AdminGroup[] = [
+  {
+    label: 'Management',
+    description: 'Employee records, balances, registrations, and documents',
+    items: [
+      {
+        title: 'Document Expiry',
+        description: 'Monitor passport, iqama & insurance expiry. Assign renewal tasks to HR staff.',
+        icon: ShieldAlert,
+        iconColor: '#EF4444',
+        path: '/(app)/admin/document-expiry',
+      },
+      {
+        title: 'Pending Registrations',
+        description: 'Review and approve employee self-registrations. Assign roles, departments, and employee codes.',
+        icon: UserPlus,
+        iconColor: '#F97316',
+        path: '/(app)/admin/registrations',
+      },
+      {
+        title: 'Manage Employees',
+        description: 'View, search, and edit employee profiles, roles, departments, and organizational assignments.',
+        icon: Users,
+        iconColor: '#2563EB',
+        path: '/(app)/admin/employees',
+      },
+      {
+        title: 'Manage Balances',
+        description: 'View PTO balances for all employees. Add or deduct hours with full audit trail.',
+        icon: Wallet,
+        iconColor: '#16A34A',
+        path: '/(app)/admin/balances',
+      },
+    ],
+  },
+  {
+    label: 'History & Reports',
+    description: 'Audit trails, ledgers, and transaction history',
+    items: [
+      {
+        title: 'Leave Request History',
+        description: 'Complete history of all leave requests. Search, filter by date range, and review all transactions.',
+        icon: ClipboardList,
+        iconColor: '#8B5CF6',
+        path: '/(app)/admin/request-history',
+      },
+      {
+        title: 'Document Renewal History',
+        description: 'History of all document renewal tasks. Track who renewed what, when, and the old/new expiry dates.',
+        icon: RefreshCw,
+        iconColor: '#0EA5E9',
+        path: '/(app)/admin/renewal-history',
+      },
+      {
+        title: 'Balance Ledger',
+        description: 'Complete history of all balance adjustments across the organization.',
+        icon: BookOpen,
+        iconColor: '#F59E0B',
+        path: '/(app)/admin/balance-ledger',
+      },
+    ],
+  },
+];
 
 // ─── Web Components ──────────────────────────────────────────────────
 
@@ -37,17 +122,17 @@ function WebAdminCard({
       style={{
         backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
         border: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
-        borderRadius: 16,
-        padding: '28px 28px',
+        borderRadius: 14,
+        padding: '20px 24px',
         cursor: 'pointer',
         transition: 'all 0.15s ease',
         display: 'flex',
         alignItems: 'center',
-        gap: 20,
+        gap: 18,
       }}
       onMouseEnter={(e: any) => {
-        e.currentTarget.style.borderColor = '#2563EB';
-        e.currentTarget.style.boxShadow = '0 4px 16px rgba(37,99,235,0.12)';
+        e.currentTarget.style.borderColor = iconColor;
+        e.currentTarget.style.boxShadow = `0 4px 16px ${iconColor}18`;
         e.currentTarget.style.transform = 'translateY(-2px)';
       }}
       onMouseLeave={(e: any) => {
@@ -58,9 +143,9 @@ function WebAdminCard({
     >
       <div
         style={{
-          width: 56,
-          height: 56,
-          borderRadius: 14,
+          width: 48,
+          height: 48,
+          borderRadius: 12,
           backgroundColor: `${iconColor}14`,
           display: 'flex',
           alignItems: 'center',
@@ -68,17 +153,62 @@ function WebAdminCard({
           flexShrink: 0,
         }}
       >
-        <Icon size={26} color={iconColor} />
+        <Icon size={24} color={iconColor} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 16, fontWeight: 600, color: isDark ? '#FFFFFF' : '#0F172A', marginBottom: 4 }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: isDark ? '#FFFFFF' : '#0F172A', marginBottom: 3 }}>
           {title}
         </div>
-        <div style={{ fontSize: 13, color: isDark ? '#94A3B8' : '#64748B', lineHeight: 1.4 }}>
+        <div style={{ fontSize: 12, color: isDark ? '#94A3B8' : '#64748B', lineHeight: 1.4 }}>
           {description}
         </div>
       </div>
-      <ChevronRight size={20} color={isDark ? '#64748B' : '#94A3B8'} />
+      <ChevronRight size={18} color={isDark ? '#64748B' : '#94A3B8'} />
+    </div>
+  );
+}
+
+function WebGroupSection({
+  group,
+  isDark,
+  onNavigate,
+}: {
+  group: AdminGroup;
+  isDark: boolean;
+  onNavigate: (path: string) => void;
+}) {
+  return (
+    <div style={{ marginBottom: 36 }}>
+      {/* Group header */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 17, fontWeight: 700, color: isDark ? '#F1F5F9' : '#0F172A' }}>
+          {group.label}
+        </div>
+        <div style={{ fontSize: 13, color: isDark ? '#64748B' : '#94A3B8', marginTop: 2 }}>
+          {group.description}
+        </div>
+      </div>
+
+      {/* Cards grid — 2 columns */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, 1fr)',
+          gap: 14,
+        }}
+      >
+        {group.items.map((page) => (
+          <WebAdminCard
+            key={page.path}
+            title={page.title}
+            description={page.description}
+            icon={page.icon}
+            iconColor={page.iconColor}
+            isDark={isDark}
+            onClick={() => onNavigate(page.path)}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -90,36 +220,7 @@ export default function AdminScreen() {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
 
-  const adminPages = [
-    {
-      title: 'Manage Employees',
-      description: 'View, search, and edit employee profiles, roles, departments, and organizational assignments.',
-      icon: Users,
-      iconColor: '#2563EB',
-      path: '/(app)/admin/employees',
-    },
-    {
-      title: 'Manage Balances',
-      description: 'View PTO balances for all employees. Add or deduct hours with full audit trail.',
-      icon: Wallet,
-      iconColor: '#16A34A',
-      path: '/(app)/admin/balances',
-    },
-    {
-      title: 'Balance Ledger',
-      description: 'Complete history of all balance adjustments across the organization.',
-      icon: BookOpen,
-      iconColor: '#F59E0B',
-      path: '/(app)/admin/balance-ledger',
-    },
-    {
-      title: 'Request History',
-      description: 'Complete history of all leave requests. Search, filter by date range, and review all transactions.',
-      icon: ClipboardList,
-      iconColor: '#8B5CF6',
-      path: '/(app)/admin/request-history',
-    },
-  ];
+  const handleNavigate = (path: string) => router.push(path as any);
 
   // ─── Web Layout ──────────────────────────────────────────────────
 
@@ -133,7 +234,7 @@ export default function AdminScreen() {
           backgroundColor: isDark ? '#0F172A' : '#F8FAFC',
         }}
       >
-        <div style={{ maxWidth: 900, margin: '0 auto' }}>
+        <div style={{ maxWidth: 960, margin: '0 auto' }}>
           {/* Header */}
           <div style={{ marginBottom: 32 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
@@ -161,20 +262,15 @@ export default function AdminScreen() {
             </div>
           </div>
 
-          {/* Admin cards */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {adminPages.map((page) => (
-              <WebAdminCard
-                key={page.path}
-                title={page.title}
-                description={page.description}
-                icon={page.icon}
-                iconColor={page.iconColor}
-                isDark={isDark}
-                onClick={() => router.push(page.path as any)}
-              />
-            ))}
-          </div>
+          {/* Admin groups */}
+          {ADMIN_GROUPS.map((group) => (
+            <WebGroupSection
+              key={group.label}
+              group={group}
+              isDark={isDark}
+              onNavigate={handleNavigate}
+            />
+          ))}
         </div>
       </div>
     );
@@ -191,28 +287,40 @@ export default function AdminScreen() {
         Manage employees, balances, and organizational data
       </Text>
 
-      {adminPages.map((page) => (
-        <Card key={page.path} className="mb-3">
-          <Pressable
-            onPress={() => router.push(page.path as any)}
-            className="flex-row items-center py-2"
-          >
-            <View
-              className="w-11 h-11 rounded-xl items-center justify-center mr-3"
-              style={{ backgroundColor: `${page.iconColor}18` }}
-            >
-              <page.icon size={22} color={page.iconColor} />
-            </View>
-            <View className="flex-1">
-              <Text className="text-sm font-semibold text-text-primary dark:text-white">
-                {page.title}
-              </Text>
-              <Text className="text-xs text-text-muted dark:text-slate-400 mt-0.5" numberOfLines={2}>
-                {page.description}
-              </Text>
-            </View>
-          </Pressable>
-        </Card>
+      {ADMIN_GROUPS.map((group) => (
+        <View key={group.label} style={{ marginBottom: 20 }}>
+          {/* Group header */}
+          <Text className="text-sm font-bold text-text-primary dark:text-slate-200 mb-0.5">
+            {group.label}
+          </Text>
+          <Text className="text-xs text-text-muted dark:text-slate-500 mb-3">
+            {group.description}
+          </Text>
+
+          {group.items.map((page) => (
+            <Card key={page.path} className="mb-3">
+              <Pressable
+                onPress={() => handleNavigate(page.path)}
+                className="flex-row items-center py-2"
+              >
+                <View
+                  className="w-11 h-11 rounded-xl items-center justify-center mr-3"
+                  style={{ backgroundColor: `${page.iconColor}18` }}
+                >
+                  <page.icon size={22} color={page.iconColor} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-sm font-semibold text-text-primary dark:text-white">
+                    {page.title}
+                  </Text>
+                  <Text className="text-xs text-text-muted dark:text-slate-400 mt-0.5" numberOfLines={2}>
+                    {page.description}
+                  </Text>
+                </View>
+              </Pressable>
+            </Card>
+          ))}
+        </View>
       ))}
     </ScrollView>
   );

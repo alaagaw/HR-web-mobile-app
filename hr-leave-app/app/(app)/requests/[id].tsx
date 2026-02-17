@@ -15,7 +15,7 @@ import { ExcessDeterminationPanel } from '@/components/leave/excess-determinatio
 
 import { useAuth } from '@/hooks/use-auth';
 import { useLeaveRequest } from '@/hooks/use-leave-request';
-import { useApprovals } from '@/hooks/use-approvals';
+import { useApprovals } from '@/hooks/use-leave-approvals';
 import { useBalance } from '@/hooks/use-balance';
 import { getStatusLabel, getStatusVariant, canTransition, getRemainingApprovalSteps } from '@/lib/state-machine';
 import { formatDateRange, formatHours, formatDaysHours, formatFileSize } from '@/lib/utils';

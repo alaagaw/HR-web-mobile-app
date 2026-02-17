@@ -1,10 +1,10 @@
 import { supabase } from './client';
-import type { ApprovalService } from '../types';
+import type { LeaveApprovalService } from '../types';
 import type { LeaveRequest } from '@/types/models';
 import { LeaveStatus, LeaveType, HistoryAction, ExcessDetermination, Role } from '@/types/enums';
 import { getNextApprovalStatus } from '@/lib/state-machine';
 
-export const approvalService: ApprovalService = {
+export const leaveApprovalService: LeaveApprovalService = {
   async getMyPendingApprovals(userId) {
     const { data, error } = await supabase
       .from('leave_requests')

@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useColorScheme } from 'nativewind';
 import { useAuth } from '@/hooks/use-auth';
 import { useThemeStore } from '@/stores/theme-store';
+import { RegistrationStatus } from '@/types/enums';
 import 'react-native-reanimated';
 import '../global.css';
 
@@ -13,7 +14,7 @@ export { ErrorBoundary } from 'expo-router';
 SplashScreen.preventAutoHideAsync();
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
@@ -21,13 +22,48 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     if (isLoading) return;
 
     const inAuthGroup = segments[0] === '(auth)';
+    const currentPath = segments.join('/');
 
+    // Not authenticated → go to sign-in (unless already on an auth page)
     if (!isAuthenticated && !inAuthGroup) {
       router.replace('/(auth)/sign-in' as any);
-    } else if (isAuthenticated && inAuthGroup) {
-      router.replace('/(app)/(tabs)/dashboard' as any);
+      return;
     }
-  }, [isAuthenticated, isLoading, segments]);
+
+    if (isAuthenticated && user) {
+      // 1. Must change password (HR-invited users)
+      if (user.must_change_password) {
+        if (currentPath !== '(auth)/change-password') {
+          router.replace('/(auth)/change-password' as any);
+        }
+        return;
+      }
+
+      // 2. Route based on registration status
+      switch (user.registration_status) {
+        case RegistrationStatus.EmailUnverified:
+        case RegistrationStatus.PendingInfo:
+          if (currentPath !== '(auth)/registration-form') {
+            router.replace('/(auth)/registration-form' as any);
+          }
+          return;
+
+        case RegistrationStatus.PendingApproval:
+        case RegistrationStatus.Rejected:
+          if (currentPath !== '(auth)/pending-approval') {
+            router.replace('/(auth)/pending-approval' as any);
+          }
+          return;
+
+        case RegistrationStatus.Active:
+          // Fully active user on an auth page → send to dashboard
+          if (inAuthGroup) {
+            router.replace('/(app)/(tabs)/dashboard' as any);
+          }
+          return;
+      }
+    }
+  }, [isAuthenticated, isLoading, segments, user?.registration_status, user?.must_change_password]);
 
   return <>{children}</>;
 }

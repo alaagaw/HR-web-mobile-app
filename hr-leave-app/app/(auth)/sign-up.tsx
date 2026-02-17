@@ -8,33 +8,114 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Banner } from '@/components/ui/banner';
 import { useAuth } from '@/hooks/use-auth';
-import { signInSchema, type SignInFormData } from '@/lib/validators';
+import { signUpSchema, type SignUpFormData } from '@/lib/validators';
 
 const isWeb = Platform.OS === 'web';
 
-// ─── Web Sign-In ──────────────────────────────────────────────────────
+// ─── Web Email-Sent Confirmation ──────────────────────────────────────
 
-function WebSignIn({
+function WebEmailSent({ onSignIn }: { onSignIn: () => void }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        height: '100vh',
+        width: '100vw',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#0F172A',
+      }}
+    >
+      <div style={{ textAlign: 'center', maxWidth: 440, padding: '0 24px' }}>
+        <div
+          style={{
+            width: 64,
+            height: 64,
+            borderRadius: 18,
+            background: 'linear-gradient(135deg, #16A34A, #15803D)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 24px',
+            boxShadow: '0 8px 32px rgba(22,163,74,0.3)',
+          }}
+        >
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        </div>
+        <h2
+          style={{
+            fontSize: 26,
+            fontWeight: 700,
+            color: '#FFFFFF',
+            margin: '0 0 10px',
+          }}
+        >
+          Check Your Email
+        </h2>
+        <p
+          style={{
+            fontSize: 15,
+            color: '#94A3B8',
+            lineHeight: 1.6,
+            margin: '0 0 32px',
+          }}
+        >
+          We sent a verification link to your email. Please click the link to verify your account, then come back and sign in.
+        </p>
+        <button
+          onClick={onSignIn}
+          style={{
+            width: '100%',
+            padding: '14px',
+            fontSize: 15,
+            fontWeight: 700,
+            borderRadius: 12,
+            border: 'none',
+            background: 'linear-gradient(135deg, #2563EB, #1D4ED8)',
+            color: '#FFFFFF',
+            cursor: 'pointer',
+            boxShadow: '0 4px 16px rgba(37,99,235,0.3)',
+            transition: 'all 0.15s ease',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.boxShadow = '0 6px 24px rgba(37,99,235,0.45)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(37,99,235,0.3)'; }}
+        >
+          Go to Sign In
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Web Sign-Up ──────────────────────────────────────────────────────
+
+function WebSignUp({
   error,
   loading,
   onSubmit,
-  onSignUp,
+  onSignIn,
 }: {
   error: string | null;
   loading: boolean;
-  onSubmit: (data: { email: string; password: string }) => void;
-  onSignUp: () => void;
+  onSubmit: (data: { email: string; password: string; confirmPassword: string }) => void;
+  onSignIn: () => void;
 }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [confirmError, setConfirmError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
     setEmailError('');
     setPasswordError('');
+    setConfirmError('');
 
     let valid = true;
     if (!email.trim()) {
@@ -47,48 +128,24 @@ function WebSignIn({
     if (!password) {
       setPasswordError('Password is required');
       valid = false;
+    } else if (password.length < 8) {
+      setPasswordError('Password must be at least 8 characters');
+      valid = false;
     }
-    if (valid) onSubmit({ email, password });
+    if (!confirmPassword) {
+      setConfirmError('Please confirm your password');
+      valid = false;
+    } else if (password !== confirmPassword) {
+      setConfirmError('Passwords do not match');
+      valid = false;
+    }
+    if (valid) onSubmit({ email, password, confirmPassword });
   };
 
-  const features = [
-    {
-      icon: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-          <circle cx="9" cy="7" r="4" />
-          <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-        </svg>
-      ),
-      title: 'Employee Management',
-      desc: 'Manage profiles, departments, and organizational structure',
-    },
-    {
-      icon: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
-          <line x1="16" x2="16" y1="2" y2="6" />
-          <line x1="8" x2="8" y1="2" y2="6" />
-          <line x1="3" x2="21" y1="10" y2="10" />
-        </svg>
-      ),
-      title: 'Leave Tracking',
-      desc: 'Request, approve, and monitor PTO with full audit trails',
-    },
-    {
-      icon: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
-          <path d="M14 2v6h6" />
-          <path d="M16 13H8" />
-          <path d="M16 17H8" />
-          <path d="M10 9H8" />
-        </svg>
-      ),
-      title: 'Document Compliance',
-      desc: 'Track passport, iqama & insurance expiry across your workforce',
-    },
+  const steps = [
+    { num: '1', label: 'Create account', desc: 'Set up your email and password' },
+    { num: '2', label: 'Complete profile', desc: 'Fill in your personal details' },
+    { num: '3', label: 'Admin approval', desc: 'HR will review and activate your account' },
   ];
 
   const inputStyle = (hasError: boolean): React.CSSProperties => ({
@@ -102,6 +159,38 @@ function WebSignIn({
     outline: 'none',
     transition: 'border-color 0.15s ease',
   });
+
+  const eyeButton = (show: boolean, toggle: () => void) => (
+    <button
+      type="button"
+      onClick={toggle}
+      style={{
+        position: 'absolute',
+        right: 14,
+        top: '50%',
+        transform: 'translateY(-50%)',
+        background: 'none',
+        border: 'none',
+        cursor: 'pointer',
+        padding: 4,
+        display: 'flex',
+        alignItems: 'center',
+      }}
+    >
+      {show ? (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+          <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+          <line x1="1" x2="23" y1="1" y2="23" />
+        </svg>
+      ) : (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      )}
+    </button>
+  );
 
   return (
     <div
@@ -126,7 +215,7 @@ function WebSignIn({
           overflow: 'hidden',
         }}
       >
-        {/* Decorative background circles */}
+        {/* Decorative circles */}
         <div
           style={{
             position: 'absolute',
@@ -150,7 +239,6 @@ function WebSignIn({
           }}
         />
 
-        {/* Logo + title */}
         <div style={{ position: 'relative', zIndex: 1, maxWidth: 480 }}>
           <div
             style={{
@@ -178,9 +266,7 @@ function WebSignIn({
               letterSpacing: '-0.5px',
             }}
           >
-            Human Resources
-            <br />
-            Management System
+            Join Your Team
           </h1>
           <p
             style={{
@@ -191,42 +277,65 @@ function WebSignIn({
               maxWidth: 400,
             }}
           >
-            Streamline employee management, leave tracking, and document compliance — all in one place.
+            Create your account in 3 simple steps and get started with your organization's HR portal.
           </p>
 
-          {/* Feature list */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            {features.map((f, i) => (
+          {/* Steps */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+            {steps.map((s, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
                 <div
                   style={{
                     width: 44,
                     height: 44,
                     borderRadius: 12,
-                    backgroundColor: 'rgba(37,99,235,0.15)',
+                    backgroundColor: i === 0 ? 'rgba(37,99,235,0.2)' : 'rgba(37,99,235,0.08)',
+                    border: i === 0 ? '1.5px solid rgba(37,99,235,0.4)' : '1.5px solid transparent',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexShrink: 0,
+                    fontSize: 18,
+                    fontWeight: 800,
+                    color: i === 0 ? '#3B82F6' : '#475569',
                   }}
                 >
-                  {f.icon}
+                  {s.num}
                 </div>
                 <div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: '#F1F5F9', marginBottom: 3 }}>
-                    {f.title}
+                  <div
+                    style={{
+                      fontSize: 15,
+                      fontWeight: 700,
+                      color: i === 0 ? '#F1F5F9' : '#64748B',
+                      marginBottom: 3,
+                    }}
+                  >
+                    {s.label}
                   </div>
-                  <div style={{ fontSize: 13, color: '#64748B', lineHeight: 1.5 }}>
-                    {f.desc}
+                  <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.5 }}>
+                    {s.desc}
                   </div>
                 </div>
+                {i < steps.length - 1 && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: 77,
+                      marginTop: 48,
+                      width: 1.5,
+                      height: 20,
+                      backgroundColor: '#1E293B',
+                    }}
+                  />
+                )}
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* ─── Right Panel — Sign-In Form ─── */}
+      {/* ─── Right Panel — Form ─── */}
       <div
         style={{
           width: 520,
@@ -237,6 +346,7 @@ function WebSignIn({
           backgroundColor: '#0F172A',
           borderLeft: '1px solid #1E293B',
           flexShrink: 0,
+          overflowY: 'auto',
         }}
       >
         <div style={{ maxWidth: 400 }}>
@@ -248,19 +358,19 @@ function WebSignIn({
               margin: '0 0 6px',
             }}
           >
-            Welcome back
+            Create your account
           </h2>
           <p
             style={{
               fontSize: 14,
               color: '#64748B',
-              margin: '0 0 36px',
+              margin: '0 0 32px',
             }}
           >
-            Sign in to your account to continue
+            Fill in your details to get started
           </p>
 
-          {/* Error banner */}
+          {/* Error */}
           {error && (
             <div
               style={{
@@ -285,19 +395,10 @@ function WebSignIn({
             </div>
           )}
 
-          {/* Form */}
           <form onSubmit={handleSubmit}>
             {/* Email */}
             <div style={{ marginBottom: 20 }}>
-              <label
-                style={{
-                  display: 'block',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: '#CBD5E1',
-                  marginBottom: 8,
-                }}
-              >
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#CBD5E1', marginBottom: 8 }}>
                 Email address
               </label>
               <input
@@ -310,68 +411,49 @@ function WebSignIn({
                 style={inputStyle(!!emailError)}
                 autoComplete="email"
               />
-              {emailError && (
-                <div style={{ fontSize: 13, color: '#EF4444', marginTop: 6 }}>{emailError}</div>
-              )}
+              {emailError && <div style={{ fontSize: 13, color: '#EF4444', marginTop: 6 }}>{emailError}</div>}
             </div>
 
             {/* Password */}
-            <div style={{ marginBottom: 28 }}>
-              <label
-                style={{
-                  display: 'block',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: '#CBD5E1',
-                  marginBottom: 8,
-                }}
-              >
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#CBD5E1', marginBottom: 8 }}>
                 Password
               </label>
               <div style={{ position: 'relative' }}>
                 <input
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="Enter your password"
+                  placeholder="At least 8 characters"
                   value={password}
                   onChange={(e) => { setPassword(e.target.value); setPasswordError(''); }}
                   onFocus={(e) => { e.currentTarget.style.borderColor = '#2563EB'; }}
                   onBlur={(e) => { e.currentTarget.style.borderColor = passwordError ? '#EF4444' : '#334155'; }}
                   style={{ ...inputStyle(!!passwordError), paddingRight: 48 }}
-                  autoComplete="current-password"
+                  autoComplete="new-password"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  style={{
-                    position: 'absolute',
-                    right: 14,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: 4,
-                    display: 'flex',
-                    alignItems: 'center',
-                  }}
-                >
-                  {showPassword ? (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-                      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-                      <line x1="1" x2="23" y1="1" y2="23" />
-                    </svg>
-                  ) : (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
-                  )}
-                </button>
+                {eyeButton(showPassword, () => setShowPassword(!showPassword))}
               </div>
-              {passwordError && (
-                <div style={{ fontSize: 13, color: '#EF4444', marginTop: 6 }}>{passwordError}</div>
-              )}
+              {passwordError && <div style={{ fontSize: 13, color: '#EF4444', marginTop: 6 }}>{passwordError}</div>}
+            </div>
+
+            {/* Confirm Password */}
+            <div style={{ marginBottom: 28 }}>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#CBD5E1', marginBottom: 8 }}>
+                Confirm Password
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showConfirm ? 'text' : 'password'}
+                  placeholder="Re-enter your password"
+                  value={confirmPassword}
+                  onChange={(e) => { setConfirmPassword(e.target.value); setConfirmError(''); }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = '#2563EB'; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = confirmError ? '#EF4444' : '#334155'; }}
+                  style={{ ...inputStyle(!!confirmError), paddingRight: 48 }}
+                  autoComplete="new-password"
+                />
+                {eyeButton(showConfirm, () => setShowConfirm(!showConfirm))}
+              </div>
+              {confirmError && <div style={{ fontSize: 13, color: '#EF4444', marginTop: 6 }}>{confirmError}</div>}
             </div>
 
             {/* Submit */}
@@ -408,17 +490,17 @@ function WebSignIn({
                   <circle cx="12" cy="12" r="10" stroke="#FFFFFF" strokeWidth="3" fill="none" strokeDasharray="32" strokeLinecap="round" />
                 </svg>
               )}
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? 'Creating account...' : 'Create Account'}
             </button>
           </form>
 
-          {/* Sign up link */}
+          {/* Sign in link */}
           <div style={{ textAlign: 'center', marginTop: 28 }}>
             <span style={{ fontSize: 14, color: '#64748B' }}>
-              Don't have an account?{' '}
+              Already have an account?{' '}
             </span>
             <span
-              onClick={onSignUp}
+              onClick={onSignIn}
               style={{
                 fontSize: 14,
                 fontWeight: 600,
@@ -429,17 +511,12 @@ function WebSignIn({
               onMouseEnter={(e) => { e.currentTarget.style.color = '#3B82F6'; }}
               onMouseLeave={(e) => { e.currentTarget.style.color = '#2563EB'; }}
             >
-              Sign Up
+              Sign In
             </span>
           </div>
         </div>
 
-        {/* Spinner animation */}
-        <style
-          dangerouslySetInnerHTML={{
-            __html: `@keyframes spin { to { transform: rotate(360deg); } }`,
-          }}
-        />
+        <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { to { transform: rotate(360deg); } }` }} />
       </div>
     </div>
   );
@@ -447,43 +524,86 @@ function WebSignIn({
 
 // ─── Main Screen ──────────────────────────────────────────────────────
 
-export default function SignInScreen() {
-  const { signIn } = useAuth();
+export default function SignUpScreen() {
+  const { signUp } = useAuth();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
-  const { control, handleSubmit, formState: { errors } } = useForm<SignInFormData>({
-    resolver: zodResolver(signInSchema),
-    defaultValues: { email: '', password: '' },
+  const {
+    control,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<SignUpFormData>({
+    resolver: zodResolver(signUpSchema),
+    defaultValues: { email: '', password: '', confirmPassword: '' },
   });
 
   const onSubmit = async (data: { email: string; password: string }) => {
     setError(null);
     setLoading(true);
     try {
-      await signIn(data.email, data.password);
+      const result = await signUp(data.email, data.password);
+      if (result.needsEmailVerification) {
+        setEmailSent(true);
+      }
     } catch (err: any) {
-      setError(err.message || 'Invalid email or password');
+      setError(err.message || 'Sign up failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  const goToSignIn = () => router.replace('/(auth)/sign-in' as any);
+
   // ─── Web ──────────────────────────────────────────────────
 
   if (isWeb) {
+    if (emailSent) return <WebEmailSent onSignIn={goToSignIn} />;
     return (
-      <WebSignIn
+      <WebSignUp
         error={error}
         loading={loading}
         onSubmit={onSubmit}
-        onSignUp={() => router.push('/(auth)/sign-up' as any)}
+        onSignIn={goToSignIn}
       />
     );
   }
 
   // ─── Mobile ───────────────────────────────────────────────
+
+  if (emailSent) {
+    return (
+      <SafeAreaView className="flex-1 bg-background dark:bg-slate-900">
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
+          className="px-6"
+        >
+          <View className="items-center mb-10">
+            <View className="w-16 h-16 rounded-2xl bg-green-500 items-center justify-center mb-4">
+              <Text className="text-2xl text-white">✓</Text>
+            </View>
+            <Text className="text-2xl font-bold text-text-primary dark:text-white">
+              Check Your Email
+            </Text>
+            <Text className="text-sm text-text-muted dark:text-slate-400 mt-2 text-center px-4">
+              We sent a verification link to your email. Please click the link to verify your account, then come back and sign in.
+            </Text>
+          </View>
+
+          <View className="mt-4">
+            <Button
+              onPress={goToSignIn}
+              fullWidth
+            >
+              Go to Sign In
+            </Button>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-background dark:bg-slate-900">
@@ -500,11 +620,19 @@ export default function SignInScreen() {
             <View className="w-16 h-16 rounded-2xl bg-primary items-center justify-center mb-4">
               <Text className="text-2xl font-bold text-white">HR</Text>
             </View>
-            <Text className="text-2xl font-bold text-text-primary dark:text-white">HR System</Text>
-            <Text className="text-sm text-text-muted dark:text-slate-400 mt-1">Sign in to your account</Text>
+            <Text className="text-2xl font-bold text-text-primary dark:text-white">
+              HR System
+            </Text>
+            <Text className="text-sm text-text-muted dark:text-slate-400 mt-1">
+              Create your account
+            </Text>
           </View>
 
-          {error && <Banner variant="error" className="mb-4">{error}</Banner>}
+          {error && (
+            <Banner variant="error" className="mb-4">
+              {error}
+            </Banner>
+          )}
 
           <Controller
             control={control}
@@ -529,12 +657,28 @@ export default function SignInScreen() {
             render={({ field: { onChange, value } }) => (
               <Input
                 label="Password"
-                placeholder="Enter your password"
+                placeholder="At least 8 characters"
                 value={value}
                 onChangeText={onChange}
                 error={errors.password?.message}
                 secureTextEntry
-                autoComplete="password"
+                autoComplete="new-password"
+              />
+            )}
+          />
+
+          <Controller
+            control={control}
+            name="confirmPassword"
+            render={({ field: { onChange, value } }) => (
+              <Input
+                label="Confirm Password"
+                placeholder="Re-enter your password"
+                value={value}
+                onChangeText={onChange}
+                error={errors.confirmPassword?.message}
+                secureTextEntry
+                autoComplete="new-password"
                 returnKeyType="go"
                 onSubmitEditing={handleSubmit(onSubmit)}
               />
@@ -543,16 +687,16 @@ export default function SignInScreen() {
 
           <View className="mt-2">
             <Button onPress={handleSubmit(onSubmit)} loading={loading} fullWidth>
-              Sign In
+              Create Account
             </Button>
           </View>
 
           <Pressable
-            onPress={() => router.push('/(auth)/sign-up' as any)}
+            onPress={goToSignIn}
             className="mt-4 items-center"
           >
             <Text className="text-sm text-primary">
-              Don't have an account? Sign Up
+              Already have an account? Sign In
             </Text>
           </Pressable>
         </ScrollView>
