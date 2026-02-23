@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { View, Text, FlatList, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { useColorScheme } from 'nativewind';
 import { ScreenHeader } from '@/components/layout/screen-header';
 import { Card } from '@/components/ui/card';
@@ -116,11 +116,7 @@ export default function RegistrationsScreen() {
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchData();
-    }, [fetchData])
-  );
+  const { invalidate } = useAutoRefresh(() => { fetchData(); }, []);
 
   const openReview = (reg: PendingRegistration) => {
     setDialog({
@@ -149,7 +145,7 @@ export default function RegistrationsScreen() {
       );
       setSnack({ open: true, message: 'Registration approved!', severity: 'success' });
       setDialog(INITIAL_DIALOG);
-      fetchData();
+      invalidate();
     } catch (err: any) {
       setSnack({ open: true, message: err.message, severity: 'error' });
       setDialog((d) => ({ ...d, submitting: false }));
@@ -168,7 +164,7 @@ export default function RegistrationsScreen() {
       );
       setSnack({ open: true, message: 'Registration rejected.', severity: 'success' });
       setDialog(INITIAL_DIALOG);
-      fetchData();
+      invalidate();
     } catch (err: any) {
       setSnack({ open: true, message: err.message, severity: 'error' });
       setDialog((d) => ({ ...d, submitting: false }));

@@ -120,14 +120,8 @@ export const leaveService: LeaveService = {
     } else if (routing.nextAssigneeRole === 'manager') {
       assigneeId = employee.manager_id;
     } else if (routing.nextAssigneeRole === 'hr' || routing.nextAssigneeRole === 'hr_director') {
-      // Find an HR user
-      const { data: hrUsers } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('role', routing.nextAssigneeRole)
-        .eq('is_active', true)
-        .limit(1);
-      assigneeId = hrUsers?.[0]?.id ?? null;
+      // HR steps: leave unassigned so ALL HR users see it (claim-by-acting model)
+      assigneeId = null;
     }
 
     const now = new Date().toISOString();
@@ -166,8 +160,9 @@ export const leaveService: LeaveService = {
       metadata: emergencyNumber ? { emergency_number: emergencyNumber } : null,
     });
 
-    // Create notification for assignee
+    // Create notification for assignee(s)
     if (assigneeId) {
+      // Specific assignee (supervisor/manager)
       await supabase.from('notifications').insert({
         user_id: assigneeId,
         type: 'approval_needed',
@@ -175,6 +170,25 @@ export const leaveService: LeaveService = {
         body: `${request.case_number} requires your review.`,
         reference_id: requestId,
       });
+    } else if (routing.nextAssigneeRole === 'hr' || routing.nextAssigneeRole === 'hr_director') {
+      // HR steps: notify ALL active HR users of that role
+      const { data: hrUsers } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('role', routing.nextAssigneeRole)
+        .eq('is_active', true);
+
+      if (hrUsers && hrUsers.length > 0) {
+        await supabase.from('notifications').insert(
+          hrUsers.map((u) => ({
+            user_id: u.id,
+            type: 'approval_needed',
+            title: 'Leave Request Pending Your Approval',
+            body: `${request.case_number} requires your review.`,
+            reference_id: requestId,
+          }))
+        );
+      }
     }
 
     return updated as LeaveRequest;

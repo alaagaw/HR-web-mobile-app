@@ -51,7 +51,7 @@ export interface LeaveService {
 }
 
 export interface LeaveApprovalService {
-  getMyPendingApprovals(userId: string): Promise<LeaveRequest[]>;
+  getMyPendingApprovals(userId: string, role?: string): Promise<LeaveRequest[]>;
   getChainRequests(userId: string, role: string): Promise<LeaveRequest[]>;
   approveRequest(requestId: string, userId: string, comment?: string): Promise<void>;
   rejectRequest(requestId: string, userId: string, comment: string): Promise<void>;
@@ -125,6 +125,7 @@ export interface RenewalTaskService {
   startTask(taskId: string, userId: string): Promise<void>;
   completeTask(taskId: string, userId: string, newExpiryDate: string, comment?: string): Promise<void>;
   cancelTask(taskId: string, userId: string, reason: string): Promise<void>;
+  unassignTask(taskId: string, userId: string, reason?: string): Promise<void>;
   getTaskHistory(taskId: string): Promise<RenewalTaskHistory[]>;
   getAllHistory(dateFrom?: string, dateTo?: string): Promise<(RenewalTaskHistory & { task?: RenewalTask })[]>;
 }

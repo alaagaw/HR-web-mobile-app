@@ -210,7 +210,7 @@ export default function TabLayout() {
   useEffect(() => {
     if (user?.id) {
       notificationService.getUnreadCount(user.id).then(setUnreadCount);
-      leaveApprovalService.getMyPendingApprovals(user.id).then((data) => setPendingCount(data.length));
+      leaveApprovalService.getMyPendingApprovals(user.id, user.role).then((data) => setPendingCount(data.length));
     }
   }, [user?.id]);
 

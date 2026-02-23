@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { View, Text, FlatList, TextInput, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { useColorScheme } from 'nativewind';
 import { Search } from 'lucide-react-native';
 import { ScreenHeader } from '@/components/layout/screen-header';
@@ -603,13 +603,7 @@ export default function EmployeesScreen() {
   }, [search]);
 
   useEffect(() => { loadEmployees(); }, [loadEmployees]);
-  useFocusEffect(useCallback(() => { loadEmployees(); }, [loadEmployees]));
-
-  // Auto-refresh every 60 seconds
-  useEffect(() => {
-    const interval = setInterval(loadEmployees, 60_000);
-    return () => clearInterval(interval);
-  }, [loadEmployees]);
+  const { invalidate } = useAutoRefresh(() => { loadEmployees(); }, []);
 
   // --- Dialog handlers ---
   const handleOpenEdit = (emp: Profile) => {
@@ -650,7 +644,7 @@ export default function EmployeesScreen() {
       });
       setDialog(INITIAL_DIALOG);
       setSuccessMsg(`${dialog.full_name} updated successfully`);
-      loadEmployees();
+      invalidate();
     } catch {
       setDialog((s) => ({ ...s, submitting: false }));
     }
@@ -678,7 +672,7 @@ export default function EmployeesScreen() {
       );
       setInvite(INITIAL_INVITE);
       setSuccessMsg(`Invitation sent to ${invite.email}`);
-      loadEmployees();
+      invalidate();
     } catch (err: any) {
       setInvite((s) => ({ ...s, submitting: false, error: err.message || 'Failed to send invite' }));
     }

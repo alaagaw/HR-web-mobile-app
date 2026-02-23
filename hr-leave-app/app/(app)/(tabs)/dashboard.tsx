@@ -1,7 +1,7 @@
-import { useState, useCallback, useEffect } from 'react';
-import { View, Text, ScrollView, Pressable, Platform } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, ScrollView, Pressable, Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { useColorScheme } from 'nativewind';
 import {
   Clock,
@@ -651,22 +651,19 @@ export default function DashboardScreen() {
   const { notifications, fetchNotifications } = useNotifications(user?.id);
   const unreadCount = useNotificationStore((s) => s.unreadCount);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!user) return;
-      fetchBalance(user.id);
-      fetchEmergencyCount(user.id);
-      fetchMyRequests(user.id);
-      fetchNotifications();
+  useAutoRefresh(() => {
+    if (!user) return;
+    fetchBalance(user.id);
+    fetchEmergencyCount(user.id);
+    fetchMyRequests(user.id);
+    fetchNotifications();
 
-      const isApproverRole = [Role.Supervisor, Role.Manager, Role.HR, Role.HRDirector].includes(user.role);
-      if (isApproverRole) {
-        fetchPendingApprovals(user.id);
-      }
-      // Fetch renewal tasks assigned to this user (HR staff)
-      fetchRenewalTasks(user.id);
-    }, [user?.id]),
-  );
+    const isApproverRole = [Role.Supervisor, Role.Manager, Role.HR, Role.HRDirector].includes(user.role);
+    if (isApproverRole) {
+      fetchPendingApprovals(user.id, user.role);
+    }
+    fetchRenewalTasks(user.id);
+  }, [user?.id]);
 
   // Keep sidebar badge in sync
   useEffect(() => {
@@ -705,10 +702,17 @@ export default function DashboardScreen() {
     if (!user) return;
     try {
       await approve(request.id, user.id);
-      fetchPendingApprovals(user.id);
+      fetchPendingApprovals(user.id, user.role);
       fetchMyRequests(user.id);
-    } catch {
-      // Error is handled by the hook
+    } catch (err: any) {
+      if (err.message?.startsWith('ALREADY_HANDLED')) {
+        if (Platform.OS === 'web') {
+          window.alert('This request has already been handled by another user.');
+        } else {
+          Alert.alert('Already Handled', 'This request has already been processed by another user.');
+        }
+        fetchPendingApprovals(user.id, user.role);
+      }
     }
   };
 

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { View, Text, KeyboardAvoidingView, Platform, ScrollView, Pressable } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, Image, KeyboardAvoidingView, Platform, ScrollView, Pressable } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,9 +8,12 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Banner } from '@/components/ui/banner';
 import { useAuth } from '@/hooks/use-auth';
+import { LinearGradient } from 'expo-linear-gradient';
 import { signInSchema, type SignInFormData } from '@/lib/validators';
 
 const isWeb = Platform.OS === 'web';
+
+const POLYTECH_BG_URL = '/PolyTech_background.png';
 
 // ─── Web Sign-In ──────────────────────────────────────────────────────
 
@@ -107,6 +110,7 @@ function WebSignIn({
     <div
       style={{
         display: 'flex',
+        flexDirection: 'row',
         height: '100vh',
         width: '100vw',
         overflow: 'hidden',
@@ -119,39 +123,17 @@ function WebSignIn({
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
-          justifyContent: 'center',
-          padding: '60px 56px',
-          background: 'linear-gradient(160deg, #1E3A5F 0%, #0F172A 50%, #1E293B 100%)',
+          justifyContent: 'flex-end',
           position: 'relative',
           overflow: 'hidden',
+          backgroundImage: `linear-gradient(to top, rgba(3,10,31,0.97) 0%, rgba(3,10,31,0.85) 40%, transparent 100%), url(${POLYTECH_BG_URL})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center top',
         }}
       >
-        {/* Decorative background circles */}
-        <div
-          style={{
-            position: 'absolute',
-            top: -120,
-            right: -80,
-            width: 400,
-            height: 400,
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(37,99,235,0.12) 0%, transparent 70%)',
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            bottom: -100,
-            left: -60,
-            width: 350,
-            height: 350,
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(37,99,235,0.08) 0%, transparent 70%)',
-          }}
-        />
 
-        {/* Logo + title */}
-        <div style={{ position: 'relative', zIndex: 1, maxWidth: 480 }}>
+        {/* Content */}
+        <div style={{ position: 'relative', zIndex: 1, padding: '0 56px 60px' }}>
           <div
             style={{
               width: 56,
@@ -453,6 +435,17 @@ export default function SignInScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // On web, track window width so narrow browsers get the mobile layout
+  const [useWebLayout, setUseWebLayout] = useState(
+    isWeb && typeof window !== 'undefined' ? window.innerWidth >= 980 : false,
+  );
+  useEffect(() => {
+    if (!isWeb) return;
+    const onResize = () => setUseWebLayout(window.innerWidth >= 980);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   const { control, handleSubmit, formState: { errors } } = useForm<SignInFormData>({
     resolver: zodResolver(signInSchema),
     defaultValues: { email: '', password: '' },
@@ -470,9 +463,9 @@ export default function SignInScreen() {
     }
   };
 
-  // ─── Web ──────────────────────────────────────────────────
+  // ─── Web (wide screens only) ───────────────────────────────
 
-  if (isWeb) {
+  if (useWebLayout) {
     return (
       <WebSignIn
         error={error}
@@ -492,69 +485,92 @@ export default function SignInScreen() {
         className="flex-1"
       >
         <ScrollView
-          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
-          className="px-6"
+          contentContainerStyle={{ flexGrow: 1 }}
           keyboardShouldPersistTaps="handled"
         >
-          <View className="items-center mb-10">
-            <View className="w-16 h-16 rounded-2xl bg-primary items-center justify-center mb-4">
-              <Text className="text-2xl font-bold text-white">HR</Text>
+          {/* ─── Top: Background image + branding ─── */}
+          <View style={{ height: 320, position: 'relative', overflow: 'hidden' }}>
+            <Image
+              source={require('@/assets/images/PolyTech_background.png')}
+              style={{ position: 'absolute', width: '100%', height: '100%' }}
+              resizeMode="cover"
+            />
+            {/* Gradient fade into background color */}
+            <LinearGradient
+              colors={['transparent', 'rgba(15,23,42,0.7)', '#0F172A']}
+              locations={[0, 0.5, 1]}
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: '60%',
+              }}
+            />
+            {/* Branding overlay */}
+            <View style={{ flex: 1, justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 24 }}>
+              <View className="w-16 h-16 rounded-2xl bg-primary items-center justify-center mb-4">
+                <Text className="text-2xl font-bold text-white">HR</Text>
+              </View>
+              <Text className="text-2xl font-bold text-white">HR System</Text>
+              <Text className="text-sm text-slate-400 mt-1">Sign in to your account</Text>
             </View>
-            <Text className="text-2xl font-bold text-text-primary dark:text-white">HR System</Text>
-            <Text className="text-sm text-text-muted dark:text-slate-400 mt-1">Sign in to your account</Text>
           </View>
 
-          {error && <Banner variant="error" className="mb-4">{error}</Banner>}
+          {/* ─── Bottom: Sign-in form ─── */}
+          <View className="px-6 pt-8 pb-8" style={{ flex: 1 }}>
+            {error && <Banner variant="error" className="mb-4">{error}</Banner>}
 
-          <Controller
-            control={control}
-            name="email"
-            render={({ field: { onChange, value } }) => (
-              <Input
-                label="Email"
-                placeholder="you@company.com"
-                value={value}
-                onChangeText={onChange}
-                error={errors.email?.message}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-              />
-            )}
-          />
+            <Controller
+              control={control}
+              name="email"
+              render={({ field: { onChange, value } }) => (
+                <Input
+                  label="Email"
+                  placeholder="you@company.com"
+                  value={value}
+                  onChangeText={onChange}
+                  error={errors.email?.message}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                />
+              )}
+            />
 
-          <Controller
-            control={control}
-            name="password"
-            render={({ field: { onChange, value } }) => (
-              <Input
-                label="Password"
-                placeholder="Enter your password"
-                value={value}
-                onChangeText={onChange}
-                error={errors.password?.message}
-                secureTextEntry
-                autoComplete="password"
-                returnKeyType="go"
-                onSubmitEditing={handleSubmit(onSubmit)}
-              />
-            )}
-          />
+            <Controller
+              control={control}
+              name="password"
+              render={({ field: { onChange, value } }) => (
+                <Input
+                  label="Password"
+                  placeholder="Enter your password"
+                  value={value}
+                  onChangeText={onChange}
+                  error={errors.password?.message}
+                  secureTextEntry
+                  autoComplete="password"
+                  returnKeyType="go"
+                  onSubmitEditing={handleSubmit(onSubmit)}
+                />
+              )}
+            />
 
-          <View className="mt-2">
-            <Button onPress={handleSubmit(onSubmit)} loading={loading} fullWidth>
-              Sign In
-            </Button>
+            <View className="mt-2">
+              <Button onPress={handleSubmit(onSubmit)} loading={loading} fullWidth>
+                Sign In
+              </Button>
+            </View>
+
+            <Pressable
+              onPress={() => router.push('/(auth)/sign-up' as any)}
+              className="mt-4 items-center"
+            >
+              <Text className="text-sm text-primary">
+                Don't have an account? Sign Up
+              </Text>
+            </Pressable>
           </View>
-
-          <Pressable
-            onPress={() => router.push('/(auth)/sign-up' as any)}
-            className="mt-4 items-center"
-          >
-            <Text className="text-sm text-primary">
-              Don't have an account? Sign Up
-            </Text>
-          </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

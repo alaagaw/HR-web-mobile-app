@@ -66,6 +66,19 @@ export function useRenewalTasks() {
     }
   }, []);
 
+  const unassignTask = useCallback(async (taskId: string, userId: string, reason?: string) => {
+    try {
+      await renewalTaskService.unassignTask(taskId, userId, reason);
+      setMyTasks((prev) => prev.filter((t) => t.id !== taskId));
+      setAllTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, status: 'cancelled' as any, unassigned_at: new Date().toISOString(), unassigned_by_id: userId } : t))
+      );
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    }
+  }, []);
+
   return {
     myTasks,
     allTasks,
@@ -76,5 +89,6 @@ export function useRenewalTasks() {
     startTask,
     completeTask,
     cancelTask,
+    unassignTask,
   };
 }

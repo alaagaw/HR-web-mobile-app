@@ -242,6 +242,65 @@ export const renewalTaskService: RenewalTaskService = {
     }
   },
 
+  async unassignTask(taskId, userId, reason) {
+    const now = new Date().toISOString();
+
+    const { data: existing } = await supabase
+      .from('renewal_tasks')
+      .select('status, assigned_to_id, task_number, employee_id')
+      .eq('id', taskId)
+      .single();
+
+    if (!existing || (existing.status !== RenewalTaskStatus.Pending && existing.status !== RenewalTaskStatus.InProgress)) {
+      throw new Error('Task can only be unassigned from pending or in-progress status');
+    }
+
+    const { error } = await supabase
+      .from('renewal_tasks')
+      .update({
+        status: RenewalTaskStatus.Cancelled,
+        unassigned_at: now,
+        unassigned_by_id: userId,
+        updated_at: now,
+      })
+      .eq('id', taskId);
+
+    if (error) throw new Error(error.message);
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role, full_name')
+      .eq('id', userId)
+      .single();
+
+    await supabase.from('renewal_task_history').insert({
+      task_id: taskId,
+      action: RenewalTaskAction.Unassigned,
+      performed_by: userId,
+      performer_role: profile?.role || 'hr',
+      comment: reason || null,
+      from_status: existing.status,
+      to_status: RenewalTaskStatus.Cancelled,
+    });
+
+    // Notify the previously assigned employee
+    if (existing.assigned_to_id) {
+      const { data: empProfile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', existing.employee_id)
+        .single();
+
+      await supabase.from('notifications').insert({
+        user_id: existing.assigned_to_id,
+        type: NotificationType.RenewalTaskAssigned,
+        title: 'Renewal Task Unassigned',
+        body: `${profile?.full_name || 'HR'} unassigned renewal task ${existing.task_number} for ${empProfile?.full_name || 'employee'}.`,
+        reference_id: taskId,
+      });
+    }
+  },
+
   async cancelTask(taskId, userId, reason) {
     const now = new Date().toISOString();
 

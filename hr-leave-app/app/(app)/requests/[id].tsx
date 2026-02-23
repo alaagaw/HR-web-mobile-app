@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { View, Text, ScrollView, Alert, Pressable, Image, Linking, Platform, TextInput } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,6 +17,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useLeaveRequest } from '@/hooks/use-leave-request';
 import { useApprovals } from '@/hooks/use-leave-approvals';
 import { useBalance } from '@/hooks/use-balance';
+import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { getStatusLabel, getStatusVariant, canTransition, getRemainingApprovalSteps } from '@/lib/state-machine';
 import { formatDateRange, formatHours, formatDaysHours, formatFileSize } from '@/lib/utils';
 import { computeBalanceImpact } from '@/lib/hours-calculator';
@@ -34,11 +35,12 @@ export default function RequestDetailScreen() {
   const [showCancelForm, setShowCancelForm] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
+  const [lockError, setLockError] = useState<string | null>(null);
 
-  useEffect(() => {
+  useAutoRefresh(() => {
     if (id) fetchRequestById(id);
     if (currentRequest?.employee_id) fetchBalance(currentRequest.employee_id);
-  }, [id]);
+  }, [id, currentRequest?.employee_id]);
 
   if (!currentRequest || !user) return null;
 
@@ -47,7 +49,12 @@ export default function RequestDetailScreen() {
   const isEmployee = req.employee_id === user.id;
   const isHR = user.role === Role.HR || user.role === Role.HRDirector;
   const canCancel = canTransition(req.status, 'cancel', user.role);
-  const showApprovalActions = isAssignee && canTransition(req.status, 'approve', user.role);
+  // HR users can act on unassigned HR-step requests (claim-by-acting model)
+  const isHRClaimable = isHR && req.current_assignee_id === null && (
+    (user.role === Role.HR && req.status === LeaveStatus.PendingHR) ||
+    (user.role === Role.HRDirector && req.status === LeaveStatus.PendingHRDirector)
+  );
+  const showApprovalActions = (isAssignee || isHRClaimable) && canTransition(req.status, 'approve', user.role) && !lockError;
   const showExcessDetermination =
     isHR &&
     req.status === LeaveStatus.Approved &&
@@ -61,13 +68,29 @@ export default function RequestDetailScreen() {
     : null;
 
   const handleApprove = async (comment?: string) => {
-    await approve(req.id, user.id, comment);
-    fetchRequestById(req.id);
+    setLockError(null);
+    try {
+      await approve(req.id, user.id, comment);
+      fetchRequestById(req.id);
+    } catch (err: any) {
+      if (err.message?.startsWith('ALREADY_HANDLED')) {
+        setLockError('This request has already been processed by another user.');
+        fetchRequestById(req.id);
+      }
+    }
   };
 
   const handleReject = async (comment: string) => {
-    await reject(req.id, user.id, comment);
-    fetchRequestById(req.id);
+    setLockError(null);
+    try {
+      await reject(req.id, user.id, comment);
+      fetchRequestById(req.id);
+    } catch (err: any) {
+      if (err.message?.startsWith('ALREADY_HANDLED')) {
+        setLockError('This request has already been processed by another user.');
+        fetchRequestById(req.id);
+      }
+    }
   };
 
   const handleCancel = async () => {
@@ -201,6 +224,13 @@ export default function RequestDetailScreen() {
               currentAssigneeName={req.current_assignee?.full_name}
               remainingSteps={getRemainingApprovalSteps(req.status, req.leave_type as LeaveType, req.emergency_number)}
             />
+          </Card>
+        )}
+
+        {/* Lock error */}
+        {lockError && (
+          <Card className="mb-4 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-3">
+            <Text className="text-sm text-red-600 dark:text-red-400 font-semibold">{lockError}</Text>
           </Card>
         )}
 

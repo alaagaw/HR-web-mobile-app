@@ -1,0 +1,558 @@
+:root {
+  --pageTop: #030a1f;
+  --pageBottom: #060f2c;
+  --text: #f8fbff;
+  --muted: #9fb2d6;
+  --muted2: #8196bd;
+  --line: rgba(122, 150, 210, 0.18);
+  --lineSoft: rgba(122, 150, 210, 0.1);
+  --primary: #2f64ff;
+  --primary2: #1c4df0;
+  --danger: #ff4c6a;
+}
+
+.webAuthRoot {
+  position: relative;
+  display: flex;
+  min-height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  color: var(--text);
+  background:
+    radial-gradient(1200px 700px at 14% 3%, rgba(42, 108, 255, 0.2), transparent 60%),
+    radial-gradient(850px 560px at 82% 11%, rgba(0, 236, 255, 0.1), transparent 62%),
+    radial-gradient(1200px 820px at 50% 100%, rgba(45, 88, 162, 0.19), transparent 66%),
+    linear-gradient(180deg, var(--pageTop) 0%, var(--pageBottom) 100%);
+}
+
+.webAuthRoot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(2px 2px at 19% 24%, rgba(255, 255, 255, 0.28), transparent),
+    radial-gradient(1.5px 1.5px at 74% 15%, rgba(220, 242, 255, 0.24), transparent),
+    radial-gradient(1px 1px at 64% 72%, rgba(255, 255, 255, 0.2), transparent),
+    radial-gradient(1.2px 1.2px at 34% 82%, rgba(227, 239, 255, 0.18), transparent),
+    radial-gradient(1px 1px at 88% 42%, rgba(220, 242, 255, 0.16), transparent);
+  opacity: 0.85;
+}
+
+.webAuthRoot::after {
+  content: '';
+  position: absolute;
+  left: -6%;
+  right: -6%;
+  top: 33%;
+  height: 220px;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 95% at 50% 0%, rgba(95, 157, 255, 0.3) 0%, rgba(95, 157, 255, 0.06) 45%, transparent 70%),
+    linear-gradient(180deg, rgba(150, 186, 255, 0.07), rgba(150, 186, 255, 0));
+  filter: blur(3px);
+}
+
+.webTopActions {
+  position: absolute;
+  top: 30px;
+  right: 38px;
+  display: flex;
+  gap: 12px;
+  z-index: 7;
+}
+
+.topActionBtn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid rgba(146, 170, 220, 0.26);
+  background: radial-gradient(circle at 30% 20%, rgba(130, 173, 255, 0.2), rgba(24, 49, 98, 0.55));
+  color: rgba(224, 236, 255, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 10px 20px rgba(3, 10, 32, 0.38);
+}
+
+.webLeft {
+  position: relative;
+  flex: 1;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  padding: 30px 56px 34px;
+  overflow: hidden;
+}
+
+.webLeft::before {
+  content: '';
+  position: absolute;
+  left: 22px;
+  right: 0;
+  top: 18px;
+  bottom: 22px;
+  border: 1px solid var(--lineSoft);
+  background:
+    radial-gradient(72% 50% at 50% 40%, rgba(107, 162, 255, 0.18), transparent 70%),
+    radial-gradient(82% 44% at 50% 22%, rgba(95, 156, 255, 0.27), transparent 55%),
+    linear-gradient(180deg, rgba(18, 50, 104, 0.35) 0%, rgba(8, 19, 50, 0.78) 100%);
+  box-shadow: inset 0 0 70px rgba(102, 161, 255, 0.06);
+}
+
+.webLeft::after {
+  content: '';
+  position: absolute;
+  left: 40px;
+  right: 20px;
+  top: 250px;
+  height: 1px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(134, 184, 255, 0.55), transparent);
+  box-shadow: 0 0 16px rgba(90, 148, 255, 0.45);
+}
+
+.webLeftInner {
+  position: relative;
+  z-index: 3;
+  width: 100%;
+  max-width: 760px;
+}
+
+.logoHero {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+
+.logoGlass {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 560px);
+  min-height: 132px;
+  padding: 12px 16px 10px;
+  border-radius: 18px;
+  border: 1px solid rgba(145, 181, 245, 0.22);
+  background: linear-gradient(180deg, rgba(141, 186, 255, 0.08), rgba(59, 103, 182, 0.05));
+  backdrop-filter: blur(8px);
+}
+
+.logoGlow {
+  position: absolute;
+  inset: -8% -14%;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 45% at 50% 50%, rgba(213, 233, 255, 0.18) 0%, transparent 58%),
+    radial-gradient(74% 46% at 50% 50%, rgba(83, 150, 255, 0.27) 0%, transparent 66%),
+    radial-gradient(95% 20% at 50% 49%, rgba(123, 180, 255, 0.22) 0%, transparent 72%);
+}
+
+.logoImg {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: min(100%, 380px);
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 0 10px rgba(98, 165, 255, 0.6)) drop-shadow(0 0 24px rgba(34, 95, 235, 0.38));
+}
+
+.webTitle {
+  margin: 0 0 10px;
+  max-width: 660px;
+  font-size: clamp(44px, 3.9vw, 76px);
+  font-weight: 800;
+  line-height: 1.07;
+  letter-spacing: -0.02em;
+}
+
+.webSubtitle {
+  margin: 0 0 28px;
+  max-width: 620px;
+  font-size: clamp(16px, 1.35vw, 26px);
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.featureList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.featureRow {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.featureIcon {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  border: 1px solid rgba(122, 161, 236, 0.3);
+  background: linear-gradient(180deg, rgba(42, 86, 175, 0.5), rgba(19, 45, 97, 0.65));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 20px rgba(7, 17, 49, 0.4);
+}
+
+.featureTitle {
+  margin: 0 0 4px;
+  font-size: clamp(20px, 2vw, 42px);
+  font-weight: 650;
+  line-height: 1.15;
+  color: #f2f7ff;
+}
+
+.featureDesc {
+  margin: 0;
+  max-width: 620px;
+  font-size: clamp(15px, 1.45vw, 30px);
+  line-height: 1.45;
+  color: var(--muted2);
+}
+
+.webRight {
+  position: relative;
+  z-index: 3;
+  width: 520px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--line);
+  background:
+    radial-gradient(120% 90% at 0% 0%, rgba(51, 98, 199, 0.16), transparent 65%),
+    linear-gradient(180deg, #061338, #061033);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 52px 36px;
+}
+
+.authCard {
+  width: 100%;
+  max-width: 400px;
+}
+
+.authTitle {
+  margin: 0 0 8px;
+  font-size: clamp(42px, 3vw, 64px);
+  line-height: 1.1;
+  font-weight: 780;
+  color: #f6f9ff;
+}
+
+.authSubtitle {
+  margin: 0 0 30px;
+  font-size: clamp(16px, 1.2vw, 24px);
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.errorBanner {
+  margin-bottom: 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 14px;
+  border: 1px solid rgba(255, 81, 112, 0.45);
+  background: rgba(255, 81, 112, 0.12);
+  color: #ffb8c8;
+}
+
+.field {
+  margin-bottom: 16px;
+}
+
+.label {
+  display: block;
+  margin-bottom: 9px;
+  font-size: clamp(14px, 0.95vw, 20px);
+  line-height: 1.35;
+  font-weight: 560;
+  color: #e4ecfc;
+}
+
+.inputIconWrap,
+.passwordWrap {
+  position: relative;
+}
+
+.webInput {
+  width: 100%;
+  height: 58px;
+  border-radius: 14px;
+  border: 1px solid rgba(144, 164, 198, 0.36);
+  background: linear-gradient(90deg, rgba(237, 243, 255, 0.96) 0%, rgba(216, 227, 245, 0.95) 100%);
+  color: #0d1a38;
+  font-size: clamp(16px, 0.95vw, 22px);
+  line-height: 1;
+  padding: 0 18px;
+  outline: none;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.webInput::placeholder {
+  color: #4f6187;
+}
+
+.webInput.withIcon {
+  padding-right: 60px;
+}
+
+.webInput:focus {
+  border-color: rgba(136, 164, 218, 0.75);
+  box-shadow: 0 0 0 4px rgba(83, 124, 204, 0.22);
+}
+
+.webInput.error {
+  border-color: rgba(255, 76, 106, 0.85);
+  box-shadow: 0 0 0 3px rgba(255, 76, 106, 0.18);
+}
+
+.fieldIcon,
+.eyeBtn {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  width: 30px;
+  height: 26px;
+  margin-top: -13px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8ba0c3;
+  background: rgba(148, 165, 195, 0.45);
+}
+
+.eyeBtn {
+  border: 0;
+  cursor: pointer;
+}
+
+.fieldError {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--danger);
+}
+
+.submitBtn {
+  width: 100%;
+  height: 58px;
+  margin-top: 8px;
+  border: 0;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  color: #ffffff;
+  font-size: clamp(22px, 1.55vw, 38px);
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--primary), var(--primary2));
+  box-shadow: 0 12px 26px rgba(29, 77, 224, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.submitBtn:hover {
+  filter: brightness(1.08);
+}
+
+.submitBtn:active {
+  transform: translateY(1px);
+}
+
+.submitBtn:disabled {
+  opacity: 0.78;
+  cursor: not-allowed;
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.signupRow {
+  margin-top: 24px;
+  text-align: center;
+}
+
+.signupMuted {
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.signupLink {
+  color: #3d7dff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.signupLink:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 1366px) {
+  .webTopActions {
+    top: 20px;
+    right: 18px;
+  }
+
+  .topActionBtn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .webLeft {
+    padding: 24px 34px 22px;
+  }
+
+  .webLeft::before {
+    left: 12px;
+    top: 12px;
+    bottom: 12px;
+  }
+
+  .webLeft::after {
+    left: 22px;
+    right: 10px;
+    top: 208px;
+  }
+
+  .logoGlass {
+    width: min(100%, 450px);
+    min-height: 112px;
+  }
+
+  .logoImg {
+    width: min(100%, 320px);
+  }
+
+  .webRight {
+    width: 460px;
+    padding: 56px 32px 26px;
+  }
+
+  .featureIcon {
+    width: 42px;
+    height: 42px;
+  }
+}
+
+@media (max-width: 980px) {
+  .webAuthRoot {
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  .webAuthRoot::after,
+  .webLeft::after,
+  .webTopActions {
+    display: none;
+  }
+
+  .webLeft {
+    width: 100%;
+    padding: 38px 16px 16px;
+  }
+
+  .webLeft::before {
+    left: 8px;
+    right: 8px;
+    top: 12px;
+    bottom: 8px;
+  }
+
+  .webLeftInner {
+    max-width: 700px;
+  }
+
+  .logoHero {
+    margin-bottom: 14px;
+  }
+
+  .logoGlass {
+    min-height: 92px;
+    width: min(100%, 300px);
+  }
+
+  .logoImg {
+    width: min(100%, 210px);
+  }
+
+  .webTitle {
+    font-size: 34px;
+  }
+
+  .webSubtitle {
+    font-size: 16px;
+    margin-bottom: 20px;
+  }
+
+  .featureList {
+    gap: 14px;
+  }
+
+  .featureIcon {
+    width: 38px;
+    height: 38px;
+  }
+
+  .featureTitle {
+    font-size: 22px;
+  }
+
+  .featureDesc {
+    font-size: 15px;
+  }
+
+  .webRight {
+    width: 100%;
+    border-left: 0;
+    padding: 24px 16px 30px;
+  }
+
+  .authCard {
+    max-width: 500px;
+  }
+
+  .authTitle {
+    font-size: 34px;
+  }
+
+  .authSubtitle,
+  .label {
+    font-size: 16px;
+  }
+
+  .webInput,
+  .submitBtn {
+    height: 52px;
+    font-size: 18px;
+  }
+
+  .submitBtn {
+    font-size: 24px;
+  }
+
+  .fieldIcon,
+  .eyeBtn {
+    width: 28px;
+    height: 24px;
+    margin-top: -12px;
+  }
+}

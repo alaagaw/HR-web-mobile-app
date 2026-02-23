@@ -1,7 +1,7 @@
-import { useCallback, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { View, Text, FlatList, Pressable, Platform, Modal, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { useColorScheme } from 'nativewind';
 import { RequestCard } from '@/components/leave/request-card';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -181,6 +181,10 @@ function WebLeaveRequestsTable({
         ].includes(row.status);
         if (!isPending) return '—';
         if (userId && row.current_assignee_id === userId) return 'You';
+        if (!row.current_assignee_id) {
+          if (row.status === LeaveStatus.PendingHR) return 'All HR';
+          if (row.status === LeaveStatus.PendingHRDirector) return 'All HR Directors';
+        }
         return row.current_assignee?.full_name || row.current_assignee_role || '—';
       },
     },
@@ -604,7 +608,6 @@ export default function TasksScreen() {
   const setPendingCount = useTaskStore((s) => s.setPendingCount);
   const setRenewalTaskCount = useTaskStore((s) => s.setRenewalTaskCount);
   const [activeTab, setActiveTab] = useState(0);
-  const [, setTick] = useState(0);
   const [mobileRenewTask, setMobileRenewTask] = useState<RenewalTask | null>(null);
   const [mobileNewExpiry, setMobileNewExpiry] = useState('');
 
@@ -619,20 +622,14 @@ export default function TasksScreen() {
     setRenewalTaskCount(renewalTasks.length);
   }, [renewalTasks.length]);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!user) return;
-      fetchPendingApprovals(user.id);
-      fetchChainRequests(user.id, user.role);
-      if (user.role === Role.HR || user.role === Role.HRDirector) {
-        fetchRenewalTasks(user.id);
-      }
-
-      // Re-render every 60s so "Pending Since" stays fresh
-      const timer = setInterval(() => setTick((t) => t + 1), 60_000);
-      return () => clearInterval(timer);
-    }, [user?.id])
-  );
+  useAutoRefresh(() => {
+    if (!user) return;
+    fetchPendingApprovals(user.id, user.role);
+    fetchChainRequests(user.id, user.role);
+    if (user.role === Role.HR || user.role === Role.HRDirector) {
+      fetchRenewalTasks(user.id);
+    }
+  }, [user?.id]);
 
   const handleRowPress = (request: LeaveRequest) => {
     router.push(`/(app)/requests/${request.id}` as any);

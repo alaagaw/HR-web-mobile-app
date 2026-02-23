@@ -5,7 +5,33 @@ import { LeaveStatus, LeaveType, HistoryAction, ExcessDetermination, Role } from
 import { getNextApprovalStatus } from '@/lib/state-machine';
 
 export const leaveApprovalService: LeaveApprovalService = {
-  async getMyPendingApprovals(userId) {
+  async getMyPendingApprovals(userId, role?) {
+    const isHR = role === Role.HR || role === Role.HRDirector;
+
+    if (isHR) {
+      // HR users see: requests assigned directly to them
+      // PLUS unassigned requests at the HR step matching their role
+      const hrStatus = role === Role.HRDirector
+        ? LeaveStatus.PendingHRDirector
+        : LeaveStatus.PendingHR;
+
+      const { data, error } = await supabase
+        .from('leave_requests')
+        .select('*, employee:profiles!employee_id(id, full_name, role, department)')
+        .or(`current_assignee_id.eq.${userId},and(current_assignee_id.is.null,status.eq.${hrStatus})`)
+        .in('status', [
+          LeaveStatus.PendingSupervisor,
+          LeaveStatus.PendingManager,
+          LeaveStatus.PendingHR,
+          LeaveStatus.PendingHRDirector,
+        ])
+        .order('pending_since', { ascending: true });
+
+      if (error) throw new Error(error.message);
+      return (data ?? []) as LeaveRequest[];
+    }
+
+    // Supervisor/Manager: only see what is assigned to them
     const { data, error } = await supabase
       .from('leave_requests')
       .select('*, employee:profiles!employee_id(id, full_name, role, department)')
@@ -81,20 +107,15 @@ export const leaveApprovalService: LeaveApprovalService = {
     if (nextAssigneeRole === 'manager') {
       nextAssigneeId = request.employee.manager_id;
     } else if (nextAssigneeRole === 'hr' || nextAssigneeRole === 'hr_director') {
-      const { data: users } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('role', nextAssigneeRole)
-        .eq('is_active', true)
-        .limit(1);
-      nextAssigneeId = users?.[0]?.id ?? null;
+      // HR steps: leave unassigned so ALL HR users see it (claim-by-acting model)
+      nextAssigneeId = null;
     }
 
     const now = new Date().toISOString();
     const isTerminal = nextStatus === LeaveStatus.Approved;
 
-    // Update request
-    const { error: updateError } = await supabase
+    // Update request with optimistic locking
+    const { data: updateResult, error: updateError } = await supabase
       .from('leave_requests')
       .update({
         status: nextStatus,
@@ -105,9 +126,15 @@ export const leaveApprovalService: LeaveApprovalService = {
         excess_determination: isTerminal && request.has_excess ? ExcessDetermination.Pending : request.excess_determination,
         updated_at: now,
       })
-      .eq('id', requestId);
+      .eq('id', requestId)
+      .eq('status', request.status)         // Optimistic lock: must still be at expected status
+      .eq('updated_at', request.updated_at)  // Double guard: no other writes since we read
+      .select();
 
     if (updateError) throw new Error(updateError.message);
+    if (!updateResult || updateResult.length === 0) {
+      throw new Error('ALREADY_HANDLED: This request has already been processed by another user. Please refresh to see the latest status.');
+    }
 
     // Log history
     await supabase.from('leave_request_history').insert({
@@ -140,29 +167,51 @@ export const leaveApprovalService: LeaveApprovalService = {
       });
     }
 
-    // Notify next assignee if not terminal
-    if (!isTerminal && nextAssigneeId) {
-      await supabase.from('notifications').insert({
-        user_id: nextAssigneeId,
-        type: 'approval_needed',
-        title: 'Leave Request Pending Your Approval',
-        body: `${request.case_number} requires your review.`,
-        reference_id: requestId,
-      });
+    // Notify next assignee(s) if not terminal
+    if (!isTerminal) {
+      if (nextAssigneeId) {
+        // Specific assignee (supervisor/manager)
+        await supabase.from('notifications').insert({
+          user_id: nextAssigneeId,
+          type: 'approval_needed',
+          title: 'Leave Request Pending Your Approval',
+          body: `${request.case_number} requires your review.`,
+          reference_id: requestId,
+        });
+      } else if (nextAssigneeRole === Role.HR || nextAssigneeRole === Role.HRDirector) {
+        // HR steps: notify ALL active HR users of that role
+        const { data: hrUsers } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('role', nextAssigneeRole)
+          .eq('is_active', true);
+
+        if (hrUsers && hrUsers.length > 0) {
+          await supabase.from('notifications').insert(
+            hrUsers.map((u) => ({
+              user_id: u.id,
+              type: 'approval_needed',
+              title: 'Leave Request Pending Your Approval',
+              body: `${request.case_number} requires your review.`,
+              reference_id: requestId,
+            }))
+          );
+        }
+      }
     }
   },
 
   async rejectRequest(requestId, userId, comment) {
     const { data: request } = await supabase
       .from('leave_requests')
-      .select('status, employee_id, case_number, current_assignee_role')
+      .select('status, employee_id, case_number, current_assignee_role, updated_at')
       .eq('id', requestId)
       .single();
 
     if (!request) throw new Error('Request not found');
 
     const now = new Date().toISOString();
-    const { error } = await supabase
+    const { data: updateResult, error } = await supabase
       .from('leave_requests')
       .update({
         status: LeaveStatus.Rejected,
@@ -171,9 +220,15 @@ export const leaveApprovalService: LeaveApprovalService = {
         resolved_at: now,
         updated_at: now,
       })
-      .eq('id', requestId);
+      .eq('id', requestId)
+      .eq('status', request.status)         // Optimistic lock
+      .eq('updated_at', request.updated_at)  // Double guard
+      .select();
 
     if (error) throw new Error(error.message);
+    if (!updateResult || updateResult.length === 0) {
+      throw new Error('ALREADY_HANDLED: This request has already been processed by another user. Please refresh to see the latest status.');
+    }
 
     await supabase.from('leave_request_history').insert({
       request_id: requestId,

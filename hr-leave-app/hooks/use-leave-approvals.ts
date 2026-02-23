@@ -10,11 +10,11 @@ export function useApprovals() {
   const [chainLoading, setChainLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchPendingApprovals = useCallback(async (userId: string) => {
+  const fetchPendingApprovals = useCallback(async (userId: string, role?: string) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await leaveApprovalService.getMyPendingApprovals(userId);
+      const data = await leaveApprovalService.getMyPendingApprovals(userId, role);
       setPendingApprovals(data);
     } catch (err: any) {
       setError(err.message);

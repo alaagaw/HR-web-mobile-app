@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, Pressable, Platform } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { useColorScheme } from 'nativewind';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/layout/screen-header';
@@ -968,16 +968,14 @@ export default function CalendarScreen() {
   // Mobile state
   const [mobileSelectedDay, setMobileSelectedDay] = useState<Date>(new Date());
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!user) return;
-      setLoading(true);
-      leaveService
-        .getAllRequests({ status: LeaveStatus.Approved })
-        .then(setAllRequests)
-        .finally(() => setLoading(false));
-    }, [user?.id])
-  );
+  useAutoRefresh(() => {
+    if (!user) return;
+    setLoading(true);
+    leaveService
+      .getAllRequests({ status: LeaveStatus.Approved })
+      .then(setAllRequests)
+      .finally(() => setLoading(false));
+  }, [user?.id]);
 
   const filteredRequests = useMemo(() => {
     let data = allRequests;

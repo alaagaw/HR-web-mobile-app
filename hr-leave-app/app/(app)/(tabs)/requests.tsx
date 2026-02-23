@@ -1,7 +1,7 @@
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { View, FlatList, Pressable, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { Plus } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
 import { RequestCard } from '@/components/leave/request-card';
@@ -133,6 +133,10 @@ function WebRequestsTable({
           LeaveStatus.PendingHRDirector,
         ].includes(row.status);
         if (!isPending) return '—';
+        if (!row.current_assignee_id) {
+          if (row.status === LeaveStatus.PendingHR) return 'All HR';
+          if (row.status === LeaveStatus.PendingHRDirector) return 'All HR Directors';
+        }
         return row.current_assignee?.full_name || row.current_assignee_role || '—';
       },
     },
@@ -182,18 +186,10 @@ export default function RequestsScreen() {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
   const { requests, loading, fetchMyRequests } = useLeaveRequest();
-  const [, setTick] = useState(0);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!user) return;
-      fetchMyRequests(user.id);
-
-      // Re-render every 60s so relative timestamps ("pending since") stay fresh
-      const timer = setInterval(() => setTick((t) => t + 1), 60_000);
-      return () => clearInterval(timer);
-    }, [user?.id])
-  );
+  useAutoRefresh(() => {
+    if (!user) return;
+    fetchMyRequests(user.id);
+  }, [user?.id]);
 
   const handleRowPress = (request: LeaveRequest) => {
     router.push(`/(app)/requests/${request.id}` as any);

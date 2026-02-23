@@ -107,4 +107,5 @@ export enum RenewalTaskAction {
   Completed = 'completed',
   Cancelled = 'cancelled',
   Reassigned = 'reassigned',
+  Unassigned = 'unassigned',
 }

@@ -1,6 +1,6 @@
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { View, Text, FlatList, Platform } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { useColorScheme } from 'nativewind';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -113,20 +113,18 @@ export default function TeamScreen() {
   const [teamRequests, setTeamRequests] = useState<LeaveRequest[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!user) return;
-      setLoading(true);
-      leaveService
-        .getAllRequests({ status: LeaveStatus.Approved })
-        .then((data) => {
-          const today = new Date().toISOString().split('T')[0];
-          const upcoming = data.filter((r) => r.end_date >= today);
-          setTeamRequests(upcoming);
-        })
-        .finally(() => setLoading(false));
-    }, [user?.id])
-  );
+  useAutoRefresh(() => {
+    if (!user) return;
+    setLoading(true);
+    leaveService
+      .getAllRequests({ status: LeaveStatus.Approved })
+      .then((data) => {
+        const today = new Date().toISOString().split('T')[0];
+        const upcoming = data.filter((r) => r.end_date >= today);
+        setTeamRequests(upcoming);
+      })
+      .finally(() => setLoading(false));
+  }, [user?.id]);
 
   return (
     <View className="flex-1 bg-background dark:bg-slate-900">

@@ -1,8 +1,8 @@
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { View, Text, FlatList, Platform, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { useColorScheme } from 'nativewind';
 import { format, subDays, startOfMonth, startOfYear, subMonths } from 'date-fns';
 import { ScreenHeader } from '@/components/layout/screen-header';
@@ -753,7 +753,7 @@ export default function RenewalHistoryScreen() {
     }
   };
 
-  useFocusEffect(useCallback(() => { loadData(dateFrom, dateTo); }, []));
+  useAutoRefresh(() => { loadData(dateFrom, dateTo); }, []);
 
   const handleDateFromChange = (v: string) => {
     setDateFrom(v);

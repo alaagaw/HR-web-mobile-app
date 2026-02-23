@@ -1,8 +1,8 @@
-import React, { useCallback, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { View, Text, ScrollView, Platform, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { useColorScheme } from 'nativewind';
 import { ScreenHeader } from '@/components/layout/screen-header';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -12,6 +12,18 @@ import type { EmployeeDocument, Profile, RenewalTask } from '@/types/models';
 import { Role, RenewalTaskStatus } from '@/types/enums';
 
 const isWeb = Platform.OS === 'web';
+const WIDE_SCREEN_BREAKPOINT = 1280; // px — below this, use mobile layout on web
+
+function useWindowWidth() {
+  const [width, setWidth] = useState(() => (isWeb ? window.innerWidth : 0));
+  useEffect(() => {
+    if (!isWeb) return;
+    const onResize = () => setWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return width;
+}
 
 // Lazy-load MUI components only on web
 let DataGrid: any;
@@ -817,6 +829,8 @@ const DEFAULT_HIDDEN_COLUMNS: Record<string, boolean> = {
   passport_number: false,
   iqama_number: false,
   insurance_number: false,
+  assigned_on: false,
+  unassigned_on: false,
 };
 
 const ALL_VISIBLE_COLUMNS: Record<string, boolean> = {
@@ -825,6 +839,8 @@ const ALL_VISIBLE_COLUMNS: Record<string, boolean> = {
   passport_number: true,
   iqama_number: true,
   insurance_number: true,
+  assigned_on: true,
+  unassigned_on: true,
 };
 
 function WebExpiryTable({
@@ -834,6 +850,7 @@ function WebExpiryTable({
   onSelectionChange,
   globalSearch,
   showAllColumns,
+  onUnassign,
 }: {
   data: EnrichedRow[];
   isDark: boolean;
@@ -841,8 +858,10 @@ function WebExpiryTable({
   onSelectionChange: (ids: string[]) => void;
   globalSearch: string;
   showAllColumns: boolean;
+  onUnassign: (taskId: string) => void;
 }) {
   const [columnVisibilityModel, setColumnVisibilityModel] = useState<Record<string, boolean>>(DEFAULT_HIDDEN_COLUMNS);
+  const [unassignTarget, setUnassignTarget] = useState<{ taskId: string; assigneeName: string } | null>(null);
 
   // Sync with parent's showAllColumns toggle
   const effectiveVisibility = showAllColumns ? ALL_VISIBLE_COLUMNS : columnVisibilityModel;
@@ -862,6 +881,7 @@ function WebExpiryTable({
     daysLeft: '',
     expiring: '',
     assignedTo: '',
+    assignedBy: '',
     taskStatus: '',
   });
 
@@ -897,6 +917,7 @@ function WebExpiryTable({
         row.nextExpiryDays !== null ? String(row.nextExpiryDays) : '',
         [...row.expiredTypes, ...row.expiringSoonTypes].join(' ').toLowerCase(),
         (row.activeTask?.assigned_to?.full_name || '').toLowerCase(),
+        (row.activeTask?.assigned_by?.full_name || '').toLowerCase(),
         (row.activeTask?.status || '').toLowerCase(),
         (row.activeTask?.task_number || '').toLowerCase(),
       ].join(' ');
@@ -925,6 +946,10 @@ function WebExpiryTable({
     if (filters.assignedTo) {
       const assignee = (row.activeTask?.assigned_to?.full_name || '').toLowerCase();
       if (!assignee.includes(filters.assignedTo.toLowerCase())) return false;
+    }
+    if (filters.assignedBy) {
+      const assigner = (row.activeTask?.assigned_by?.full_name || '').toLowerCase();
+      if (!assigner.includes(filters.assignedBy.toLowerCase())) return false;
     }
     if (filters.taskStatus) {
       const status = (row.activeTask?.status || '').toLowerCase();
@@ -1174,6 +1199,94 @@ function WebExpiryTable({
       },
     },
     {
+      field: 'assigned_by',
+      headerName: 'Assigned By',
+      flex: 1,
+      minWidth: 130,
+      renderHeader: renderHeader('Assigned By', 'assignedBy'),
+      valueGetter: (_value: any, row: EnrichedRow) => row.activeTask?.assigned_by?.full_name || '',
+      renderCell: (params: any) => {
+        const row = params.row as EnrichedRow;
+        if (!row.activeTask) return <span style={{ color: '#6B7280' }}>—</span>;
+        return (
+          <div style={{ fontWeight: 600, fontSize: 13, color: isDark ? '#F8FAFC' : '#0F172A' }}>
+            {row.activeTask.assigned_by?.full_name || '—'}
+          </div>
+        );
+      },
+    },
+    {
+      field: 'assigned_on',
+      headerName: 'Assigned On',
+      flex: 1,
+      minWidth: 160,
+      valueGetter: (_value: any, row: EnrichedRow) => row.activeTask?.assigned_at || '',
+      renderCell: (params: any) => {
+        const row = params.row as EnrichedRow;
+        if (!row.activeTask?.assigned_at) return <span style={{ color: '#6B7280' }}>—</span>;
+        const d = new Date(row.activeTask.assigned_at);
+        return (
+          <span style={{ fontSize: 13, color: isDark ? '#F8FAFC' : '#0F172A' }}>
+            {d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+          </span>
+        );
+      },
+    },
+    {
+      field: 'unassigned_on',
+      headerName: 'Unassigned On',
+      flex: 1,
+      minWidth: 160,
+      valueGetter: (_value: any, row: EnrichedRow) => row.activeTask?.unassigned_at || '',
+      renderCell: (params: any) => {
+        const row = params.row as EnrichedRow;
+        if (!row.activeTask?.unassigned_at) return <span style={{ color: '#6B7280' }}>—</span>;
+        const d = new Date(row.activeTask.unassigned_at);
+        return (
+          <span style={{ fontSize: 13, color: isDark ? '#F8FAFC' : '#0F172A' }}>
+            {d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+          </span>
+        );
+      },
+    },
+    {
+      field: 'actions',
+      headerName: 'Actions',
+      width: 100,
+      sortable: false,
+      filterable: false,
+      renderCell: (params: any) => {
+        const row = params.row as EnrichedRow;
+        const isActive = row.activeTask &&
+          (row.activeTask.status === RenewalTaskStatus.Pending || row.activeTask.status === RenewalTaskStatus.InProgress);
+        if (!isActive) return null;
+        return (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setUnassignTarget({
+                taskId: row.activeTask!.id,
+                assigneeName: row.activeTask?.assigned_to?.full_name || 'HR',
+              });
+            }}
+            style={{
+              padding: '4px 10px',
+              fontSize: 12,
+              fontWeight: 600,
+              borderRadius: 6,
+              border: `1px solid ${isDark ? '#7F1D1D' : '#FECACA'}`,
+              backgroundColor: isDark ? 'rgba(239,68,68,0.1)' : '#FEF2F2',
+              color: '#EF4444',
+              cursor: 'pointer',
+              transition: 'all 0.12s ease',
+            }}
+          >
+            Unassign
+          </button>
+        );
+      },
+    },
+    {
       field: 'task_status',
       headerName: 'Task Status',
       flex: 0.8,
@@ -1285,6 +1398,40 @@ function WebExpiryTable({
           },
         }}
       />
+
+      {/* Unassign confirmation dialog */}
+      {Dialog && (
+        <Dialog
+          open={!!unassignTarget}
+          onClose={() => setUnassignTarget(null)}
+          maxWidth="xs"
+          fullWidth
+        >
+          <DialogTitle>Unassign Renewal Task</DialogTitle>
+          <DialogContent>
+            <div style={{ fontSize: 14, color: isDark ? '#CBD5E1' : '#475569' }}>
+              Are you sure you want to unassign this renewal task from{' '}
+              <strong>{unassignTarget?.assigneeName}</strong>?
+              The task will be cancelled and you can reassign it to someone else.
+            </div>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <MuiButton onClick={() => setUnassignTarget(null)}>Cancel</MuiButton>
+            <MuiButton
+              variant="contained"
+              color="error"
+              onClick={() => {
+                if (unassignTarget) {
+                  onUnassign(unassignTarget.taskId);
+                  setUnassignTarget(null);
+                }
+              }}
+            >
+              Unassign
+            </MuiButton>
+          </DialogActions>
+        </Dialog>
+      )}
     </div>
   );
 }
@@ -1298,6 +1445,8 @@ export default function DocumentExpiryScreen() {
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const windowWidth = useWindowWidth();
+  const isWideScreen = isWeb && windowWidth >= WIDE_SCREEN_BREAKPOINT;
 
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
   const [renewalTasks, setRenewalTasks] = useState<RenewalTask[]>([]);
@@ -1329,7 +1478,7 @@ export default function DocumentExpiryScreen() {
     }
   };
 
-  useFocusEffect(useCallback(() => { loadData(); }, []));
+  const { invalidate } = useAutoRefresh(() => { loadData(); }, []);
 
   // Enrich rows with risk calculation + renewal task data
   const enrichedData = useMemo(() => enrichRows(documents, thresholdDays, renewalTasks), [documents, thresholdDays, renewalTasks]);
@@ -1348,8 +1497,19 @@ export default function DocumentExpiryScreen() {
 
   const selectedRows = filteredData.filter((r) => selectedIds.includes(r.id));
 
-  // ─── Web render ─────────────────────────────────────────
-  if (isWeb) {
+  const handleUnassign = async (taskId: string) => {
+    if (!user) return;
+    try {
+      await renewalTaskService.unassignTask(taskId, user.id);
+      invalidate();
+      setSnackbar({ open: true, message: 'Task unassigned successfully. You can now reassign.', severity: 'success' });
+    } catch (err: any) {
+      setSnackbar({ open: true, message: err.message || 'Failed to unassign task', severity: 'error' });
+    }
+  };
+
+  // ─── Web render (wide screens only) ────────────────────
+  if (isWideScreen) {
     return (
       <View style={{ flex: 1, backgroundColor: isDark ? '#0F172A' : '#F8FAFC' }}>
         {/* Page header with inline stats */}
@@ -1579,6 +1739,7 @@ export default function DocumentExpiryScreen() {
                   onSelectionChange={setSelectedIds}
                   globalSearch={globalSearch}
                   showAllColumns={showAllColumns}
+                  onUnassign={handleUnassign}
                 />
               </MuiThemeProvider>
             </View>
@@ -1602,6 +1763,7 @@ export default function DocumentExpiryScreen() {
               onAssigned={() => {
                 setSnackbar({ open: true, message: 'Renewal tasks assigned successfully!', severity: 'success' });
                 setSelectedIds([]);
+                invalidate();
               }}
             />
             <ImportDialog
@@ -1609,7 +1771,7 @@ export default function DocumentExpiryScreen() {
               isDark={isDark}
               onClose={() => setImportOpen(false)}
               onImported={() => {
-                loadData();
+                invalidate();
                 setSnackbar({ open: true, message: 'Excel data imported successfully!', severity: 'success' });
               }}
             />

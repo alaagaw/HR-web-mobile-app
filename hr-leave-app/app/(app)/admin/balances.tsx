@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { View, Text, FlatList, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { useColorScheme } from 'nativewind';
 import { ScreenHeader } from '@/components/layout/screen-header';
 import { Card } from '@/components/ui/card';
@@ -485,13 +485,7 @@ export default function BalancesScreen() {
     }
   };
 
-  useFocusEffect(useCallback(() => { loadData(); }, []));
-
-  // Auto-refresh every 60 seconds
-  useEffect(() => {
-    const interval = setInterval(loadData, 60_000);
-    return () => clearInterval(interval);
-  }, []);
+  const { invalidate } = useAutoRefresh(() => { loadData(); }, []);
 
   // --- Web dialog handlers ---
   const handleOpenAdjust = (emp: EmployeeWithBalance) => {
@@ -518,7 +512,7 @@ export default function BalancesScreen() {
       await balanceService.adjustBalance(emp.id, 'pto', finalHours, reason, user.id);
       setDialog(INITIAL_DIALOG);
       setSuccessMsg(`Balance adjusted for ${emp.full_name}`);
-      loadData();
+      invalidate();
     } catch {
       setDialog((s) => ({ ...s, submitting: false }));
     }
@@ -538,7 +532,7 @@ export default function BalancesScreen() {
             if (isNaN(hours) || hours === 0) return;
             const reason = hours > 0 ? 'Manual accrual adjustment' : 'Manual deduction';
             await balanceService.adjustBalance(emp.id, 'pto', hours, reason, user!.id);
-            loadData();
+            invalidate();
           },
         },
       ],
