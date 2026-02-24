@@ -126,3 +126,35 @@ export enum TimeEntryStatus {
   Edited = 'edited',
   Deleted = 'deleted',
 }
+
+// ============================================================
+// TIMESHEET SYSTEM (Projects, Weekly Entries, Submissions)
+// ============================================================
+
+export enum ProjectStatus {
+  Active = 'active',
+  Completed = 'completed',
+  OnHold = 'on_hold',
+  Cancelled = 'cancelled',
+}
+
+export enum TimesheetSubmissionStatus {
+  Draft = 'draft',
+  Submitted = 'submitted',
+  Approved = 'approved',
+  Rejected = 'rejected',
+}
+
+export enum ComplianceFlagType {
+  MissingEntry = 'missing_entry',
+  LateSubmission = 'late_submission',
+}
+
+export enum TimesheetAction {
+  Created = 'created',
+  Submitted = 'submitted',
+  Approved = 'approved',
+  Rejected = 'rejected',
+  Updated = 'updated',
+  Imported = 'imported',
+}

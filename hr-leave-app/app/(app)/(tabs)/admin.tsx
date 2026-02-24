@@ -12,6 +12,9 @@ import {
   UserPlus,
   FileText,
   RefreshCw,
+  FolderOpen,
+  Building2,
+  UserCheck,
 } from 'lucide-react-native';
 import { Card } from '@/components/ui/card';
 
@@ -94,6 +97,40 @@ const ADMIN_GROUPS: AdminGroup[] = [
         icon: BookOpen,
         iconColor: '#F59E0B',
         path: '/(app)/admin/balance-ledger',
+      },
+    ],
+  },
+  {
+    label: 'Timesheet Management',
+    description: 'Projects, suppliers, timesheets, and timesheet assignments',
+    items: [
+      {
+        title: 'Projects',
+        description: 'Manage projects, clients, and locations for timesheet tracking.',
+        icon: FolderOpen,
+        iconColor: '#0891B2',
+        path: '/(app)/admin/projects',
+      },
+      {
+        title: 'Suppliers',
+        description: 'Manage vendor/subcontractor companies that provide workers.',
+        icon: Building2,
+        iconColor: '#7C3AED',
+        path: '/(app)/admin/suppliers',
+      },
+      {
+        title: 'Timesheets',
+        description: 'View and manage weekly timesheets. Enter hours, submit for approval.',
+        icon: ClipboardList,
+        iconColor: '#059669',
+        path: '/(app)/admin/timesheets',
+      },
+      {
+        title: 'Timesheet Assignments',
+        description: 'Assign timesheet keepers to projects and sites.',
+        icon: UserCheck,
+        iconColor: '#D97706',
+        path: '/(app)/admin/timesheet-assignments',
       },
     ],
   },

@@ -131,3 +131,30 @@ export const registrationFormSchema = z.object({
 });
 
 export type RegistrationFormSchemaData = z.infer<typeof registrationFormSchema>;
+
+// ============================================================
+// TIMESHEET SYSTEM SCHEMAS
+// ============================================================
+
+export const projectFormSchema = z.object({
+  project_number: z.string().min(1, 'Project number is required'),
+  name: z.string().min(1, 'Project name is required'),
+  client: z.string().nullable().optional(),
+  location: z.string().nullable().optional(),
+  scope: z.string().nullable().optional(),
+  status: z.string().optional(),
+  start_date: z.string().nullable().optional(),
+  end_date: z.string().nullable().optional(),
+});
+
+export type ProjectFormData = z.infer<typeof projectFormSchema>;
+
+export const supplierFormSchema = z.object({
+  name: z.string().min(1, 'Supplier name is required'),
+  code: z.string().nullable().optional(),
+  contact_person: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  email: z.string().email('Invalid email').nullable().optional().or(z.literal('')),
+});
+
+export type SupplierFormData = z.infer<typeof supplierFormSchema>;

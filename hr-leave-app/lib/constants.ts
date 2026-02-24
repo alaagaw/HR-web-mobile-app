@@ -23,3 +23,9 @@ export const MAX_COMMENT_LENGTH = 500;
 export const APPROVAL_SLA_HOURS = 48;
 export const CASE_NUMBER_PREFIX = 'LR';
 export const ATTACHMENTS_BUCKET = 'leave-attachments';
+
+// ── Timesheet System ──────────────────────────────────────────
+export const COMPANY_NAME = 'POLY-TECH';
+export const TIMESHEET_DOC_NUMBER = 'PT-OPR-FM-0008';
+export const TIMESHEET_DOC_REV = 'REV:01 PAGE 1 OF 1';
+export const TIMESHEET_DOC_DATE = '20-03-2020';

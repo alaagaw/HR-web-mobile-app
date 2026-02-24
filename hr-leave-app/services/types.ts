@@ -22,6 +22,18 @@ import type {
   InviteEmployeeData,
   PendingRegistration,
   ApproveRegistrationData,
+  Project,
+  ProjectDraft,
+  ProjectFilters,
+  Supplier,
+  SupplierDraft,
+  TimesheetEntry,
+  TimesheetEntryDraft,
+  TimesheetSubmission,
+  TimesheetAssignment,
+  ComplianceFlag,
+  TimesheetHistory,
+  TimesheetFilters,
 } from '@/types/models';
 import type { ExcessDetermination, RegistrationStatus } from '@/types/enums';
 
@@ -157,4 +169,53 @@ export interface TimeTrackingService {
   getHistory(employeeId: string, dateFrom: string, dateTo: string): Promise<TimeEntry[]>;
   createManualEntry(employeeId: string, clockIn: string, clockOut: string, notes?: string): Promise<TimeEntry>;
   getWeeklySummary(employeeId: string, weekStart: string): Promise<{ date: string; totalMinutes: number; entries: TimeEntry[] }[]>;
+}
+
+// ============================================================
+// TIMESHEET SYSTEM (Projects, Weekly Entries, Submissions)
+// ============================================================
+
+export interface ProjectService {
+  getAll(filters?: ProjectFilters): Promise<Project[]>;
+  getById(id: string): Promise<Project>;
+  create(data: ProjectDraft, createdBy: string): Promise<Project>;
+  update(id: string, data: Partial<ProjectDraft>): Promise<Project>;
+  delete(id: string): Promise<void>;
+}
+
+export interface SupplierService {
+  getAll(): Promise<Supplier[]>;
+  getById(id: string): Promise<Supplier>;
+  create(data: SupplierDraft): Promise<Supplier>;
+  update(id: string, data: Partial<SupplierDraft>): Promise<Supplier>;
+  delete(id: string): Promise<void>;
+}
+
+export interface TimesheetService {
+  // Entries (daily hours)
+  getEntriesForWeek(projectId: string, weekStart: string, weekEnd: string): Promise<TimesheetEntry[]>;
+  getEntriesForMonth(projectId: string, month: number, year: number): Promise<TimesheetEntry[]>;
+  upsertEntry(entry: TimesheetEntryDraft, enteredBy: string): Promise<TimesheetEntry>;
+  upsertEntries(entries: TimesheetEntryDraft[], enteredBy: string): Promise<TimesheetEntry[]>;
+  deleteEntry(entryId: string): Promise<void>;
+
+  // Submissions (weekly approval batches)
+  getSubmissions(filters?: TimesheetFilters): Promise<TimesheetSubmission[]>;
+  getSubmissionForWeek(projectId: string, weekStart: string): Promise<TimesheetSubmission | null>;
+  submitForApproval(projectId: string, weekStart: string, weekEnd: string, userId: string, userRole: string): Promise<TimesheetSubmission>;
+  approve(submissionId: string, userId: string, userRole: string, comment?: string): Promise<TimesheetSubmission>;
+  reject(submissionId: string, userId: string, userRole: string, reason: string): Promise<TimesheetSubmission>;
+
+  // Assignments (keeper <-> project)
+  getAssignments(projectId?: string): Promise<TimesheetAssignment[]>;
+  getMyAssignments(userId: string): Promise<TimesheetAssignment[]>;
+  assignKeeper(projectId: string, assignedToId: string, assignedById: string): Promise<TimesheetAssignment>;
+  removeAssignment(assignmentId: string): Promise<void>;
+
+  // Compliance
+  getComplianceFlags(projectId?: string): Promise<ComplianceFlag[]>;
+  resolveFlag(flagId: string, userId: string, note?: string): Promise<void>;
+
+  // History
+  getHistory(submissionId: string): Promise<TimesheetHistory[]>;
 }

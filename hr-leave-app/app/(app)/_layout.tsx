@@ -10,6 +10,10 @@ export default function AppLayout() {
       <Stack.Screen name="admin/employees" />
       <Stack.Screen name="admin/balances" />
       <Stack.Screen name="admin/balance-ledger" />
+      <Stack.Screen name="admin/projects" />
+      <Stack.Screen name="admin/suppliers" />
+      <Stack.Screen name="admin/timesheet-assignments" />
+      <Stack.Screen name="admin/timesheets" />
     </Stack>
   );
 }

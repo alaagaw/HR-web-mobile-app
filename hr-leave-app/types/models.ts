@@ -11,6 +11,10 @@ import {
   RegistrationStatus,
   TimeEntryType,
   TimeEntryStatus,
+  ProjectStatus,
+  TimesheetSubmissionStatus,
+  ComplianceFlagType,
+  TimesheetAction,
 } from './enums';
 
 // ============================================================
@@ -367,4 +371,170 @@ export interface TimeEntry {
   updated_at: string;
   // Joined relation
   employee?: ProfileSummary;
+}
+
+// ============================================================
+// TIMESHEET SYSTEM (Projects, Weekly Entries, Submissions)
+// ============================================================
+
+export interface Project {
+  id: string;
+  project_number: string;
+  name: string;
+  client: string | null;
+  location: string | null;
+  scope: string | null;
+  status: ProjectStatus;
+  start_date: string | null;
+  end_date: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectDraft {
+  project_number: string;
+  name: string;
+  client?: string | null;
+  location?: string | null;
+  scope?: string | null;
+  status?: ProjectStatus;
+  start_date?: string | null;
+  end_date?: string | null;
+}
+
+export interface Supplier {
+  id: string;
+  name: string;
+  code: string | null;
+  contact_person: string | null;
+  phone: string | null;
+  email: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SupplierDraft {
+  name: string;
+  code?: string | null;
+  contact_person?: string | null;
+  phone?: string | null;
+  email?: string | null;
+}
+
+export interface TimesheetEntry {
+  id: string;
+  project_id: string;
+  employee_id: string | null;
+  employee_name: string;
+  employee_number: string | null;
+  designation: string | null;
+  supplier_id: string | null;
+  entry_date: string;
+  standard_hours: number;
+  overtime_hours: number;
+  st_shift: string;
+  ot_shift: string;
+  notes: string | null;
+  entered_by: string;
+  created_at: string;
+  updated_at: string;
+  // Joined relations
+  employee?: ProfileSummary;
+  supplier?: Supplier;
+  project?: Project;
+}
+
+export interface TimesheetEntryDraft {
+  project_id: string;
+  employee_id?: string | null;
+  employee_name: string;
+  employee_number?: string | null;
+  designation?: string | null;
+  supplier_id?: string | null;
+  entry_date: string;
+  standard_hours?: number;
+  overtime_hours?: number;
+  st_shift?: string;
+  ot_shift?: string;
+  notes?: string | null;
+}
+
+export interface TimesheetSubmission {
+  id: string;
+  project_id: string;
+  week_start: string;
+  week_end: string;
+  status: TimesheetSubmissionStatus;
+  submitted_by: string | null;
+  submitted_at: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  rejected_by: string | null;
+  rejected_at: string | null;
+  rejection_reason: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined relations
+  project?: Project;
+  submitted_by_profile?: ProfileSummary;
+  approved_by_profile?: ProfileSummary;
+}
+
+export interface TimesheetAssignment {
+  id: string;
+  project_id: string;
+  assigned_to_id: string;
+  assigned_by_id: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  // Joined relations
+  project?: Project;
+  assigned_to?: ProfileSummary;
+  assigned_by?: ProfileSummary;
+}
+
+export interface ComplianceFlag {
+  id: string;
+  project_id: string;
+  keeper_id: string;
+  flag_date: string;
+  flag_type: ComplianceFlagType;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  resolution_note: string | null;
+  created_at: string;
+  // Joined relations
+  project?: Project;
+  keeper?: ProfileSummary;
+}
+
+export interface TimesheetHistory {
+  id: number;
+  submission_id: string;
+  action: TimesheetAction;
+  performed_by: string;
+  performer_role: string;
+  comment: string | null;
+  from_status: string | null;
+  to_status: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  performer?: ProfileSummary;
+}
+
+export interface TimesheetFilters {
+  project_id?: string;
+  supplier_id?: string;
+  status?: TimesheetSubmissionStatus | TimesheetSubmissionStatus[];
+  week_start?: string;
+  week_end?: string;
+}
+
+export interface ProjectFilters {
+  status?: ProjectStatus;
+  search?: string;
 }
