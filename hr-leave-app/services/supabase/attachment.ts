@@ -8,10 +8,14 @@ export const attachmentService: AttachmentService = {
   async uploadAttachment(requestId, file, uploadedBy) {
     const filePath = `${requestId}/${Date.now()}-${file.name}`;
 
+    // Read the file from local URI as a blob
+    const response = await fetch(file.uri);
+    const blob = await response.blob();
+
     // Upload to Supabase Storage
     const { error: uploadError } = await supabase.storage
       .from(ATTACHMENTS_BUCKET)
-      .upload(filePath, { uri: file.uri, type: file.type, name: file.name } as any);
+      .upload(filePath, blob, { contentType: file.type });
 
     if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
 

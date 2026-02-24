@@ -15,3 +15,4 @@ export { userService } from './supabase/user';
 export { documentService } from './supabase/document';
 export { renewalTaskService } from './supabase/renewal-task';
 export { registrationService } from './supabase/registration';
+export { timeTrackingService } from './supabase/time-tracking';

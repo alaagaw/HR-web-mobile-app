@@ -11,8 +11,8 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { useAuth } from '@/hooks/use-auth';
 import { leaveService } from '@/services';
 import { formatDateRange, formatHours, formatDate } from '@/lib/utils';
-import { getStatusLabel } from '@/lib/state-machine';
-import { LeaveStatus, LeaveType } from '@/types/enums';
+import { getStatusLabel, getLeaveTypeLabel, getLeaveTypeMuiColor } from '@/lib/state-machine';
+import { LeaveStatus } from '@/types/enums';
 import type { LeaveRequest } from '@/types/models';
 
 const isWeb = Platform.OS === 'web';
@@ -95,7 +95,7 @@ function WebHistoryTable({
   const filteredData = data.filter((row) => {
     const caseNum = row.case_number.toLowerCase();
     const emp = `${row.employee?.full_name || ''} ${row.employee?.department || ''}`.toLowerCase();
-    const type = (row.leave_type === LeaveType.Emergency ? 'emergency' : 'pto').toLowerCase();
+    const type = getLeaveTypeLabel(row.leave_type).toLowerCase();
     const dates = formatDateRange(row.start_date, row.end_date).toLowerCase();
     const hours = formatHours(row.requested_hours).toLowerCase();
     const status = getStatusLabel(row.status).toLowerCase();
@@ -177,15 +177,14 @@ function WebHistoryTable({
       renderHeader: renderHeader('Type', 'type'),
       renderCell: (params: any) => (
         <Chip
-          label={params.row.leave_type === LeaveType.Emergency ? 'Emergency' : 'PTO'}
+          label={getLeaveTypeLabel(params.row.leave_type)}
           size="small"
-          color={params.row.leave_type === LeaveType.Emergency ? 'error' : 'info'}
+          color={getLeaveTypeMuiColor(params.row.leave_type)}
           variant="outlined"
           sx={{ fontWeight: 600, fontSize: 12 }}
         />
       ),
-      valueGetter: (_value: any, row: LeaveRequest) =>
-        row.leave_type === LeaveType.Emergency ? 'Emergency' : 'PTO',
+      valueGetter: (_value: any, row: LeaveRequest) => getLeaveTypeLabel(row.leave_type),
     },
     {
       field: 'dates',

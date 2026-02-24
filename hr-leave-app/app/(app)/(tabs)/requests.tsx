@@ -8,8 +8,8 @@ import { RequestCard } from '@/components/leave/request-card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useAuth } from '@/hooks/use-auth';
 import { useLeaveRequest } from '@/hooks/use-leave-request';
-import { LeaveStatus, LeaveType } from '@/types/enums';
-import { getStatusLabel } from '@/lib/state-machine';
+import { LeaveStatus } from '@/types/enums';
+import { getStatusLabel, getLeaveTypeLabel, getLeaveTypeMuiColor } from '@/lib/state-machine';
 import { formatDateRange, formatHours, formatPendingSince } from '@/lib/utils';
 import type { LeaveRequest } from '@/types/models';
 
@@ -65,15 +65,14 @@ function WebRequestsTable({
       minWidth: 110,
       renderCell: (params: any) => (
         <Chip
-          label={params.row.leave_type === LeaveType.Emergency ? 'Emergency' : 'PTO'}
+          label={getLeaveTypeLabel(params.row.leave_type)}
           size="small"
-          color={params.row.leave_type === LeaveType.Emergency ? 'error' : 'info'}
+          color={getLeaveTypeMuiColor(params.row.leave_type)}
           variant="outlined"
           sx={{ fontWeight: 600, fontSize: 12 }}
         />
       ),
-      valueGetter: (_value: any, row: LeaveRequest) =>
-        row.leave_type === LeaveType.Emergency ? 'Emergency' : 'PTO',
+      valueGetter: (_value: any, row: LeaveRequest) => getLeaveTypeLabel(row.leave_type),
     },
     {
       field: 'dates',

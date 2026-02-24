@@ -3,6 +3,7 @@ import type {
   ProfileSummary,
   LeaveRequest,
   LeaveRequestDraft,
+  TimeEntry,
   LeaveBalance,
   LeaveLedgerEntry,
   Attachment,
@@ -142,4 +143,18 @@ export interface RegistrationService {
 
   // HR invite (calls Edge Function)
   inviteEmployee(data: InviteEmployeeData, invitedBy: string): Promise<void>;
+}
+
+// ============================================================
+// TIME TRACKING (Clock In / Clock Out)
+// ============================================================
+
+export interface TimeTrackingService {
+  clockIn(employeeId: string, notes?: string): Promise<TimeEntry>;
+  clockOut(entryId: string, notes?: string): Promise<TimeEntry>;
+  getActiveEntry(employeeId: string): Promise<TimeEntry | null>;
+  getEntriesByDate(employeeId: string, date: string): Promise<TimeEntry[]>;
+  getHistory(employeeId: string, dateFrom: string, dateTo: string): Promise<TimeEntry[]>;
+  createManualEntry(employeeId: string, clockIn: string, clockOut: string, notes?: string): Promise<TimeEntry>;
+  getWeeklySummary(employeeId: string, weekStart: string): Promise<{ date: string; totalMinutes: number; entries: TimeEntry[] }[]>;
 }

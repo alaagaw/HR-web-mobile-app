@@ -1,9 +1,9 @@
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { Badge } from '@/components/ui/badge';
-import { getStatusLabel, getStatusVariant } from '@/lib/state-machine';
+import { getStatusLabel, getStatusVariant, getLeaveTypeLabel, getLeaveTypeVariant } from '@/lib/state-machine';
 import { formatDateRange, formatHours, formatPendingSince } from '@/lib/utils';
-import { LeaveStatus, LeaveType } from '@/types/enums';
+import { LeaveStatus } from '@/types/enums';
 import type { LeaveRequest } from '@/types/models';
 
 interface RequestTableProps {
@@ -107,8 +107,8 @@ export function RequestTable({ data, onRowPress, showEmployee = false, highlight
 
             {/* Type */}
             <View style={COL.type}>
-              <Badge variant={request.leave_type === LeaveType.Emergency ? 'error' : 'info'}>
-                {request.leave_type === LeaveType.Emergency ? 'Emergency' : 'PTO'}
+              <Badge variant={getLeaveTypeVariant(request.leave_type)}>
+                {getLeaveTypeLabel(request.leave_type)}
               </Badge>
             </View>
 

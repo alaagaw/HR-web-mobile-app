@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, Alert, Pressable, Image, Linking, Platform, TextInput } from 'react-native';
+import { View, Text, ScrollView, Pressable, Image, TextInput } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FileText, Download, ImageIcon } from 'lucide-react-native';
+import { FileText, Eye, ImageIcon } from 'lucide-react-native';
 
 import { ScreenHeader } from '@/components/layout/screen-header';
 import { Card } from '@/components/ui/card';
@@ -12,17 +12,19 @@ import { BalanceCard } from '@/components/leave/balance-card';
 import { RequestTimeline } from '@/components/leave/request-timeline';
 import { ApprovalActions } from '@/components/leave/approval-actions';
 import { ExcessDeterminationPanel } from '@/components/leave/excess-determination';
+import { FilePreviewModal } from '@/components/ui/file-preview-modal';
 
 import { useAuth } from '@/hooks/use-auth';
 import { useLeaveRequest } from '@/hooks/use-leave-request';
 import { useApprovals } from '@/hooks/use-leave-approvals';
 import { useBalance } from '@/hooks/use-balance';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
-import { getStatusLabel, getStatusVariant, canTransition, getRemainingApprovalSteps } from '@/lib/state-machine';
+import { getStatusLabel, getStatusVariant, canTransition, getRemainingApprovalSteps, getLeaveTypeLabel, getLeaveTypeVariant, isUnpaidLeaveType } from '@/lib/state-machine';
 import { formatDateRange, formatHours, formatDaysHours, formatFileSize } from '@/lib/utils';
 import { computeBalanceImpact } from '@/lib/hours-calculator';
 import { LeaveStatus, LeaveType, ExcessDetermination, Role } from '@/types/enums';
 import { MAX_COMMENT_LENGTH } from '@/lib/constants';
+import type { Attachment } from '@/types/models';
 
 export default function RequestDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -36,6 +38,7 @@ export default function RequestDetailScreen() {
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
 
   useAutoRefresh(() => {
     if (id) fetchRequestById(id);
@@ -123,8 +126,8 @@ export default function RequestDetailScreen() {
           <Badge variant={getStatusVariant(req.status)}>
             {getStatusLabel(req.status)}
           </Badge>
-          <Badge variant={req.is_emergency ? 'error' : 'info'}>
-            {req.is_emergency ? 'Emergency' : 'PTO'}
+          <Badge variant={getLeaveTypeVariant(req.leave_type)}>
+            {getLeaveTypeLabel(req.leave_type)}
           </Badge>
           {req.emergency_number && (
             <Badge variant="warning">{`Emergency #${req.emergency_number}`}</Badge>
@@ -145,7 +148,9 @@ export default function RequestDetailScreen() {
         <Card className="mb-4">
           <DetailRow label="Dates" value={formatDateRange(req.start_date, req.end_date)} />
           <DetailRow label="Requested" value={formatHours(req.requested_hours)} sub={formatDaysHours(req.requested_hours, workdayHours)} />
-          <DetailRow label="Paid Hours" value={formatHours(req.paid_hours)} sub={formatDaysHours(req.paid_hours, workdayHours)} />
+          {!isUnpaidLeaveType(req.leave_type) && (
+            <DetailRow label="Paid Hours" value={formatHours(req.paid_hours)} sub={formatDaysHours(req.paid_hours, workdayHours)} />
+          )}
           {req.has_excess && (
             <DetailRow label="Excess" value={formatHours(req.excess_hours)} sub={formatDaysHours(req.excess_hours, workdayHours)} highlight />
           )}
@@ -179,13 +184,7 @@ export default function RequestDetailScreen() {
               return (
                 <Pressable
                   key={att.id}
-                  onPress={() => {
-                    if (Platform.OS === 'web') {
-                      window.open(att.file_url, '_blank');
-                    } else {
-                      Linking.openURL(att.file_url);
-                    }
-                  }}
+                  onPress={() => setPreviewAttachment(att)}
                   className="py-2 border-b border-border/50 dark:border-slate-700/50"
                 >
                   {/* Image thumbnail preview */}
@@ -206,13 +205,20 @@ export default function RequestDetailScreen() {
                       <Text className="text-sm text-primary dark:text-blue-400">{att.file_name}</Text>
                       <Text className="text-xs text-text-muted dark:text-slate-400">{formatFileSize(att.file_size)}</Text>
                     </View>
-                    <Download size={16} color="#64748B" />
+                    <Eye size={16} color="#64748B" />
                   </View>
                 </Pressable>
               );
             })}
           </Card>
         )}
+
+        {/* File Preview Modal */}
+        <FilePreviewModal
+          visible={!!previewAttachment}
+          attachment={previewAttachment}
+          onClose={() => setPreviewAttachment(null)}
+        />
 
         {/* Timeline */}
         {req.history && req.history.length > 0 && (

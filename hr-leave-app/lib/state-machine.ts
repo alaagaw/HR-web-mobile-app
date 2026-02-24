@@ -21,9 +21,9 @@ export function getNextApprovalStatus(
   leaveType: LeaveType,
   emergencyNumber: number | null
 ): TransitionResult {
-  // PTO flow: Supervisor → Manager → HR → Approved
+  // PTO / Non-Paid flow: Supervisor → Manager → HR → Approved
   // HR employees skip to PendingHRDirector, so we handle that too.
-  if (leaveType === LeaveType.PTO) {
+  if (leaveType === LeaveType.PTO || leaveType === LeaveType.NonPaidTimeOff) {
     switch (currentStatus) {
       case LeaveStatus.PendingSupervisor:
         return { nextStatus: LeaveStatus.PendingManager, nextAssigneeRole: Role.Manager };
@@ -85,8 +85,8 @@ export function getInitialRoutingStatus(
   emergencyTier: EmergencyTier | null,
   employeeRole?: Role
 ): TransitionResult {
-  // PTO routing — skip steps at or below the employee's role
-  if (leaveType === LeaveType.PTO) {
+  // PTO / Non-Paid routing — skip steps at or below the employee's role
+  if (leaveType === LeaveType.PTO || leaveType === LeaveType.NonPaidTimeOff) {
     switch (employeeRole) {
       case Role.Supervisor:
         return { nextStatus: LeaveStatus.PendingManager, nextAssigneeRole: Role.Manager };
@@ -222,7 +222,7 @@ export function getRemainingApprovalSteps(
 
   if (!pendingStatuses.includes(status)) return [];
 
-  if (leaveType === LeaveType.PTO) {
+  if (leaveType === LeaveType.PTO || leaveType === LeaveType.NonPaidTimeOff) {
     switch (status) {
       case LeaveStatus.PendingSupervisor:
         return ['Supervisor', 'Manager', 'HR'];
@@ -283,6 +283,49 @@ export function getStatusLabel(status: LeaveStatus): string {
     [LeaveStatus.Cancelled]: 'Cancelled',
   };
   return labels[status];
+}
+
+/**
+ * Get a human-readable label for a leave type.
+ */
+export function getLeaveTypeLabel(leaveType: LeaveType | string): string {
+  switch (leaveType) {
+    case LeaveType.PTO: return 'PTO';
+    case LeaveType.Emergency: return 'Emergency';
+    case LeaveType.NonPaidTimeOff: return 'Non-Paid';
+    default: return String(leaveType);
+  }
+}
+
+/**
+ * Get badge color variant for a leave type.
+ */
+export function getLeaveTypeVariant(leaveType: LeaveType | string): 'error' | 'info' | 'warning' | 'default' {
+  switch (leaveType) {
+    case LeaveType.Emergency: return 'error';
+    case LeaveType.PTO: return 'info';
+    case LeaveType.NonPaidTimeOff: return 'warning';
+    default: return 'default';
+  }
+}
+
+/**
+ * Get MUI Chip color for a leave type.
+ */
+export function getLeaveTypeMuiColor(leaveType: LeaveType | string): 'error' | 'info' | 'warning' | 'default' {
+  switch (leaveType) {
+    case LeaveType.Emergency: return 'error';
+    case LeaveType.PTO: return 'info';
+    case LeaveType.NonPaidTimeOff: return 'warning';
+    default: return 'default';
+  }
+}
+
+/**
+ * Whether a leave type is unpaid (no balance deduction).
+ */
+export function isUnpaidLeaveType(leaveType: LeaveType | string): boolean {
+  return leaveType === LeaveType.Emergency || leaveType === LeaveType.NonPaidTimeOff;
 }
 
 /**

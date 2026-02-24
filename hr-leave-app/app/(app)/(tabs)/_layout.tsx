@@ -10,6 +10,7 @@ import {
   CalendarDays,
   Settings,
   Bell,
+  Clock,
 } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
 import { useAuth } from '@/hooks/use-auth';
@@ -28,6 +29,7 @@ const NAV_ITEMS = [
   { name: 'requests', title: 'My Requests', Icon: FileText, approverOnly: false, hrOnly: false },
   { name: 'tasks', title: 'Tasks', Icon: CheckSquare, approverOnly: true, hrOnly: false },
   { name: 'team', title: 'Team', Icon: Users, approverOnly: true, hrOnly: false },
+  { name: 'timeclock', title: 'Clock In/Out', Icon: Clock, approverOnly: false, hrOnly: false },
   { name: 'calendar', title: 'Calendar', Icon: CalendarDays, approverOnly: false, hrOnly: false },
   { name: 'notifications', title: 'Notifications', Icon: Bell, approverOnly: false, hrOnly: false, route: '/(app)/notifications' },
   { name: 'admin', title: 'HR Admin', Icon: Settings, approverOnly: false, hrOnly: true },
@@ -288,6 +290,14 @@ export default function TabLayout() {
           title: 'Team',
           tabBarIcon: ({ color, size }) => <Users size={size} color={color} />,
           href: isApprover ? undefined : null,
+        }}
+      />
+      <Tabs.Screen
+        name="timeclock"
+        options={{
+          title: 'Clock In/Out',
+          ...(isWeb && { headerShown: false }),
+          tabBarIcon: ({ color, size }) => <Clock size={size} color={color} />,
         }}
       />
       <Tabs.Screen

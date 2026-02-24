@@ -28,7 +28,7 @@ import { attachmentService } from '@/services';
 import { leaveRequestSchema, type LeaveRequestFormData } from '@/lib/validators';
 import { computeRequestedHours, computeBalanceImpact } from '@/lib/hours-calculator';
 import { meetsAdvanceNotice, formatDaysHours } from '@/lib/utils';
-import { getEmergencyTier } from '@/lib/state-machine';
+import { getEmergencyTier, isUnpaidLeaveType } from '@/lib/state-machine';
 import { LeaveType, EmergencyTier } from '@/types/enums';
 import { MAX_COMMENT_LENGTH } from '@/lib/constants';
 import type { BalanceImpact } from '@/types/models';
@@ -116,6 +116,7 @@ export default function NewRequestScreen() {
   const watchedIncludeWeekends = watch('include_weekends');
 
   const isEmergency = watchedType === LeaveType.Emergency;
+  const isUnpaid = isUnpaidLeaveType(watchedType);
   const workdayHours = user?.workday_hours || 8;
 
   useEffect(() => {
@@ -141,11 +142,23 @@ export default function NewRequestScreen() {
       workday_hours: workdayHours,
     });
 
+    // Unpaid types don't use balance
+    if (isUnpaid) {
+      setImpact({
+        available_hours: 0, available_days: 0,
+        requested_hours: hoursResult.requested_hours,
+        requested_days: hoursResult.requested_days,
+        remaining_hours: 0, remaining_days: 0,
+        paid_hours: 0, excess_hours: 0, excess_days: 0, has_excess: false,
+      });
+      return;
+    }
+
     const balance = balances.find((b) => b.leave_type === watchedType);
     const available = balance?.balance_hours ?? 0;
 
     setImpact(computeBalanceImpact(available, hoursResult.requested_hours, workdayHours));
-  }, [watchedStartDate, watchedEndDate, watchedStartTime, watchedEndTime, watchedIsFullDay, watchedIncludeWeekends, watchedType, balances]);
+  }, [watchedStartDate, watchedEndDate, watchedStartTime, watchedEndTime, watchedIsFullDay, watchedIncludeWeekends, watchedType, balances, isUnpaid]);
 
   const emergencyTier = getEmergencyTier(emergencyCount);
   const emergencyBlocked = isEmergency && emergencyTier === EmergencyTier.Blocked;
@@ -322,7 +335,8 @@ export default function NewRequestScreen() {
                         }}
                       >
                         <option value={LeaveType.PTO} style={{ backgroundColor: isDark ? DT.cardBg : '#FFFFFF', color: isDark ? DT.textPrimary : LT.textPrimary }}>PTO / Vacation</option>
-                        <option value={LeaveType.Emergency} style={{ backgroundColor: isDark ? DT.cardBg : '#FFFFFF', color: isDark ? DT.textPrimary : LT.textPrimary }}>Emergency Leave</option>
+                        <option value={LeaveType.Emergency} style={{ backgroundColor: isDark ? DT.cardBg : '#FFFFFF', color: isDark ? DT.textPrimary : LT.textPrimary }}>Emergency Leave (Unpaid)</option>
+                        <option value={LeaveType.NonPaidTimeOff} style={{ backgroundColor: isDark ? DT.cardBg : '#FFFFFF', color: isDark ? DT.textPrimary : LT.textPrimary }}>Non-Paid Time Off</option>
                       </select>
                     )}
                   />
@@ -460,13 +474,11 @@ export default function NewRequestScreen() {
                 </WebFormField>
 
                 {/* Attachments */}
-                {isEmergency && (
-                  <FileUpload
-                    label="Attachments (optional)"
-                    files={files}
-                    onFilesChange={setFiles}
-                  />
-                )}
+                <FileUpload
+                  label="Attachments (optional)"
+                  files={files}
+                  onFilesChange={setFiles}
+                />
 
                 {/* Action buttons */}
                 <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
@@ -546,7 +558,7 @@ export default function NewRequestScreen() {
                 </div>
 
                 {/* Balance impact card */}
-                {impact && (
+                {impact && !isUnpaid && (
                   <div
                     style={{
                       backgroundColor: isDark ? DT.cardBg : LT.cardBg,
@@ -605,6 +617,46 @@ export default function NewRequestScreen() {
                       </div>
                     )}
                   </div>
+
+                )}
+
+                {/* Unpaid type indicator */}
+                {impact && isUnpaid && (
+                  <div
+                    style={{
+                      backgroundColor: isDark ? DT.cardBg : LT.cardBg,
+                      border: `1px solid ${isDark ? DT.cardBorder : LT.cardBorder}`,
+                      borderRadius: 16,
+                      boxShadow: isDark ? DT.cardShadow : LT.cardShadow,
+                      padding: 24,
+                      textAlign: 'center' as const,
+                    }}
+                  >
+                    <div style={{ display: 'flex', gap: 12 }}>
+                      <WebBalanceStat
+                        label="Requesting"
+                        hours={impact.requested_hours}
+                        days={formatDaysHours(impact.requested_hours, workdayHours)}
+                        color={isDark ? DT.warningText : '#D97706'}
+                        bg={isDark ? DT.warningBg : '#FFFBEB'}
+                        isDark={isDark}
+                      />
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 14,
+                        padding: '8px 14px',
+                        borderRadius: 10,
+                        backgroundColor: isDark ? 'rgba(245,158,11,0.15)' : '#FFFBEB',
+                        border: `1px solid ${isDark ? 'rgba(245,158,11,0.25)' : '#FDE68A'}`,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: isDark ? '#fcd34d' : '#92400E',
+                      }}
+                    >
+                      This is an unpaid leave — no balance will be deducted.
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
@@ -635,7 +687,8 @@ export default function NewRequestScreen() {
                 label="Request Type"
                 options={[
                   { value: LeaveType.PTO, label: 'PTO / Vacation' },
-                  { value: LeaveType.Emergency, label: 'Emergency Leave', description: 'Requires reason text' },
+                  { value: LeaveType.Emergency, label: 'Emergency Leave (Unpaid)', description: 'Requires reason text' },
+                  { value: LeaveType.NonPaidTimeOff, label: 'Non-Paid Time Off' },
                 ]}
                 value={value}
                 onValueChange={onChange}
@@ -721,10 +774,16 @@ export default function NewRequestScreen() {
             </View>
           )}
 
-          <BalanceCard impact={impact} workdayHours={workdayHours} />
+          {!isUnpaid && <BalanceCard impact={impact} workdayHours={workdayHours} />}
 
-          {impact?.has_excess && (
+          {!isUnpaid && impact?.has_excess && (
             <ExcessBanner excessHours={impact.excess_hours} excessDays={impact.excess_days} />
+          )}
+
+          {isUnpaid && (
+            <Banner variant="warning" className="mb-4">
+              This is an unpaid leave — no balance will be deducted.
+            </Banner>
           )}
 
           {isEmergency && (
@@ -765,13 +824,11 @@ export default function NewRequestScreen() {
             )}
           />
 
-          {isEmergency && (
-            <FileUpload
-              label="Attachments (optional)"
-              files={files}
-              onFilesChange={setFiles}
-            />
-          )}
+          <FileUpload
+            label="Attachments (optional)"
+            files={files}
+            onFilesChange={setFiles}
+          />
 
           <View className="flex-row gap-3 mt-4 mb-8">
             <View className="flex-1">

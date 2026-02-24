@@ -10,6 +10,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { leaveService } from '@/services';
 import { LeaveStatus, LeaveType } from '@/types/enums';
 import { formatDateRange, formatHours, getInitials, getRoleLabel } from '@/lib/utils';
+import { getLeaveTypeLabel, getLeaveTypeVariant } from '@/lib/state-machine';
 import type { LeaveRequest } from '@/types/models';
 import {
   format,
@@ -109,7 +110,9 @@ function getMonthDays(date: Date): Date[] {
 }
 
 function leaveColor(leave: LeaveRequest): string {
-  return leave.leave_type === 'emergency' ? '#EF4444' : hashColor(leave.employee_id);
+  return leave.leave_type === LeaveType.Emergency ? '#EF4444'
+    : leave.leave_type === LeaveType.NonPaidTimeOff ? '#F59E0B'
+    : hashColor(leave.employee_id);
 }
 
 // ======================== WEB: Toolbar ========================
@@ -210,8 +213,9 @@ function CalendarToolbar({
           sx={{ fontSize: 13, fontWeight: 600, borderRadius: 2 }}
         >
           <MuiMenuItem value="">All Types</MuiMenuItem>
-          <MuiMenuItem value="pto">PTO</MuiMenuItem>
-          <MuiMenuItem value="emergency">Emergency</MuiMenuItem>
+          <MuiMenuItem value={LeaveType.PTO}>PTO</MuiMenuItem>
+          <MuiMenuItem value={LeaveType.Emergency}>Emergency</MuiMenuItem>
+          <MuiMenuItem value={LeaveType.NonPaidTimeOff}>Non-Paid</MuiMenuItem>
         </MuiSelect>
       </MuiFormControl>
 
@@ -543,11 +547,15 @@ function WeekView({
                           fontWeight: 700,
                           padding: '1px 6px',
                           borderRadius: 4,
-                          backgroundColor: leave.leave_type === 'emergency' ? '#EF444425' : '#3B82F620',
-                          color: leave.leave_type === 'emergency' ? '#EF4444' : '#3B82F6',
+                          backgroundColor: leave.leave_type === LeaveType.Emergency ? '#EF444425'
+                            : leave.leave_type === LeaveType.NonPaidTimeOff ? '#F59E0B25'
+                            : '#3B82F620',
+                          color: leave.leave_type === LeaveType.Emergency ? '#EF4444'
+                            : leave.leave_type === LeaveType.NonPaidTimeOff ? '#F59E0B'
+                            : '#3B82F6',
                         }}
                       >
-                        {leave.leave_type === 'pto' ? 'PTO' : 'EMERGENCY'}
+                        {getLeaveTypeLabel(leave.leave_type).toUpperCase()}
                       </span>
                       <span style={{ fontSize: 11, color: isDark ? '#64748B' : '#94A3B8' }}>
                         {formatHours(leave.requested_hours)}
@@ -694,7 +702,12 @@ function LeaveDetailDialog({
   if (!leave) return null;
 
   const color = leaveColor(leave);
-  const isEmergency = leave.leave_type === LeaveType.Emergency;
+
+  const typeColorMap: Record<string, { bg: string; fg: string; border: string }> = {
+    [LeaveType.Emergency]: { bg: '#EF444420', fg: '#EF4444', border: '#EF444440' },
+    [LeaveType.NonPaidTimeOff]: { bg: '#F59E0B20', fg: '#F59E0B', border: '#F59E0B40' },
+  };
+  const typeColors = typeColorMap[leave.leave_type] || { bg: '#3B82F620', fg: '#3B82F6', border: '#3B82F640' };
 
   return (
     <Dialog
@@ -753,14 +766,14 @@ function LeaveDetailDialog({
               label: 'Leave Type',
               value: (
                 <Chip
-                  label={isEmergency ? 'Emergency' : 'PTO'}
+                  label={getLeaveTypeLabel(leave.leave_type)}
                   size="small"
                   sx={{
                     fontWeight: 700,
                     fontSize: 12,
-                    backgroundColor: isEmergency ? '#EF444420' : '#3B82F620',
-                    color: isEmergency ? '#EF4444' : '#3B82F6',
-                    border: `1px solid ${isEmergency ? '#EF444440' : '#3B82F640'}`,
+                    backgroundColor: typeColors.bg,
+                    color: typeColors.fg,
+                    border: `1px solid ${typeColors.border}`,
                   }}
                 />
               ),
@@ -917,7 +930,7 @@ function DayDetailDialog({
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: isDark ? '#F1F5F9' : '#0F172A' }}>{leave.employee?.full_name}</div>
                   <div style={{ fontSize: 12, color: isDark ? '#94A3B8' : '#64748B', marginTop: 1 }}>
-                    {leave.employee?.department || '\u2014'} {DOT} {leave.leave_type === 'pto' ? 'PTO' : 'Emergency'}
+                    {leave.employee?.department || '\u2014'} {DOT} {getLeaveTypeLabel(leave.leave_type)}
                   </div>
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 700, color }}>
@@ -1204,7 +1217,6 @@ export default function CalendarScreen() {
           </Card>
         ) : (
           mobileDayLeaves.map((leave) => {
-            const isEmergency = leave.leave_type === LeaveType.Emergency;
             const color = leaveColor(leave);
             return (
               <Card key={leave.id} className="mb-3">
@@ -1228,8 +1240,8 @@ export default function CalendarScreen() {
                       {formatDateRange(leave.start_date, leave.end_date)} {DOT} {formatHours(leave.requested_hours)}
                     </Text>
                   </View>
-                  <Badge variant={isEmergency ? 'error' : 'info'}>
-                    {isEmergency ? 'Emergency' : 'PTO'}
+                  <Badge variant={getLeaveTypeVariant(leave.leave_type)}>
+                    {getLeaveTypeLabel(leave.leave_type)}
                   </Badge>
                 </View>
               </Card>

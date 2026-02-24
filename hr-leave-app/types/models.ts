@@ -9,6 +9,8 @@ import {
   RenewalTaskStatus,
   RenewalTaskAction,
   RegistrationStatus,
+  TimeEntryType,
+  TimeEntryStatus,
 } from './enums';
 
 // ============================================================
@@ -347,4 +349,22 @@ export interface ApproveRegistrationData {
   department: string;
   supervisor_id: string | null;
   manager_id: string | null;
+}
+
+// ============================================================
+// TIME TRACKING (Clock In / Clock Out)
+// ============================================================
+
+export interface TimeEntry {
+  id: string;
+  employee_id: string;
+  clock_in: string;
+  clock_out: string | null;
+  notes: string | null;
+  entry_type: TimeEntryType;
+  status: TimeEntryStatus;
+  created_at: string;
+  updated_at: string;
+  // Joined relation
+  employee?: ProfileSummary;
 }

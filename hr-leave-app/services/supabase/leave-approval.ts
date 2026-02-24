@@ -147,15 +147,17 @@ export const leaveApprovalService: LeaveApprovalService = {
       to_status: nextStatus,
     });
 
-    // If approved, deduct balance
+    // If approved, deduct balance (skip for unpaid types where paid_hours is 0)
     if (isTerminal) {
-      await supabase.rpc('deduct_leave_balance', {
-        p_employee_id: request.employee_id,
-        p_leave_type: request.leave_type,
-        p_hours: request.paid_hours,
-        p_request_id: requestId,
-        p_performed_by: userId,
-      });
+      if (request.paid_hours > 0) {
+        await supabase.rpc('deduct_leave_balance', {
+          p_employee_id: request.employee_id,
+          p_leave_type: request.leave_type,
+          p_hours: request.paid_hours,
+          p_request_id: requestId,
+          p_performed_by: userId,
+        });
+      }
 
       // Notify employee
       await supabase.from('notifications').insert({

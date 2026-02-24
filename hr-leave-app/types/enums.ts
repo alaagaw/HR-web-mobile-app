@@ -13,6 +13,7 @@ export enum Role {
 export enum LeaveType {
   PTO = 'pto',
   Emergency = 'emergency',
+  NonPaidTimeOff = 'non_paid_time_off',
 }
 
 export enum LeaveStatus {
@@ -108,4 +109,20 @@ export enum RenewalTaskAction {
   Cancelled = 'cancelled',
   Reassigned = 'reassigned',
   Unassigned = 'unassigned',
+}
+
+// ============================================================
+// TIME TRACKING (Clock In / Clock Out)
+// ============================================================
+
+export enum TimeEntryType {
+  Regular = 'regular',
+  Manual = 'manual',
+}
+
+export enum TimeEntryStatus {
+  Active = 'active',
+  Completed = 'completed',
+  Edited = 'edited',
+  Deleted = 'deleted',
 }

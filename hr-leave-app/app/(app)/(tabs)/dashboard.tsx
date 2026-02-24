@@ -27,7 +27,7 @@ import { useNotifications } from '@/hooks/use-notifications';
 import { useNotificationStore } from '@/stores/notification-store';
 import { useTaskStore } from '@/stores/task-store';
 import { Role, LeaveStatus, LeaveType, RenewalTaskStatus } from '@/types/enums';
-import { getStatusLabel } from '@/lib/state-machine';
+import { getStatusLabel, getLeaveTypeLabel, getLeaveTypeMuiColor } from '@/lib/state-machine';
 import { formatHours, formatDaysHours, formatDateRange, formatPendingSince, getRoleLabel } from '@/lib/utils';
 import type { LeaveRequest, AppNotification, RenewalTask } from '@/types/models';
 
@@ -265,7 +265,7 @@ function ActionRequiredCard({
                     {req.employee?.full_name || '—'}
                   </span>
                   <span style={{ fontSize: 13, color: tk.textSecondary }}>
-                    {req.leave_type === LeaveType.Emergency ? 'Emergency' : 'PTO'}
+                    {getLeaveTypeLabel(req.leave_type)}
                   </span>
                 </div>
                 <div style={{ fontSize: 13, color: tk.textMuted }}>
@@ -544,15 +544,14 @@ function WebRecentRequestsTable({
       minWidth: 90,
       renderCell: (params: any) => (
         <Chip
-          label={params.row.leave_type === LeaveType.Emergency ? 'Emergency' : 'PTO'}
+          label={getLeaveTypeLabel(params.row.leave_type)}
           size="small"
-          color={params.row.leave_type === LeaveType.Emergency ? 'error' : 'info'}
+          color={getLeaveTypeMuiColor(params.row.leave_type)}
           variant="outlined"
           sx={{ fontWeight: 600, fontSize: 12 }}
         />
       ),
-      valueGetter: (_v: any, row: LeaveRequest) =>
-        row.leave_type === LeaveType.Emergency ? 'Emergency' : 'PTO',
+      valueGetter: (_v: any, row: LeaveRequest) => getLeaveTypeLabel(row.leave_type),
     },
     {
       field: 'dates',

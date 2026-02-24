@@ -3,7 +3,7 @@ import { Clock, ChevronRight, CheckCircle, ArrowRight } from 'lucide-react-nativ
 import { useColorScheme } from 'nativewind';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { getStatusLabel, getStatusVariant, getRemainingApprovalSteps } from '@/lib/state-machine';
+import { getStatusLabel, getStatusVariant, getRemainingApprovalSteps, getLeaveTypeLabel, getLeaveTypeVariant } from '@/lib/state-machine';
 import { formatDateRange, formatPendingSince, formatHours } from '@/lib/utils';
 import type { LeaveRequest } from '@/types/models';
 import { LeaveStatus, LeaveType } from '@/types/enums';
@@ -43,10 +43,8 @@ export function RequestCard({ request, onPress, showEmployee = false, highlightA
         <View className="flex-row items-center justify-between mb-2">
           <View className="flex-row items-center gap-2">
             <Text className="text-sm font-semibold text-text-primary dark:text-white">{request.case_number}</Text>
-            <Badge
-              variant={request.leave_type === LeaveType.Emergency ? 'error' : 'info'}
-            >
-              {request.leave_type === LeaveType.Emergency ? 'Emergency' : 'PTO'}
+            <Badge variant={getLeaveTypeVariant(request.leave_type)}>
+              {getLeaveTypeLabel(request.leave_type)}
             </Badge>
           </View>
           <Badge variant={getStatusVariant(request.status)}>

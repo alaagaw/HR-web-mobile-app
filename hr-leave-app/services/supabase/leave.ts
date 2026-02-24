@@ -5,6 +5,7 @@ import { LeaveStatus, LeaveType, HistoryAction, Role } from '@/types/enums';
 import {
   getEmergencyTier,
   getInitialRoutingStatus,
+  isUnpaidLeaveType,
 } from '@/lib/state-machine';
 import { computeRequestedHours, computeBalanceImpact } from '@/lib/hours-calculator';
 import { DEFAULT_WORKDAY_HOURS } from '@/lib/constants';
@@ -26,17 +27,24 @@ export const leaveService: LeaveService = {
       workday_hours: workdayHours,
     });
 
-    // Fetch balance for impact calculation
-    const { data: balance } = await supabase
-      .from('leave_balances')
-      .select('balance_hours')
-      .eq('employee_id', employeeId)
-      .eq('leave_type', data.leave_type)
-      .eq('year', new Date().getFullYear())
-      .single();
+    // Unpaid leave types (Emergency, Non-Paid) don't deduct from balance
+    const unpaid = isUnpaidLeaveType(data.leave_type);
 
-    const availableHours = balance?.balance_hours ?? 0;
-    const impact = computeBalanceImpact(availableHours, hoursResult.requested_hours, workdayHours);
+    let impact;
+    if (unpaid) {
+      impact = { paid_hours: 0, excess_hours: 0, has_excess: false };
+    } else {
+      const { data: balance } = await supabase
+        .from('leave_balances')
+        .select('balance_hours')
+        .eq('employee_id', employeeId)
+        .eq('leave_type', data.leave_type)
+        .eq('year', new Date().getFullYear())
+        .single();
+
+      const availableHours = balance?.balance_hours ?? 0;
+      impact = computeBalanceImpact(availableHours, hoursResult.requested_hours, workdayHours);
+    }
 
     const { data: request, error } = await supabase
       .from('leave_requests')
