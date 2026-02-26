@@ -170,7 +170,7 @@ function WebSidebar({ user, isApprover, isHR, isDark, pendingCount, unreadCount 
                   justifyContent: 'center',
                 }}
               >
-                <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
+                <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700', lineHeight: 20, textAlign: 'center' }}>
                   {unreadCount}
                 </Text>
               </View>
@@ -187,7 +187,7 @@ function WebSidebar({ user, isApprover, isHR, isDark, pendingCount, unreadCount 
                   justifyContent: 'center',
                 }}
               >
-                <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
+                <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700', lineHeight: 20, textAlign: 'center' }}>
                   {pendingCount}
                 </Text>
               </View>

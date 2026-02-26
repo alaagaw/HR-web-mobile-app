@@ -14,7 +14,7 @@ export function NotificationBell({ onPress }: NotificationBellProps) {
       <Bell size={22} color="#0F172A" />
       {unreadCount > 0 && (
         <View className="absolute -top-0.5 -right-0.5 bg-error rounded-full min-w-[18px] h-[18px] items-center justify-center px-1">
-          <Text className="text-[10px] font-bold text-white">
+          <Text className="text-[10px] font-bold text-white leading-[18px] text-center">
             {unreadCount > 99 ? '99+' : unreadCount}
           </Text>
         </View>
