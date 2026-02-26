@@ -34,6 +34,8 @@ import type {
   ComplianceFlag,
   TimesheetHistory,
   TimesheetFilters,
+  ConsolidatedMonthEntry,
+  MonthlyHourSetting,
 } from '@/types/models';
 import type { ExcessDetermination, RegistrationStatus } from '@/types/enums';
 
@@ -218,4 +220,11 @@ export interface TimesheetService {
 
   // History
   getHistory(submissionId: string): Promise<TimesheetHistory[]>;
+
+  // Monthly consolidated (cross-project aggregation)
+  getConsolidatedMonth(month: number, year: number): Promise<ConsolidatedMonthEntry[]>;
+
+  // Monthly hour settings
+  getMonthlyHourSetting(month: number, year: number): Promise<MonthlyHourSetting | null>;
+  upsertMonthlyHourSetting(month: number, year: number, regularHoursLimit: number, setBy: string): Promise<MonthlyHourSetting>;
 }

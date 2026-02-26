@@ -1,5 +1,19 @@
-import { format, addDays, startOfWeek, endOfWeek, getDaysInMonth as fnsGetDaysInMonth, isFriday as fnsIsFriday, isSaturday } from 'date-fns';
-import type { TimesheetEntry } from '@/types/models';
+import { format, addDays, startOfWeek, endOfWeek, getDaysInMonth as fnsGetDaysInMonth, isFriday as fnsIsFriday, isSaturday, differenceInCalendarDays } from 'date-fns';
+import type { TimesheetEntry, ConsolidatedMonthEntry } from '@/types/models';
+
+// ============================================================
+// DAY LOCKING — entries older than this many days become read-only
+// ============================================================
+
+/** Number of days after which a timesheet day entry becomes locked for editing */
+export const TIMESHEET_EDIT_WINDOW_DAYS = 4;
+
+/** Check if a specific date is locked (beyond the edit window from today) */
+export function isDayLocked(dateStr: string, editWindowDays: number = TIMESHEET_EDIT_WINDOW_DAYS): boolean {
+  const today = new Date();
+  const entryDate = new Date(dateStr + 'T00:00:00');
+  return differenceInCalendarDays(today, entryDate) > editWindowDays;
+}
 
 // ============================================================
 // WEEK HELPERS
@@ -124,6 +138,63 @@ export function computeMonthlyColumnTotals(
 
   return totals;
 }
+
+// ============================================================
+// REGULAR / OVERTIME SPLIT (for consolidated monthly view)
+// ============================================================
+
+/** Split total hours into regular and overtime based on a configurable limit */
+export function splitRegularOvertime(
+  totalHours: number,
+  regularLimit: number = 8
+): { regular: number; overtime: number } {
+  if (totalHours <= 0) return { regular: 0, overtime: 0 };
+  const regular = Math.min(totalHours, regularLimit);
+  const overtime = Math.max(0, totalHours - regularLimit);
+  return { regular, overtime };
+}
+
+/** Build consolidated monthly grid rows from ConsolidatedMonthEntry[] */
+export interface ConsolidatedGridRow {
+  employee_key: string;
+  employee_name: string;
+  employee_number: string | null;
+  designation: string | null;
+  supplier_id: string | null;
+  supplier_name: string | null;
+  /** Total hours per day keyed by dateStr (yyyy-MM-dd) */
+  dailyHours: Record<string, number>;
+}
+
+export function buildConsolidatedGridRows(
+  entries: ConsolidatedMonthEntry[]
+): ConsolidatedGridRow[] {
+  const map = new Map<string, ConsolidatedGridRow>();
+
+  for (const entry of entries) {
+    let row = map.get(entry.employee_key);
+    if (!row) {
+      row = {
+        employee_key: entry.employee_key,
+        employee_name: entry.employee_name,
+        employee_number: entry.employee_number,
+        designation: entry.designation,
+        supplier_id: entry.supplier_id,
+        supplier_name: entry.supplier_name,
+        dailyHours: {},
+      };
+      map.set(entry.employee_key, row);
+    }
+    // Sum hours for this day (entries are already aggregated per employee+day but just in case)
+    row.dailyHours[entry.entry_date] = (row.dailyHours[entry.entry_date] || 0) + entry.total_hours;
+  }
+
+  return Array.from(map.values()).sort((a, b) => a.employee_name.localeCompare(b.employee_name));
+}
+
+// ============================================================
+// EMPLOYEE GROUPING
+// ============================================================
 
 /** Group entries by employee for weekly grid display */
 export function groupEntriesByEmployee(

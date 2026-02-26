@@ -11,6 +11,7 @@ import {
   Settings,
   Bell,
   Clock,
+  ClipboardList,
 } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
 import { useAuth } from '@/hooks/use-auth';
@@ -30,6 +31,7 @@ const NAV_ITEMS = [
   { name: 'tasks', title: 'Tasks', Icon: CheckSquare, approverOnly: true, hrOnly: false },
   { name: 'team', title: 'Team', Icon: Users, approverOnly: true, hrOnly: false },
   { name: 'timeclock', title: 'Clock In/Out', Icon: Clock, approverOnly: false, hrOnly: false },
+  { name: 'timesheet-entry', title: 'Timesheet', Icon: ClipboardList, approverOnly: false, hrOnly: false },
   { name: 'calendar', title: 'Calendar', Icon: CalendarDays, approverOnly: false, hrOnly: false },
   { name: 'notifications', title: 'Notifications', Icon: Bell, approverOnly: false, hrOnly: false, route: '/(app)/notifications' },
   { name: 'admin', title: 'HR Admin', Icon: Settings, approverOnly: false, hrOnly: true },
@@ -298,6 +300,14 @@ export default function TabLayout() {
           title: 'Clock In/Out',
           ...(isWeb && { headerShown: false }),
           tabBarIcon: ({ color, size }) => <Clock size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="timesheet-entry"
+        options={{
+          title: 'Timesheet',
+          ...(isWeb && { headerShown: false }),
+          tabBarIcon: ({ color, size }) => <ClipboardList size={size} color={color} />,
         }}
       />
       <Tabs.Screen

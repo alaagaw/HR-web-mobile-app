@@ -119,8 +119,8 @@ const ADMIN_GROUPS: AdminGroup[] = [
         path: '/(app)/admin/suppliers',
       },
       {
-        title: 'Timesheets',
-        description: 'View and manage weekly timesheets. Enter hours, submit for approval.',
+        title: 'Monthly Consolidated',
+        description: 'View consolidated monthly hours with regular/overtime breakdown.',
         icon: ClipboardList,
         iconColor: '#059669',
         path: '/(app)/admin/timesheets',

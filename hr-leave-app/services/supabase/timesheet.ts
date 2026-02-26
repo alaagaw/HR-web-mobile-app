@@ -6,6 +6,8 @@ import type {
   TimesheetAssignment,
   ComplianceFlag,
   TimesheetHistory,
+  ConsolidatedMonthEntry,
+  MonthlyHourSetting,
 } from '@/types/models';
 
 // ── Select patterns for joined relations ──────────────────────
@@ -366,5 +368,84 @@ export const timesheetService: TimesheetService = {
 
     if (error) throw new Error(error.message);
     return (data ?? []) as TimesheetHistory[];
+  },
+
+  // ── Monthly Consolidated (cross-project aggregation) ─────────
+
+  async getConsolidatedMonth(month, year) {
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+    // Fetch all entries for the month across ALL projects, with supplier join
+    const { data, error } = await supabase
+      .from('timesheet_entries')
+      .select('employee_id, employee_name, employee_number, designation, supplier_id, entry_date, standard_hours, overtime_hours, supplier:suppliers!supplier_id(id, name)')
+      .gte('entry_date', startDate)
+      .lte('entry_date', endDate)
+      .order('employee_name', { ascending: true })
+      .order('entry_date', { ascending: true });
+
+    if (error) throw new Error(error.message);
+
+    // Aggregate: group by (employee_key, entry_date) summing hours across projects
+    const map = new Map<string, ConsolidatedMonthEntry>();
+    for (const row of (data ?? []) as any[]) {
+      const empKey = row.employee_id || row.employee_name;
+      const mapKey = `${empKey}::${row.entry_date}`;
+      const existing = map.get(mapKey);
+      const hours = (Number(row.standard_hours) || 0) + (Number(row.overtime_hours) || 0);
+
+      if (existing) {
+        existing.total_hours += hours;
+      } else {
+        map.set(mapKey, {
+          employee_key: empKey,
+          employee_name: row.employee_name,
+          employee_number: row.employee_number || null,
+          designation: row.designation || null,
+          supplier_id: row.supplier_id || null,
+          supplier_name: row.supplier?.name || null,
+          entry_date: row.entry_date,
+          total_hours: hours,
+        });
+      }
+    }
+
+    return Array.from(map.values());
+  },
+
+  // ── Monthly Hour Settings ────────────────────────────────────
+
+  async getMonthlyHourSetting(month, year) {
+    const { data, error } = await supabase
+      .from('monthly_hour_settings')
+      .select('*')
+      .eq('month', month)
+      .eq('year', year)
+      .maybeSingle();
+
+    if (error) throw new Error(error.message);
+    return data as MonthlyHourSetting | null;
+  },
+
+  async upsertMonthlyHourSetting(month, year, regularHoursLimit, setBy) {
+    const { data, error } = await supabase
+      .from('monthly_hour_settings')
+      .upsert(
+        {
+          month,
+          year,
+          regular_hours_limit: regularHoursLimit,
+          set_by: setBy,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'month,year', ignoreDuplicates: false }
+      )
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data as MonthlyHourSetting;
   },
 };

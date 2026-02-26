@@ -7,6 +7,8 @@ import type {
   TimesheetAssignment,
   ComplianceFlag,
   TimesheetFilters,
+  ConsolidatedMonthEntry,
+  MonthlyHourSetting,
 } from '@/types/models';
 
 export function useTimesheets() {
@@ -28,6 +30,12 @@ export function useTimesheets() {
 
   // ── Compliance state ───────────────────────────────────────
   const [complianceFlags, setComplianceFlags] = useState<ComplianceFlag[]>([]);
+
+  // ── Consolidated month state ──────────────────────────────
+  const [consolidatedEntries, setConsolidatedEntries] = useState<ConsolidatedMonthEntry[]>([]);
+  const [consolidatedLoading, setConsolidatedLoading] = useState(false);
+  const [consolidatedError, setConsolidatedError] = useState<string | null>(null);
+  const [monthlyHourSetting, setMonthlyHourSetting] = useState<MonthlyHourSetting | null>(null);
 
   // ── Entry actions ──────────────────────────────────────────
 
@@ -186,6 +194,34 @@ export function useTimesheets() {
     setComplianceFlags((prev) => prev.filter((f) => f.id !== flagId));
   }, []);
 
+  // ── Consolidated month actions ──────────────────────────────
+
+  const fetchConsolidatedMonth = useCallback(async (month: number, year: number) => {
+    setConsolidatedLoading(true);
+    setConsolidatedError(null);
+    try {
+      const [entries, setting] = await Promise.all([
+        timesheetService.getConsolidatedMonth(month, year),
+        timesheetService.getMonthlyHourSetting(month, year),
+      ]);
+      setConsolidatedEntries(entries);
+      setMonthlyHourSetting(setting);
+    } catch (err: any) {
+      setConsolidatedError(err.message);
+    } finally {
+      setConsolidatedLoading(false);
+    }
+  }, []);
+
+  const updateMonthlyHourSetting = useCallback(
+    async (month: number, year: number, regularHoursLimit: number, setBy: string) => {
+      const setting = await timesheetService.upsertMonthlyHourSetting(month, year, regularHoursLimit, setBy);
+      setMonthlyHourSetting(setting);
+      return setting;
+    },
+    []
+  );
+
   return {
     // Entries
     entries,
@@ -221,5 +257,13 @@ export function useTimesheets() {
     complianceFlags,
     fetchComplianceFlags,
     resolveFlag,
+
+    // Consolidated month
+    consolidatedEntries,
+    consolidatedLoading,
+    consolidatedError,
+    monthlyHourSetting,
+    fetchConsolidatedMonth,
+    updateMonthlyHourSetting,
   };
 }

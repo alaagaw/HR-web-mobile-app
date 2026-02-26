@@ -538,3 +538,29 @@ export interface ProjectFilters {
   status?: ProjectStatus;
   search?: string;
 }
+
+// ============================================================
+// MONTHLY CONSOLIDATED VIEW
+// ============================================================
+
+export interface MonthlyHourSetting {
+  id: string;
+  month: number;
+  year: number;
+  regular_hours_limit: number;
+  set_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** One row returned by the consolidated month query (aggregated across all projects) */
+export interface ConsolidatedMonthEntry {
+  employee_key: string;
+  employee_name: string;
+  employee_number: string | null;
+  designation: string | null;
+  supplier_id: string | null;
+  supplier_name: string | null;
+  entry_date: string;
+  total_hours: number;
+}

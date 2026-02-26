@@ -1,24 +1,21 @@
 import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
-import { View, Text, ScrollView, Platform, Pressable } from 'react-native';
+import { View, Text, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useColorScheme } from 'nativewind';
 import { ScreenHeader } from '@/components/layout/screen-header';
 import { useAuth } from '@/hooks/use-auth';
 import { useTimesheets } from '@/hooks/use-timesheets';
-import { useProjects } from '@/hooks/use-projects';
 import { useSuppliers } from '@/hooks/use-suppliers';
-import { userService, timesheetService } from '@/services';
-import { format, addDays, subDays } from 'date-fns';
+import { format } from 'date-fns';
 import {
-  getWeekRange,
-  getWeekDays,
-  formatWeekRange,
-  computeColumnTotals,
-  groupEntriesByEmployee,
+  getDaysInMonth,
+  isWeekend,
+  splitRegularOvertime,
+  buildConsolidatedGridRows,
 } from '@/lib/timesheet-utils';
-import type { TimesheetEntry, TimesheetEntryDraft, Project, Profile, TimesheetAssignment, Supplier } from '@/types/models';
-import { TimesheetSubmissionStatus, Role } from '@/types/enums';
+import type { ConsolidatedGridRow } from '@/lib/timesheet-utils';
+import { Role } from '@/types/enums';
 
 const isWeb = Platform.OS === 'web';
 const WIDE_SCREEN_BREAKPOINT = 1280;
@@ -36,31 +33,13 @@ function useWindowWidth() {
 
 // ── Lazy-load MUI components only on web ──────────────────────
 let MuiThemeProvider: any;
-let Dialog: any;
-let DialogTitle: any;
-let DialogContent: any;
-let DialogActions: any;
-let MuiButton: any;
-let TextField: any;
-let Autocomplete: any;
 let Snackbar: any;
 let Alert: any;
-let Chip: any;
-let MenuItem: any;
 
 if (isWeb) {
   MuiThemeProvider = require('@/components/web/mui-theme-provider').MuiThemeProvider;
-  Dialog = require('@mui/material/Dialog').default;
-  DialogTitle = require('@mui/material/DialogTitle').default;
-  DialogContent = require('@mui/material/DialogContent').default;
-  DialogActions = require('@mui/material/DialogActions').default;
-  MuiButton = require('@mui/material/Button').default;
-  TextField = require('@mui/material/TextField').default;
-  Autocomplete = require('@mui/material/Autocomplete').default;
   Snackbar = require('@mui/material/Snackbar').default;
   Alert = require('@mui/material/Alert').default;
-  Chip = require('@mui/material/Chip').default;
-  MenuItem = require('@mui/material/MenuItem').default;
 }
 
 // ============================================================
@@ -81,192 +60,7 @@ const DT = {
 };
 
 // ============================================================
-// LOCAL GRID TYPES
-// ============================================================
-
-interface GridRow {
-  key: string; // employee_id or employee_name
-  employee_id: string | null;
-  employee_name: string;
-  employee_number: string | null;
-  designation: string | null;
-  supplier_id: string | null;
-  supplier_name: string | null;
-  shift: 'D' | 'N';
-  /** Hours keyed by dateStr (yyyy-MM-dd) */
-  hours: Record<string, number>;
-}
-
-// ============================================================
-// STATUS CHIP HELPERS
-// ============================================================
-
-function getSubmissionStatusLabel(status: TimesheetSubmissionStatus | null): string {
-  switch (status) {
-    case TimesheetSubmissionStatus.Submitted:
-      return 'Submitted';
-    case TimesheetSubmissionStatus.Approved:
-      return 'Approved';
-    case TimesheetSubmissionStatus.Rejected:
-      return 'Rejected';
-    default:
-      return 'Draft';
-  }
-}
-
-function getSubmissionChipColor(status: TimesheetSubmissionStatus | null): 'default' | 'warning' | 'success' | 'error' {
-  switch (status) {
-    case TimesheetSubmissionStatus.Submitted:
-      return 'warning';
-    case TimesheetSubmissionStatus.Approved:
-      return 'success';
-    case TimesheetSubmissionStatus.Rejected:
-      return 'error';
-    default:
-      return 'default';
-  }
-}
-
-function getSubmissionBadgeStyle(status: TimesheetSubmissionStatus | null): { bg: string; text: string } {
-  switch (status) {
-    case TimesheetSubmissionStatus.Submitted:
-      return { bg: '#78350f', text: '#fbbf24' };
-    case TimesheetSubmissionStatus.Approved:
-      return { bg: '#14532d', text: '#4ade80' };
-    case TimesheetSubmissionStatus.Rejected:
-      return { bg: '#7f1d1d', text: '#f87171' };
-    default:
-      return { bg: '#334155', text: '#94a3b8' };
-  }
-}
-
-// ============================================================
-// HELPER: check if a dateStr is a Saudi weekend (Fri or Sat)
-// ============================================================
-
-function isSaudiWeekend(dateStr: string): boolean {
-  const d = new Date(dateStr + 'T00:00:00');
-  const day = d.getDay(); // 0=Sun, 5=Fri, 6=Sat
-  return day === 5 || day === 6;
-}
-
-// ============================================================
-// HELPER: compute row total from hours map
-// ============================================================
-
-function computeRowTotalFromMap(hours: Record<string, number>): number {
-  return Object.values(hours).reduce((sum, h) => sum + (h || 0), 0);
-}
-
-// ============================================================
-// HELPER: build grid rows from entries
-// ============================================================
-
-function buildGridRows(entries: TimesheetEntry[], weekDays: { dateStr: string }[]): GridRow[] {
-  const grouped = groupEntriesByEmployee(entries);
-  const rows: GridRow[] = [];
-
-  grouped.forEach(({ employee, entries: empEntries }) => {
-    const hours: Record<string, number> = {};
-    for (const day of weekDays) {
-      const entry = empEntries.find((e) => e.entry_date === day.dateStr);
-      hours[day.dateStr] = entry ? Number(entry.standard_hours) + Number(entry.overtime_hours) : 0;
-    }
-    // Use the shift + supplier from the first entry (consistent per employee per week)
-    const firstEntry = empEntries[0];
-    rows.push({
-      key: employee.employee_id || employee.employee_name,
-      employee_id: employee.employee_id ?? null,
-      employee_name: employee.employee_name,
-      employee_number: employee.employee_number ?? null,
-      designation: employee.designation ?? null,
-      supplier_id: employee.supplier_id ?? null,
-      supplier_name: firstEntry?.supplier?.name ?? null,
-      shift: (firstEntry?.st_shift === 'N' ? 'N' : 'D') as 'D' | 'N',
-      hours,
-    });
-  });
-
-  return rows;
-}
-
-// ============================================================
-// HELPER: convert grid rows back to entry drafts
-// ============================================================
-
-function gridRowsToDrafts(rows: GridRow[], projectId: string): TimesheetEntryDraft[] {
-  const drafts: TimesheetEntryDraft[] = [];
-  for (const row of rows) {
-    for (const [dateStr, hours] of Object.entries(row.hours)) {
-      // Skip days with 0 hours — no point saving empty entries
-      if (!hours || hours <= 0) continue;
-      drafts.push({
-        project_id: projectId,
-        employee_id: row.employee_id,
-        employee_name: row.employee_name,
-        employee_number: row.employee_number,
-        designation: row.designation,
-        supplier_id: row.supplier_id,
-        entry_date: dateStr,
-        standard_hours: hours,
-        overtime_hours: 0,
-        st_shift: row.shift,
-        ot_shift: row.shift,
-      });
-    }
-  }
-  return drafts;
-}
-
-// ============================================================
-// CSV EXPORT
-// ============================================================
-
-function exportGridToCSV(
-  rows: GridRow[],
-  weekDays: { dateStr: string; dayShort: string }[],
-  projectName: string,
-  weekLabel: string,
-) {
-  const header = ['#', 'Employee', 'Designation', 'Supplier', 'Shift', ...weekDays.map((d) => `${d.dayShort} ${d.dateStr}`), 'TOTAL'];
-  const csvRows = [header.join(',')];
-
-  rows.forEach((row, idx) => {
-    const rowTotal = computeRowTotalFromMap(row.hours);
-    const cells = [
-      String(idx + 1),
-      `"${row.employee_name}"`,
-      `"${row.designation || ''}"`,
-      `"${row.supplier_name || ''}"`,
-      row.shift,
-      ...weekDays.map((d) => String(row.hours[d.dateStr] || 0)),
-      String(rowTotal),
-    ];
-    csvRows.push(cells.join(','));
-  });
-
-  // Total row
-  const totalCells = ['', 'Total Hours', '', '', ''];
-  for (const day of weekDays) {
-    const colTotal = rows.reduce((sum, r) => sum + (r.hours[day.dateStr] || 0), 0);
-    totalCells.push(String(colTotal));
-  }
-  const grandTotal = rows.reduce((sum, r) => sum + computeRowTotalFromMap(r.hours), 0);
-  totalCells.push(String(grandTotal));
-  csvRows.push(totalCells.join(','));
-
-  const csvContent = csvRows.join('\n');
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `timesheet-${projectName.replace(/\s+/g, '_')}-${weekLabel.replace(/\s+/g, '_')}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-// ============================================================
-// MAIN SCREEN
+// MAIN SCREEN — Monthly Consolidated View Only
 // ============================================================
 
 export default function TimesheetsScreen() {
@@ -279,31 +73,25 @@ export default function TimesheetsScreen() {
 
   // ── Hooks ─────────────────────────────────────────────────
   const {
-    entries,
-    entriesLoading,
-    fetchEntriesForWeek,
-    upsertEntries,
-    assignments,
-    assignmentsLoading,
-    fetchAssignments,
-    fetchMyAssignments,
-    currentSubmission,
-    fetchSubmissionForWeek,
-    submitForApproval,
+    consolidatedEntries,
+    consolidatedLoading,
+    consolidatedError,
+    monthlyHourSetting,
+    fetchConsolidatedMonth,
+    updateMonthlyHourSetting,
   } = useTimesheets();
 
-  const { projects, fetchAll: fetchAllProjects } = useProjects();
   const { suppliers, fetchAll: fetchAllSuppliers } = useSuppliers();
 
-  // ── Role check ──────────────────────────────────────────────
-  const isHR = user?.role === Role.HR || user?.role === Role.HRDirector;
-
-  // ── Local state ───────────────────────────────────────────
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [weekStart, setWeekStart] = useState<Date>(() => getWeekRange(new Date()).weekStart);
-  const [gridRows, setGridRows] = useState<GridRow[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  // ── Local state (Monthly) ────────────────────────────────
+  const [monthlyMonth, setMonthlyMonth] = useState(() => new Date().getMonth() + 1); // 1-12
+  const [monthlyYear, setMonthlyYear] = useState(() => new Date().getFullYear());
+  const [monthlySearch, setMonthlySearch] = useState('');
+  const [monthlySupplierFilter, setMonthlySupplierFilter] = useState<string>('');
+  const [regularHoursInput, setRegularHoursInput] = useState('8');
+  const [showRegular, setShowRegular] = useState(false);
+  const [showOvertime, setShowOvertime] = useState(true);
+  const [showAllMonthlyColumns, setShowAllMonthlyColumns] = useState(false);
 
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false,
@@ -311,370 +99,361 @@ export default function TimesheetsScreen() {
     severity: 'success',
   });
 
-  // Add Employee dialog
-  const [addEmployeeOpen, setAddEmployeeOpen] = useState(false);
-  const [employeeSearchResults, setEmployeeSearchResults] = useState<Profile[]>([]);
-  const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
-  const [manualEmployee, setManualEmployee] = useState({ name: '', number: '', designation: '' });
-  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  // ── Month picker state ──────────────────────────────────
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
+  const [pickerYear, setPickerYear] = useState(monthlyYear);
+  const monthPickerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-fill dialog
-  const [autoFillOpen, setAutoFillOpen] = useState(false);
-  const [autoFillHours, setAutoFillHours] = useState('11');
-
-  // ── Computed values ───────────────────────────────────────
-  const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
-  const weekDays = useMemo(() => getWeekDays(weekStart), [weekStart]);
-  const weekLabel = useMemo(() => formatWeekRange(weekStart, weekEnd), [weekStart, weekEnd]);
-  const weekStartStr = useMemo(() => format(weekStart, 'yyyy-MM-dd'), [weekStart]);
-  const weekEndStr = useMemo(() => format(weekEnd, 'yyyy-MM-dd'), [weekEnd]);
-
-  const availableProjects = useMemo(() => {
-    if (isHR) return projects; // HR sees all projects
-    const projectIds = assignments.map((a) => a.project_id);
-    return projects.filter((p) => projectIds.includes(p.id));
-  }, [isHR, assignments, projects]);
-
-  // Map project_id -> keeper name(s) from assignments
-  const keeperByProject = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const a of assignments) {
-      if (!a.is_active) continue;
-      const name = a.assigned_to?.full_name ?? 'Unknown';
-      if (map[a.project_id]) {
-        map[a.project_id] += `, ${name}`;
-      } else {
-        map[a.project_id] = name;
+  // Close picker on click outside
+  useEffect(() => {
+    if (!isWeb || !showMonthPicker) return;
+    const handler = (e: MouseEvent) => {
+      if (monthPickerRef.current && !monthPickerRef.current.contains(e.target as Node)) {
+        setShowMonthPicker(false);
       }
-    }
-    return map;
-  }, [assignments]);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showMonthPicker]);
 
-  const selectedProject = useMemo(
-    () => availableProjects.find((p) => p.id === selectedProjectId) || null,
-    [availableProjects, selectedProjectId],
+  // ── Monthly computed values ────────────────────────────────
+  const regularLimit = monthlyHourSetting?.regular_hours_limit ?? 8;
+
+  const monthlyGridRows = useMemo(
+    () => buildConsolidatedGridRows(consolidatedEntries),
+    [consolidatedEntries],
   );
 
-  const submissionStatus: TimesheetSubmissionStatus | null = currentSubmission?.status ?? null;
-  const isEditable = submissionStatus === null || submissionStatus === TimesheetSubmissionStatus.Draft || submissionStatus === TimesheetSubmissionStatus.Rejected;
+  const monthDays = useMemo(() => {
+    const total = getDaysInMonth(monthlyMonth, monthlyYear);
+    return Array.from({ length: total }, (_, i) => {
+      const day = i + 1;
+      const dateStr = `${monthlyYear}-${String(monthlyMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const d = new Date(monthlyYear, monthlyMonth - 1, day);
+      return {
+        day,
+        dateStr,
+        dayShort: format(d, 'EEE'),
+        isWeekend: isWeekend(day, monthlyMonth, monthlyYear),
+      };
+    });
+  }, [monthlyMonth, monthlyYear]);
 
-  // Column totals
-  const columnTotals = useMemo(() => {
-    const totals: Record<string, number> = {};
-    for (const day of weekDays) {
-      totals[day.dateStr] = gridRows.reduce((sum, r) => sum + (r.hours[day.dateStr] || 0), 0);
-    }
-    return totals;
-  }, [gridRows, weekDays]);
-
-  const grandTotal = useMemo(
-    () => gridRows.reduce((sum, r) => sum + computeRowTotalFromMap(r.hours), 0),
-    [gridRows],
+  const monthLabel = useMemo(
+    () => format(new Date(monthlyYear, monthlyMonth - 1), 'MMMM yyyy'),
+    [monthlyMonth, monthlyYear],
   );
+
+  // Filtered rows (search + supplier)
+  const filteredMonthlyRows = useMemo(() => {
+    let rows = monthlyGridRows;
+    if (monthlySearch.trim()) {
+      const q = monthlySearch.trim().toLowerCase();
+      rows = rows.filter(
+        (r) =>
+          r.employee_name.toLowerCase().includes(q) ||
+          (r.employee_number && r.employee_number.toLowerCase().includes(q)) ||
+          (r.designation && r.designation.toLowerCase().includes(q)),
+      );
+    }
+    if (monthlySupplierFilter) {
+      rows = rows.filter((r) => r.supplier_id === monthlySupplierFilter);
+    }
+    return rows;
+  }, [monthlyGridRows, monthlySearch, monthlySupplierFilter]);
 
   // ── Data fetching ─────────────────────────────────────────
 
-  // Fetch assignments + all projects on mount
   useEffect(() => {
-    if (!user) return;
-    fetchAllProjects();
     fetchAllSuppliers();
-    if (isHR) {
-      fetchAssignments(); // HR sees all assignments (for keeper info)
-    } else {
-      fetchMyAssignments(user.id);
-    }
-  }, [user, isHR]);
-
-  // Auto-select first project
-  useEffect(() => {
-    if (availableProjects.length > 0 && !selectedProjectId) {
-      setSelectedProjectId(availableProjects[0].id);
-    }
-  }, [availableProjects, selectedProjectId]);
-
-  // Flag: only rebuild gridRows from server data when explicitly fetching
-  const rebuildGridRef = useRef(true);
-
-  // Fetch entries + submission when project or week changes
-  useEffect(() => {
-    if (!selectedProjectId) return;
-    rebuildGridRef.current = true;
-    fetchEntriesForWeek(selectedProjectId, weekStartStr, weekEndStr);
-    fetchSubmissionForWeek(selectedProjectId, weekStartStr);
-  }, [selectedProjectId, weekStartStr, weekEndStr]);
-
-  // Build grid from entries — ONLY when a fresh fetch was requested
-  useEffect(() => {
-    if (!rebuildGridRef.current) return;
-    rebuildGridRef.current = false;
-    setGridRows(buildGridRows(entries, weekDays));
-  }, [entries, weekDays]);
-
-  // ── Week navigation ───────────────────────────────────────
-
-  const goToPrevWeek = useCallback(() => {
-    setWeekStart((prev) => subDays(prev, 7));
   }, []);
 
-  const goToNextWeek = useCallback(() => {
-    setWeekStart((prev) => addDays(prev, 7));
-  }, []);
+  // Fetch consolidated data when month changes
+  useEffect(() => {
+    fetchConsolidatedMonth(monthlyMonth, monthlyYear);
+  }, [monthlyMonth, monthlyYear]);
 
-  // ── Auto-save with debounce ─────────────────────────────────
-  // Uses refs so the timer always reads the latest state (no stale closures)
-  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const gridRowsRef = useRef(gridRows);
-  gridRowsRef.current = gridRows;
-  const selectedProjectIdRef = useRef(selectedProjectId);
-  selectedProjectIdRef.current = selectedProjectId;
-  const userRef = useRef(user);
-  userRef.current = user;
+  // Sync regularHoursInput when setting loads
+  useEffect(() => {
+    setRegularHoursInput(String(monthlyHourSetting?.regular_hours_limit ?? 8));
+  }, [monthlyHourSetting]);
 
-  const scheduleAutoSave = useCallback(() => {
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(async () => {
-      const pid = selectedProjectIdRef.current;
-      const u = userRef.current;
-      const rows = gridRowsRef.current;
-      if (!pid || !u || rows.length === 0) return;
-      try {
-        const drafts = gridRowsToDrafts(rows, pid);
-        if (drafts.length === 0) return;
-        await upsertEntries(drafts, u.id);
-      } catch (_err) {
-        // Silent fail — user can still use manual Save
+  // ── Monthly navigation ──────────────────────────────────────
+
+  const goToPrevMonth = useCallback(() => {
+    setMonthlyMonth((prev) => {
+      if (prev === 1) {
+        setMonthlyYear((y) => y - 1);
+        return 12;
       }
-    }, 1500);
-  }, [upsertEntries]);
-
-  useEffect(() => {
-    return () => {
-      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    };
+      return prev - 1;
+    });
   }, []);
 
-  // ── Cell change handler ───────────────────────────────────
-
-  const handleCellChange = useCallback((rowKey: string, dateStr: string, value: string) => {
-    const parsed = parseFloat(value);
-    const hours = isNaN(parsed) ? 0 : Math.min(24, Math.max(0, parsed));
-    setGridRows((prev) =>
-      prev.map((r) =>
-        r.key === rowKey ? { ...r, hours: { ...r.hours, [dateStr]: hours } } : r,
-      ),
-    );
-    scheduleAutoSave();
-  }, [scheduleAutoSave]);
-
-  const handleShiftChange = useCallback((rowKey: string) => {
-    setGridRows((prev) =>
-      prev.map((r) =>
-        r.key === rowKey ? { ...r, shift: r.shift === 'D' ? 'N' : 'D' } : r,
-      ),
-    );
-    scheduleAutoSave();
-  }, [scheduleAutoSave]);
-
-  const handleSupplierChange = useCallback((rowKey: string, supplier: Supplier | null) => {
-    setGridRows((prev) =>
-      prev.map((r) =>
-        r.key === rowKey
-          ? { ...r, supplier_id: supplier?.id ?? null, supplier_name: supplier?.name ?? null }
-          : r,
-      ),
-    );
-    scheduleAutoSave();
-  }, [scheduleAutoSave]);
-
-  // ── Save (manual) ──────────────────────────────────────────
-
-  const handleSave = useCallback(async () => {
-    if (!selectedProjectId || !user) return;
-    // Cancel any pending auto-save to avoid double-save
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    setSaving(true);
-    try {
-      const drafts = gridRowsToDrafts(gridRows, selectedProjectId);
-      await upsertEntries(drafts, user.id);
-      // Re-fetch to get server-generated IDs — allow grid rebuild
-      rebuildGridRef.current = true;
-      await fetchEntriesForWeek(selectedProjectId, weekStartStr, weekEndStr);
-      setSnackbar({ open: true, message: 'Timesheet saved successfully', severity: 'success' });
-    } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || 'Failed to save timesheet', severity: 'error' });
-    } finally {
-      setSaving(false);
-    }
-  }, [selectedProjectId, user, gridRows, weekStartStr, weekEndStr]);
-
-  // ── Submit for Approval ───────────────────────────────────
-
-  const handleSubmitForApproval = useCallback(async () => {
-    if (!selectedProjectId || !user) return;
-    setSubmitting(true);
-    try {
-      // Save first
-      const drafts = gridRowsToDrafts(gridRows, selectedProjectId);
-      await upsertEntries(drafts, user.id);
-      // Then submit
-      await submitForApproval(selectedProjectId, weekStartStr, weekEndStr, user.id, user.role);
-      setSnackbar({ open: true, message: 'Timesheet submitted for approval', severity: 'success' });
-    } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || 'Failed to submit timesheet', severity: 'error' });
-    } finally {
-      setSubmitting(false);
-    }
-  }, [selectedProjectId, user, gridRows, weekStartStr, weekEndStr]);
-
-  // ── Copy Last Week ────────────────────────────────────────
-
-  const handleCopyLastWeek = useCallback(async () => {
-    if (!selectedProjectId) return;
-    const prevWeekStart = subDays(weekStart, 7);
-    const prevWeekEnd = addDays(prevWeekStart, 6);
-    const prevStartStr = format(prevWeekStart, 'yyyy-MM-dd');
-    const prevEndStr = format(prevWeekEnd, 'yyyy-MM-dd');
-
-    try {
-      const prevEntries = await timesheetService.getEntriesForWeek(selectedProjectId, prevStartStr, prevEndStr);
-      if (prevEntries.length === 0) {
-        setSnackbar({ open: true, message: 'No entries found for previous week', severity: 'error' });
-        return;
+  const goToNextMonth = useCallback(() => {
+    setMonthlyMonth((prev) => {
+      if (prev === 12) {
+        setMonthlyYear((y) => y + 1);
+        return 1;
       }
+      return prev + 1;
+    });
+  }, []);
 
-      const prevWeekDays = getWeekDays(prevWeekStart);
-      const prevRows = buildGridRows(prevEntries, prevWeekDays);
+  const jumpToMonth = useCallback((month: number, year: number) => {
+    setMonthlyMonth(month);
+    setMonthlyYear(year);
+    setShowMonthPicker(false);
+  }, []);
 
-      // Map previous week hours to current week days
-      const newRows: GridRow[] = prevRows.map((prevRow) => {
-        const hours: Record<string, number> = {};
-        weekDays.forEach((currentDay, idx) => {
-          const prevDay = prevWeekDays[idx];
-          hours[currentDay.dateStr] = prevRow.hours[prevDay.dateStr] || 0;
-        });
-        return { ...prevRow, hours };
+  const handleSetRegularHours = useCallback(async () => {
+    if (!user) return;
+    const val = parseFloat(regularHoursInput);
+    if (isNaN(val) || val < 0 || val > 24) return;
+    try {
+      await updateMonthlyHourSetting(monthlyMonth, monthlyYear, val, user.id);
+      setSnackbar({ open: true, message: `Regular hours set to ${val}h`, severity: 'success' });
+    } catch (err: any) {
+      setSnackbar({ open: true, message: err.message || 'Failed to update setting', severity: 'error' });
+    }
+  }, [user, regularHoursInput, monthlyMonth, monthlyYear, updateMonthlyHourSetting]);
+
+  // Excel export for monthly consolidated view (styled, matching the HTML table)
+  const handleExportMonthlyExcel = useCallback(async () => {
+    if (filteredMonthlyRows.length === 0) return;
+    const ExcelJS = await import('exceljs');
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Consolidated Hours', {
+      views: [{ state: 'frozen', xSplit: 5, ySplit: 2 }],
+    });
+
+    // ── Style constants (typed as 'any' since ExcelJS is dynamically imported) ──
+    const fill = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } });
+    const headerFill = fill('1A2744');
+    const weekendFill = fill('2D1B3D');
+    const totalRowFill = fill('0F1729');
+    const summaryFill = fill('162036');
+    const sheetBg = fill('0F172A');
+    const headerFont = { bold: true, size: 10, color: { argb: 'F8FAFC' } };
+    const subHeaderFont = { bold: false, size: 9, color: { argb: 'CBD5E1' } };
+    const otFont = { bold: false, size: 9, color: { argb: 'F59E0B' } };
+    const dataFont = { size: 10, color: { argb: 'F8FAFC' } };
+    const otDataFont = { size: 10, color: { argb: 'F59E0B' } };
+    const boldDataFont = { bold: true, size: 10, color: { argb: 'F8FAFC' } };
+    const primaryFont = { bold: true, size: 10, color: { argb: '3B82F6' } };
+    const thinBorder = { style: 'thin' as const, color: { argb: '334155' } };
+    const cellBorder = { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder };
+    const centerAlign = { horizontal: 'center' as const, vertical: 'middle' as const };
+    const leftAlign = { horizontal: 'left' as const, vertical: 'middle' as const };
+
+    // ── Column layout ──
+    const LEFT_COLS = 5; // #, Employee, Emp #, Designation, Supplier
+    const dayCols = monthDays.length * 2; // R + OT per day
+
+    // Set column widths
+    ws.getColumn(1).width = 5;   // #
+    ws.getColumn(2).width = 22;  // Employee
+    ws.getColumn(3).width = 10;  // Emp #
+    ws.getColumn(4).width = 16;  // Designation
+    ws.getColumn(5).width = 16;  // Supplier
+    for (let i = 0; i < monthDays.length; i++) {
+      ws.getColumn(LEFT_COLS + 1 + i * 2).width = 5;      // R
+      ws.getColumn(LEFT_COLS + 1 + i * 2 + 1).width = 5;  // OT
+    }
+    ws.getColumn(LEFT_COLS + dayCols + 1).width = 8;  // Total R
+    ws.getColumn(LEFT_COLS + dayCols + 2).width = 8;  // Total OT
+    ws.getColumn(LEFT_COLS + dayCols + 3).width = 9;  // Grand Total
+
+    // ── ROW 1: Main headers ──
+    const row1 = ws.getRow(1);
+    row1.height = 24;
+    // Left headers (merge rows 1-2)
+    const leftHeaders = ['#', 'Employee', 'Emp #', 'Designation', 'Supplier'];
+    leftHeaders.forEach((label, i) => {
+      const cell = row1.getCell(i + 1);
+      cell.value = label;
+      cell.font = headerFont;
+      cell.fill = headerFill;
+      cell.border = cellBorder;
+      cell.alignment = i === 0 ? centerAlign : leftAlign;
+      ws.mergeCells(1, i + 1, 2, i + 1); // merge row 1-2
+    });
+
+    // Day headers (merge R+OT columns)
+    monthDays.forEach((md, i) => {
+      const col = LEFT_COLS + 1 + i * 2;
+      const cell = row1.getCell(col);
+      cell.value = `${md.dayShort.toUpperCase()} ${md.day}`;
+      cell.font = headerFont;
+      cell.fill = md.isWeekend ? weekendFill : headerFill;
+      cell.border = cellBorder;
+      cell.alignment = centerAlign;
+      ws.mergeCells(1, col, 1, col + 1); // merge across R + OT
+      // Also style the merged partner cell
+      const cell2 = row1.getCell(col + 1);
+      cell2.fill = md.isWeekend ? weekendFill : headerFill;
+      cell2.border = cellBorder;
+    });
+
+    // Summary headers (merge rows 1-2)
+    const summaryHeaders = ['Total R', 'Total OT', 'Grand Total'];
+    summaryHeaders.forEach((label, i) => {
+      const col = LEFT_COLS + dayCols + 1 + i;
+      const cell = row1.getCell(col);
+      cell.value = label;
+      cell.font = i === 2 ? primaryFont : (i === 1 ? { ...headerFont, color: { argb: 'F59E0B' } } : headerFont);
+      cell.fill = summaryFill;
+      cell.border = cellBorder;
+      cell.alignment = centerAlign;
+      ws.mergeCells(1, col, 2, col); // merge rows 1-2
+    });
+
+    // ── ROW 2: Sub-headers (R | OT under each day) ──
+    const row2 = ws.getRow(2);
+    row2.height = 18;
+    monthDays.forEach((md, i) => {
+      const rCol = LEFT_COLS + 1 + i * 2;
+      const otCol = rCol + 1;
+      const rCell = row2.getCell(rCol);
+      rCell.value = 'R';
+      rCell.font = subHeaderFont;
+      rCell.fill = md.isWeekend ? weekendFill : headerFill;
+      rCell.border = cellBorder;
+      rCell.alignment = centerAlign;
+      const otCell = row2.getCell(otCol);
+      otCell.value = 'OT';
+      otCell.font = otFont;
+      otCell.fill = md.isWeekend ? weekendFill : headerFill;
+      otCell.border = cellBorder;
+      otCell.alignment = centerAlign;
+    });
+
+    // ── DATA ROWS ──
+    filteredMonthlyRows.forEach((row, idx) => {
+      const excelRow = ws.getRow(3 + idx);
+      excelRow.height = 22;
+      let rowTotalR = 0;
+      let rowTotalOT = 0;
+
+      // Left columns
+      const leftVals = [idx + 1, row.employee_name, row.employee_number || '', row.designation || '', row.supplier_name || ''];
+      leftVals.forEach((val, i) => {
+        const cell = excelRow.getCell(i + 1);
+        cell.value = val;
+        cell.font = i === 1 ? boldDataFont : dataFont;
+        cell.fill = sheetBg;
+        cell.border = cellBorder;
+        cell.alignment = i === 0 ? centerAlign : leftAlign;
       });
 
-      setGridRows(newRows);
-      setSnackbar({ open: true, message: 'Copied hours from previous week', severity: 'success' });
-    } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || 'Failed to copy last week', severity: 'error' });
-    }
-  }, [selectedProjectId, weekStart, weekDays]);
+      // Day columns
+      monthDays.forEach((md, i) => {
+        const total = row.dailyHours[md.dateStr] || 0;
+        const { regular, overtime } = splitRegularOvertime(total, regularLimit);
+        rowTotalR += regular;
+        rowTotalOT += overtime;
 
-  // ── Auto-Fill ─────────────────────────────────────────────
+        const rCol = LEFT_COLS + 1 + i * 2;
+        const rCell = excelRow.getCell(rCol);
+        rCell.value = regular || null;
+        rCell.font = dataFont;
+        rCell.fill = md.isWeekend ? weekendFill : sheetBg;
+        rCell.border = cellBorder;
+        rCell.alignment = centerAlign;
 
-  const handleAutoFill = useCallback(() => {
-    const h = parseFloat(autoFillHours);
-    if (isNaN(h) || h < 0 || h > 24) return;
-    setGridRows((prev) =>
-      prev.map((row) => {
-        const hours = { ...row.hours };
-        for (const day of weekDays) {
-          // Fill only weekdays (Sun-Thu for Saudi Arabia; Fri/Sat are weekend)
-          if (!isSaudiWeekend(day.dateStr)) {
-            hours[day.dateStr] = h;
-          }
-        }
-        return { ...row, hours };
-      }),
-    );
-    setAutoFillOpen(false);
-    setSnackbar({ open: true, message: `Auto-filled ${h} hours for all weekdays`, severity: 'success' });
-  }, [autoFillHours, weekDays]);
+        const otCell = excelRow.getCell(rCol + 1);
+        otCell.value = overtime || null;
+        otCell.font = otDataFont;
+        otCell.fill = md.isWeekend ? weekendFill : sheetBg;
+        otCell.border = cellBorder;
+        otCell.alignment = centerAlign;
+      });
 
-  // ── Add Employee ──────────────────────────────────────────
+      // Summary columns
+      const summaryVals = [rowTotalR, rowTotalOT, rowTotalR + rowTotalOT];
+      summaryVals.forEach((val, i) => {
+        const cell = excelRow.getCell(LEFT_COLS + dayCols + 1 + i);
+        cell.value = val || null;
+        cell.font = i === 2 ? primaryFont : (i === 1 ? { ...boldDataFont, color: { argb: 'F59E0B' } } : boldDataFont);
+        cell.fill = summaryFill;
+        cell.border = cellBorder;
+        cell.alignment = centerAlign;
+      });
+    });
 
-  const handleSearchEmployees = useCallback(async (searchTerm: string) => {
-    if (searchTerm.length < 2) {
-      setEmployeeSearchResults([]);
-      return;
-    }
-    try {
-      const results = await userService.getEmployees({ search: searchTerm, is_active: true });
-      setEmployeeSearchResults(results);
-    } catch {
-      setEmployeeSearchResults([]);
-    }
-  }, []);
+    // ── TOTALS ROW ──
+    const totalsRowNum = 3 + filteredMonthlyRows.length;
+    const totalsRow = ws.getRow(totalsRowNum);
+    totalsRow.height = 24;
 
-  const handleAddEmployee = useCallback(() => {
-    let newRow: GridRow;
-
-    if (selectedProfile) {
-      // Check if already in grid
-      const exists = gridRows.some((r) => r.employee_id === selectedProfile.id);
-      if (exists) {
-        setSnackbar({ open: true, message: 'Employee is already in the timesheet', severity: 'error' });
-        return;
-      }
-      const hours: Record<string, number> = {};
-      for (const day of weekDays) {
-        hours[day.dateStr] = 0;
-      }
-      newRow = {
-        key: selectedProfile.id,
-        employee_id: selectedProfile.id,
-        employee_name: selectedProfile.full_name,
-        employee_number: null,
-        designation: selectedProfile.department,
-        supplier_id: selectedSupplier?.id ?? null,
-        supplier_name: selectedSupplier?.name ?? null,
-        shift: 'D',
-        hours,
-      };
-    } else if (manualEmployee.name.trim()) {
-      // Check if name already exists
-      const exists = gridRows.some(
-        (r) => r.employee_name.toLowerCase() === manualEmployee.name.trim().toLowerCase(),
-      );
-      if (exists) {
-        setSnackbar({ open: true, message: 'Employee is already in the timesheet', severity: 'error' });
-        return;
-      }
-      const hours: Record<string, number> = {};
-      for (const day of weekDays) {
-        hours[day.dateStr] = 0;
-      }
-      newRow = {
-        key: manualEmployee.name.trim(),
-        employee_id: null,
-        employee_name: manualEmployee.name.trim(),
-        employee_number: manualEmployee.number.trim() || null,
-        designation: manualEmployee.designation.trim() || null,
-        supplier_id: selectedSupplier?.id ?? null,
-        supplier_name: selectedSupplier?.name ?? null,
-        shift: 'D',
-        hours,
-      };
-    } else {
-      return;
+    // Left: "Totals" label
+    const tCell = totalsRow.getCell(1);
+    tCell.value = '';
+    tCell.fill = totalRowFill;
+    tCell.border = cellBorder;
+    const tLabelCell = totalsRow.getCell(2);
+    tLabelCell.value = 'Totals';
+    tLabelCell.font = { ...boldDataFont, size: 11 };
+    tLabelCell.fill = totalRowFill;
+    tLabelCell.border = cellBorder;
+    tLabelCell.alignment = leftAlign;
+    for (let i = 3; i <= LEFT_COLS; i++) {
+      const c = totalsRow.getCell(i);
+      c.fill = totalRowFill;
+      c.border = cellBorder;
     }
 
-    setGridRows((prev) => [...prev, newRow]);
-    setAddEmployeeOpen(false);
-    setSelectedProfile(null);
-    setSelectedSupplier(null);
-    setManualEmployee({ name: '', number: '', designation: '' });
-    setEmployeeSearchResults([]);
-    setSnackbar({ open: true, message: `Added ${newRow.employee_name}`, severity: 'success' });
-  }, [selectedProfile, manualEmployee, gridRows, weekDays]);
+    // Day column totals
+    let grandR = 0;
+    let grandOT = 0;
+    monthDays.forEach((md, i) => {
+      let colR = 0;
+      let colOT = 0;
+      for (const r of filteredMonthlyRows) {
+        const { regular, overtime } = splitRegularOvertime(r.dailyHours[md.dateStr] || 0, regularLimit);
+        colR += regular;
+        colOT += overtime;
+      }
+      grandR += colR;
+      grandOT += colOT;
 
-  // ── CSV Export ────────────────────────────────────────────
+      const rCol = LEFT_COLS + 1 + i * 2;
+      const rCell = totalsRow.getCell(rCol);
+      rCell.value = colR || null;
+      rCell.font = boldDataFont;
+      rCell.fill = totalRowFill;
+      rCell.border = cellBorder;
+      rCell.alignment = centerAlign;
 
-  const handleExportCSV = useCallback(() => {
-    if (gridRows.length === 0) return;
-    exportGridToCSV(gridRows, weekDays, selectedProject?.name || 'project', weekLabel);
-  }, [gridRows, weekDays, selectedProject, weekLabel]);
+      const otCell = totalsRow.getCell(rCol + 1);
+      otCell.value = colOT || null;
+      otCell.font = { ...boldDataFont, color: { argb: 'F59E0B' } };
+      otCell.fill = totalRowFill;
+      otCell.border = cellBorder;
+      otCell.alignment = centerAlign;
+    });
 
-  // ── Supplier column auto-width ──────────────────────────────
-  const supplierColWidth = useMemo(() => {
-    const names = suppliers.map((s) => s.name || '');
-    const longest = names.reduce((a, b) => (a.length > b.length ? a : b), 'SUPPLIER');
-    // Approximate: ~7px per char at fontSize 11, plus padding
-    return Math.max(100, Math.min(200, longest.length * 7 + 40));
-  }, [suppliers]);
+    // Summary totals
+    const summaryTotals = [grandR, grandOT, grandR + grandOT];
+    summaryTotals.forEach((val, i) => {
+      const cell = totalsRow.getCell(LEFT_COLS + dayCols + 1 + i);
+      cell.value = val || null;
+      cell.font = i === 2 ? { ...primaryFont, size: 11 } : (i === 1 ? { ...boldDataFont, color: { argb: 'F59E0B' } } : boldDataFont);
+      cell.fill = totalRowFill;
+      cell.border = cellBorder;
+      cell.alignment = centerAlign;
+    });
+
+    // ── Generate and download ──
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `consolidated-${monthLabel.replace(/\s+/g, '_')}.xlsx`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, [filteredMonthlyRows, monthDays, regularLimit, monthLabel]);
 
   // ============================================================
   // WEB RENDER (wide screens)
@@ -713,57 +492,8 @@ export default function TimesheetsScreen() {
       color: DT.textPrimary,
     };
 
-    const inputBaseStyle: React.CSSProperties = {
-      width: 52,
-      height: 36,
-      backgroundColor: '#0f1729',
-      border: `1px solid ${DT.border}`,
-      borderRadius: 6,
-      color: '#FFFFFF',
-      textAlign: 'center',
-      fontSize: 14,
-      outline: 'none',
-    };
-
-    const inputDisabledStyle: React.CSSProperties = {
-      ...inputBaseStyle,
-      backgroundColor: '#0a0f1d',
-      color: '#475569',
-      cursor: 'not-allowed',
-    };
-
     const weekendBg = '#0d1525';
     const totalRowBg = '#0d1525';
-
-    const btnStyle = (bg: string, hoverBg?: string): React.CSSProperties => ({
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 6,
-      padding: '8px 16px',
-      backgroundColor: bg,
-      color: '#FFFFFF',
-      border: 'none',
-      borderRadius: 8,
-      fontSize: 13,
-      fontWeight: 600,
-      cursor: 'pointer',
-      transition: 'all 0.12s ease',
-    });
-
-    const outlineBtnStyle: React.CSSProperties = {
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 6,
-      padding: '8px 16px',
-      backgroundColor: 'transparent',
-      color: DT.textSecondary,
-      border: `1px solid ${DT.border}`,
-      borderRadius: 8,
-      fontSize: 13,
-      fontWeight: 600,
-      cursor: 'pointer',
-      transition: 'all 0.12s ease',
-    };
 
     return (
       <View style={{ flex: 1, backgroundColor: isDark ? DT.bgMain : '#F8FAFC' }}>
@@ -811,789 +541,596 @@ export default function TimesheetsScreen() {
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 22, fontWeight: 700, color: isDark ? DT.textPrimary : '#0F172A' }}>
-              Timesheet Entries
+              Monthly Consolidated
             </div>
             <div style={{ fontSize: 13, color: isDark ? DT.textSecondary : DT.textMuted, marginTop: 2 }}>
-              {isHR ? 'View and manage timesheets for all projects' : 'Enter daily hours for your assigned projects'}
+              Cross-project consolidated employee hours with regular/overtime breakdown
             </div>
           </div>
         </div>
 
         {/* ── Content Area ───────────────────────────────── */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px 24px' }}>
-          {assignmentsLoading ? (
-            <div style={{ textAlign: 'center', padding: 40, color: DT.textSecondary }}>
-              Loading assignments...
-            </div>
-          ) : availableProjects.length === 0 ? (
-            <div
+
+          {/* ── Toolbar row 1: Month nav + Regular hours + Supplier ── */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              flexWrap: 'wrap',
+              paddingBottom: 12,
+            }}
+          >
+            {/* Month navigation */}
+            <button
+              onClick={goToPrevMonth}
               style={{
-                textAlign: 'center',
-                padding: 60,
-                color: DT.textSecondary,
-                fontSize: 15,
+                width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                border: `1px solid ${DT.border}`, borderRadius: 8, backgroundColor: DT.cardBg, color: DT.textPrimary, cursor: 'pointer', fontSize: 16,
               }}
             >
-              <div style={{ fontSize: 40, marginBottom: 16 }}>--</div>
-              <div style={{ fontWeight: 600, fontSize: 17, color: DT.textPrimary, marginBottom: 8 }}>
-                {isHR ? 'No Projects Found' : 'No Project Assignments'}
-              </div>
-              <div>{isHR ? 'No projects have been created yet. Add projects from the Projects admin page.' : 'You have not been assigned to any projects yet. Contact your administrator.'}</div>
-            </div>
-          ) : (
-            <>
-              {/* ── Project Selector + Week Nav ───────────── */}
-              <div
+              {'<'}
+            </button>
+
+            {/* Clickable month label with dropdown picker */}
+            <div style={{ position: 'relative' }} ref={monthPickerRef as any}>
+              <button
+                onClick={() => { setPickerYear(monthlyYear); setShowMonthPicker((v) => !v); }}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 16,
-                  flexWrap: 'wrap',
-                  marginBottom: 16,
+                  fontSize: 15, fontWeight: 700, color: DT.textPrimary, minWidth: 160, textAlign: 'center',
+                  padding: '8px 16px', backgroundColor: DT.cardBg, border: `1px solid ${showMonthPicker ? DT.primary : DT.border}`, borderRadius: 8,
+                  cursor: 'pointer', transition: 'border-color 0.15s',
                 }}
               >
-                {/* Project dropdown */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: DT.textSecondary }}>Project:</span>
-                  <select
-                    value={selectedProjectId || ''}
-                    onChange={(e) => setSelectedProjectId(e.target.value)}
-                    style={{
-                      padding: '8px 12px',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      border: `1px solid ${DT.border}`,
-                      borderRadius: 8,
-                      backgroundColor: DT.cardBg,
-                      color: DT.textPrimary,
-                      outline: 'none',
-                      cursor: 'pointer',
-                      minWidth: 200,
-                    }}
-                  >
-                    {availableProjects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.project_number} - {p.name}{keeperByProject[p.id] ? ` [${keeperByProject[p.id]}]` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {monthLabel}
+                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ marginLeft: 8, verticalAlign: 'middle' }}>
+                  <path d="M1 1L5 5L9 1" stroke={DT.textSecondary} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
 
-                {/* Week navigation */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: DT.textSecondary }}>Week:</span>
-                  <span
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: DT.textPrimary,
-                      padding: '8px 12px',
-                      backgroundColor: DT.cardBg,
-                      border: `1px solid ${DT.border}`,
-                      borderRadius: 8,
-                      minWidth: 200,
-                      textAlign: 'center',
-                    }}
-                  >
-                    {weekLabel}
-                  </span>
-                  <button
-                    onClick={goToPrevWeek}
-                    style={{
-                      width: 36,
-                      height: 36,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      border: `1px solid ${DT.border}`,
-                      borderRadius: 8,
-                      backgroundColor: DT.cardBg,
-                      color: DT.textPrimary,
-                      cursor: 'pointer',
-                      fontSize: 16,
-                    }}
-                  >
-                    {'<'}
-                  </button>
-                  <button
-                    onClick={goToNextWeek}
-                    style={{
-                      width: 36,
-                      height: 36,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      border: `1px solid ${DT.border}`,
-                      borderRadius: 8,
-                      backgroundColor: DT.cardBg,
-                      color: DT.textPrimary,
-                      cursor: 'pointer',
-                      fontSize: 16,
-                    }}
-                  >
-                    {'>'}
-                  </button>
-                </div>
-              </div>
-
-              {/* ── Status + Action Buttons ───────────────── */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  gap: 12,
-                  marginBottom: 16,
-                }}
-              >
-                {/* Status badge + Keeper info */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: DT.textSecondary }}>Status:</span>
-                    {Chip ? (
-                      <Chip
-                        label={getSubmissionStatusLabel(submissionStatus)}
-                        size="small"
-                        color={getSubmissionChipColor(submissionStatus)}
-                        variant="filled"
-                        sx={{ fontWeight: 700, fontSize: 11 }}
-                      />
-                    ) : (
-                      <span
-                        style={{
-                          ...getSubmissionBadgeStyle(submissionStatus),
-                          padding: '4px 12px',
-                          borderRadius: 12,
-                          fontSize: 11,
-                          fontWeight: 700,
-                          display: 'inline-block',
-                          backgroundColor: getSubmissionBadgeStyle(submissionStatus).bg,
-                          color: getSubmissionBadgeStyle(submissionStatus).text,
-                        }}
-                      >
-                        {getSubmissionStatusLabel(submissionStatus)}
-                      </span>
-                    )}
-                  </div>
-                  {selectedProjectId && keeperByProject[selectedProjectId] && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: DT.textSecondary }}>Assigned to:</span>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: DT.warning }}>
-                        {keeperByProject[selectedProjectId]}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Action buttons */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  {isEditable && (
-                    <>
-                      <button onClick={handleCopyLastWeek} style={outlineBtnStyle}>
-                        Copy Last Week
-                      </button>
-                      <button onClick={() => setAutoFillOpen(true)} style={outlineBtnStyle}>
-                        Auto-Fill
-                      </button>
-                      <button
-                        onClick={handleSave}
-                        disabled={saving}
-                        style={{
-                          ...btnStyle(DT.primary),
-                          opacity: saving ? 0.6 : 1,
-                        }}
-                      >
-                        {saving ? 'Saving...' : 'Save'}
-                      </button>
-                      <button
-                        onClick={handleSubmitForApproval}
-                        disabled={submitting || gridRows.length === 0}
-                        style={{
-                          ...btnStyle(DT.success),
-                          opacity: submitting || gridRows.length === 0 ? 0.6 : 1,
-                        }}
-                      >
-                        {submitting ? 'Submitting...' : 'Submit for Approval'}
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* ── Grid Table ────────────────────────────── */}
-              {entriesLoading ? (
-                <div style={{ textAlign: 'center', padding: 40, color: DT.textSecondary }}>
-                  Loading entries...
-                </div>
-              ) : (
+              {showMonthPicker && (
                 <div
                   style={{
+                    position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)',
+                    marginTop: 6, zIndex: 50,
+                    width: 280, padding: 12,
+                    backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
+                    border: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
                     borderRadius: 12,
-                    overflow: 'hidden',
-                    border: `1px solid ${DT.border}`,
-                    marginBottom: 16,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
                   }}
                 >
-                  {/* ── Two-panel layout: employee info (left) | time grid (right) ── */}
-                  <div style={{ display: 'flex', overflow: 'hidden' }}>
-                    {/* ── LEFT: Employee Info ── */}
-                    <div style={{ flexShrink: 0 }}>
-                      <table style={{ ...tableStyle, borderRadius: 0 }}>
-                        <thead>
-                          <tr>
-                            <th style={{ ...thCenterStyle, width: 36, height: 52, verticalAlign: 'middle' }}>#</th>
-                            <th style={{ ...thStyle, minWidth: 150, height: 52, verticalAlign: 'middle' }}>Employee</th>
-                            <th style={{ ...thStyle, minWidth: 120, height: 52, verticalAlign: 'middle', borderRight: `2px solid ${DT.primary}40` }}>Designation</th>
-                            <th style={{ ...thStyle, minWidth: supplierColWidth, height: 52, verticalAlign: 'middle' }}>Supplier</th>
-                            <th style={{ ...thCenterStyle, width: 56, height: 52, verticalAlign: 'middle' }}>Shift</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {gridRows.length === 0 ? (
-                            <tr>
-                              <td
-                                colSpan={5}
-                                style={{ ...tdStyle, textAlign: 'center', padding: 32, color: DT.textMuted }}
-                              >
-                                No employees added yet.
-                              </td>
-                            </tr>
-                          ) : (
-                            gridRows.map((row, idx) => (
-                              <tr key={row.key}>
-                                <td style={{ ...tdStyle, textAlign: 'center', color: DT.textMuted, fontSize: 12, height: 48 }}>
-                                  {idx + 1}
-                                </td>
-                                <td style={{ ...tdStyle, fontWeight: 600, paddingLeft: 10, height: 48, whiteSpace: 'nowrap' }}>
-                                  {row.employee_name}
-                                </td>
-                                <td style={{ ...tdStyle, color: DT.textSecondary, paddingLeft: 10, height: 48, fontSize: 12, borderRight: `2px solid ${DT.primary}40` }}>
-                                  {row.designation || '\u2014'}
-                                </td>
-                                <td style={{ ...tdStyle, paddingLeft: 6, height: 48, fontSize: 12, whiteSpace: 'nowrap' }}>
-                                  {isEditable ? (
-                                    <select
-                                      value={row.supplier_id || ''}
-                                      onChange={(e) => {
-                                        const s = suppliers.find((sup) => sup.id === e.target.value) || null;
-                                        handleSupplierChange(row.key, s);
-                                      }}
-                                      style={{
-                                        width: '100%',
-                                        padding: '4px 6px',
-                                        fontSize: 11,
-                                        border: `1px solid ${DT.border}`,
-                                        borderRadius: 4,
-                                        backgroundColor: '#0f1729',
-                                        color: DT.textSecondary,
-                                        cursor: 'pointer',
-                                        outline: 'none',
-                                        colorScheme: 'dark',
-                                      } as React.CSSProperties}
-                                    >
-                                      <option value="">{'\u2014'}</option>
-                                      {suppliers.map((s) => (
-                                        <option key={s.id} value={s.id}>{s.name}</option>
-                                      ))}
-                                    </select>
-                                  ) : (
-                                    <span style={{ color: DT.textSecondary, paddingLeft: 4, whiteSpace: 'nowrap' }}>
-                                      {row.supplier_name || '\u2014'}
-                                    </span>
-                                  )}
-                                </td>
-                                <td style={{ ...tdStyle, textAlign: 'center', height: 48 }}>
-                                  {isEditable ? (
-                                    <button
-                                      onClick={() => handleShiftChange(row.key)}
-                                      title={row.shift === 'D' ? 'Day shift \u2014 click to switch' : 'Night shift \u2014 click to switch'}
-                                      style={{
-                                        padding: '2px 8px',
-                                        borderRadius: 4,
-                                        border: `1px solid ${row.shift === 'N' ? '#3b82f6' : DT.border}`,
-                                        backgroundColor: row.shift === 'N' ? '#1e3a5f' : 'transparent',
-                                        color: row.shift === 'N' ? '#60a5fa' : DT.textMuted,
-                                        fontSize: 11,
-                                        fontWeight: 700,
-                                        cursor: 'pointer',
-                                      }}
-                                    >
-                                      {row.shift}
-                                    </button>
-                                  ) : (
-                                    <span style={{ fontSize: 11, fontWeight: 700, color: row.shift === 'N' ? '#60a5fa' : DT.textMuted }}>
-                                      {row.shift}
-                                    </span>
-                                  )}
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                          {/* Total row spacer */}
-                          {gridRows.length > 0 && (
-                            <tr style={{ backgroundColor: totalRowBg }}>
-                              <td style={{ ...tdStyle, height: 48 }} />
-                              <td colSpan={2} style={{ ...tdStyle, fontWeight: 700, paddingLeft: 10, fontSize: 13, height: 48, borderRight: `2px solid ${DT.primary}40` }}>
-                                Total Hours
-                              </td>
-                              <td colSpan={2} style={{ ...tdStyle, height: 48 }} />
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
+                  {/* Year selector */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <button
+                      onClick={() => setPickerYear((y) => y - 1)}
+                      style={{
+                        width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        border: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`, borderRadius: 6,
+                        backgroundColor: 'transparent', color: DT.textPrimary, cursor: 'pointer', fontSize: 14,
+                      }}
+                    >
+                      {'<'}
+                    </button>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: isDark ? DT.textPrimary : '#0F172A' }}>
+                      {pickerYear}
+                    </span>
+                    <button
+                      onClick={() => setPickerYear((y) => y + 1)}
+                      style={{
+                        width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        border: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`, borderRadius: 6,
+                        backgroundColor: 'transparent', color: DT.textPrimary, cursor: 'pointer', fontSize: 14,
+                      }}
+                    >
+                      {'>'}
+                    </button>
+                  </div>
 
-                    {/* ── DIVIDER ── */}
-                    <div style={{ width: 2, flexShrink: 0, backgroundColor: `${DT.primary}50` }} />
+                  {/* Month grid (4 rows x 3 cols) */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
+                    {(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const).map((label, idx) => {
+                      const m = idx + 1;
+                      const isSelected = m === monthlyMonth && pickerYear === monthlyYear;
+                      const isCurrent = m === new Date().getMonth() + 1 && pickerYear === new Date().getFullYear();
+                      return (
+                        <button
+                          key={label}
+                          onClick={() => jumpToMonth(m, pickerYear)}
+                          style={{
+                            padding: '8px 4px', fontSize: 13, fontWeight: isSelected ? 700 : 500,
+                            borderRadius: 8, border: 'none', cursor: 'pointer',
+                            backgroundColor: isSelected
+                              ? DT.primary
+                              : 'transparent',
+                            color: isSelected
+                              ? '#FFFFFF'
+                              : isCurrent
+                                ? DT.primary
+                                : isDark ? '#CBD5E1' : '#334155',
+                            outline: isCurrent && !isSelected ? `1px dashed ${DT.primary}` : 'none',
+                            transition: 'all 0.12s ease',
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isSelected) (e.target as HTMLButtonElement).style.backgroundColor = isDark ? '#334155' : '#F1F5F9';
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isSelected) (e.target as HTMLButtonElement).style.backgroundColor = 'transparent';
+                          }}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                    {/* ── RIGHT: Time Grid (scrollable) ── */}
-                    <div style={{ flex: 1, overflowX: 'auto' }}>
-                      <table style={{ ...tableStyle, borderRadius: 0 }}>
-                        <thead>
-                          <tr>
-                            {weekDays.map((day) => (
-                              <th
-                                key={day.dateStr}
-                                style={{
-                                  ...thCenterStyle,
-                                  width: 74,
-                                  height: 52,
-                                  verticalAlign: 'middle',
-                                  backgroundColor: isSaudiWeekend(day.dateStr) ? weekendBg : '#1a2744',
-                                }}
-                              >
-                                <div>{day.dayShort}</div>
-                                <div style={{ fontSize: 10, fontWeight: 400, marginTop: 2 }}>
-                                  {format(day.date, 'ddMMM')}
-                                </div>
-                              </th>
-                            ))}
-                            <th style={{ ...thCenterStyle, width: 72, height: 52, verticalAlign: 'middle', borderLeft: `2px solid ${DT.primary}40` }}>
-                              TOTAL
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {gridRows.length === 0 ? (
-                            <tr>
-                              <td
-                                colSpan={weekDays.length + 1}
-                                style={{ ...tdStyle, textAlign: 'center', padding: 32, color: DT.textMuted }}
-                              >
-                                &nbsp;
-                              </td>
-                            </tr>
-                          ) : (
-                            gridRows.map((row) => {
-                              const rowTotal = computeRowTotalFromMap(row.hours);
-                              return (
-                                <tr key={row.key}>
-                                  {weekDays.map((day) => {
-                                    const isWeekendDay = isSaudiWeekend(day.dateStr);
-                                    return (
-                                      <td
-                                        key={day.dateStr}
-                                        style={{
-                                          ...tdStyle,
-                                          textAlign: 'center',
-                                          height: 48,
-                                          backgroundColor: isWeekendDay ? weekendBg : undefined,
-                                        }}
-                                      >
-                                        {isEditable ? (
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            max="24"
-                                            step="0.5"
-                                            value={row.hours[day.dateStr] || ''}
-                                            onChange={(e) => handleCellChange(row.key, day.dateStr, e.target.value)}
-                                            onFocus={(e) => {
-                                              (e.target as HTMLInputElement).style.borderColor = DT.primary;
-                                            }}
-                                            onBlur={(e) => {
-                                              (e.target as HTMLInputElement).style.borderColor = DT.border;
-                                            }}
-                                            style={inputBaseStyle}
-                                          />
-                                        ) : (
-                                          <span
-                                            style={{
-                                              display: 'inline-flex',
-                                              alignItems: 'center',
-                                              justifyContent: 'center',
-                                              width: 52,
-                                              height: 36,
-                                              fontSize: 14,
-                                              color: '#475569',
-                                            }}
-                                          >
-                                            {row.hours[day.dateStr] || 0}
-                                          </span>
-                                        )}
-                                      </td>
-                                    );
-                                  })}
-                                  <td
-                                    style={{
-                                      ...tdStyle,
-                                      textAlign: 'center',
-                                      fontWeight: 700,
-                                      color: DT.primary,
-                                      fontSize: 14,
-                                      height: 48,
-                                      borderLeft: `2px solid ${DT.primary}40`,
-                                    }}
-                                  >
-                                    {rowTotal}
-                                  </td>
-                                </tr>
-                              );
-                            })
-                          )}
-                          {/* ── Total Row ── */}
-                          {gridRows.length > 0 && (
-                            <tr style={{ backgroundColor: totalRowBg }}>
-                              {weekDays.map((day) => (
-                                <td
-                                  key={day.dateStr}
-                                  style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 14, height: 48 }}
-                                >
-                                  {columnTotals[day.dateStr] || 0}
-                                </td>
-                              ))}
-                              <td
-                                style={{
-                                  ...tdStyle,
-                                  textAlign: 'center',
-                                  fontWeight: 700,
-                                  color: DT.primary,
-                                  fontSize: 14,
-                                  height: 48,
-                                  borderLeft: `2px solid ${DT.primary}40`,
-                                }}
-                              >
-                                {grandTotal}
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
+                  {/* Quick actions */}
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${isDark ? '#334155' : '#E2E8F0'}` }}>
+                    <button
+                      onClick={() => jumpToMonth(new Date().getMonth() + 1, new Date().getFullYear())}
+                      style={{
+                        flex: 1, padding: '6px 8px', fontSize: 11, fontWeight: 600, borderRadius: 6,
+                        border: `1px solid ${DT.primary}40`, backgroundColor: `${DT.primary}15`,
+                        color: DT.primary, cursor: 'pointer',
+                      }}
+                    >
+                      This Month
+                    </button>
                   </div>
                 </div>
               )}
+            </div>
 
-              {/* ── Footer: Add Employee + Count + CSV ────── */}
-              <div
+            <button
+              onClick={goToNextMonth}
+              style={{
+                width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                border: `1px solid ${DT.border}`, borderRadius: 8, backgroundColor: DT.cardBg, color: DT.textPrimary, cursor: 'pointer', fontSize: 16,
+              }}
+            >
+              {'>'}
+            </button>
+
+            <div style={{ width: 1, height: 28, backgroundColor: isDark ? '#334155' : '#E2E8F0' }} />
+
+            {/* Regular hours setting */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: DT.textSecondary }}>Regular hrs/day:</span>
+              <input
+                type="number"
+                min="0"
+                max="24"
+                step="0.5"
+                value={regularHoursInput}
+                onChange={(e) => setRegularHoursInput(e.target.value)}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  gap: 12,
+                  width: 56, height: 32, textAlign: 'center', fontSize: 13, fontWeight: 600,
+                  border: `1px solid ${DT.border}`, borderRadius: 6, backgroundColor: DT.cardBg, color: DT.textPrimary, outline: 'none',
+                }}
+              />
+              <button
+                onClick={handleSetRegularHours}
+                style={{
+                  padding: '6px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6,
+                  border: `1px solid ${DT.primary}40`, backgroundColor: `${DT.primary}20`, color: DT.primary, cursor: 'pointer',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  {isEditable && (
-                    <button
-                      onClick={() => setAddEmployeeOpen(true)}
-                      style={{
-                        ...btnStyle('transparent'),
-                        color: DT.primary,
-                        border: `1px solid ${DT.primary}`,
-                        padding: '8px 16px',
-                      }}
-                    >
-                      <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <line x1="12" y1="5" x2="12" y2="19" />
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                      </svg>
-                      Add Employee
-                    </button>
-                  )}
+                Set
+              </button>
+            </div>
+
+            <div style={{ width: 1, height: 28, backgroundColor: isDark ? '#334155' : '#E2E8F0' }} />
+
+            {/* Supplier filter */}
+            <select
+              value={monthlySupplierFilter}
+              onChange={(e) => setMonthlySupplierFilter(e.target.value)}
+              style={{
+                padding: '7px 12px', fontSize: 12, fontWeight: 600, border: `1px solid ${DT.border}`, borderRadius: 8,
+                backgroundColor: DT.cardBg, color: DT.textPrimary, outline: 'none', cursor: 'pointer',
+              }}
+            >
+              <option value="">All Suppliers</option>
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+
+            <div style={{ width: 1, height: 28, backgroundColor: isDark ? '#334155' : '#E2E8F0' }} />
+
+            {/* Export Excel */}
+            <button
+              onClick={handleExportMonthlyExcel}
+              disabled={filteredMonthlyRows.length === 0}
+              style={{
+                padding: '7px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8,
+                border: `1px solid ${isDark ? '#334155' : '#CBD5E1'}`,
+                backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
+                color: isDark ? '#CBD5E1' : '#334155',
+                cursor: filteredMonthlyRows.length === 0 ? 'not-allowed' : 'pointer',
+                opacity: filteredMonthlyRows.length === 0 ? 0.5 : 1,
+                transition: 'all 0.12s ease',
+              }}
+            >
+              Export Excel
+            </button>
+          </div>
+
+          {/* ── Toolbar row 2: Search + R/OT toggles + Show All Columns ── */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              flexWrap: 'wrap',
+              paddingBottom: 16,
+            }}
+          >
+            {/* Search with magnifying glass */}
+            <div style={{ position: 'relative', width: 260 }}>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={DT.textMuted}
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+              >
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search employee, number, designation..."
+                value={monthlySearch}
+                onChange={(e) => setMonthlySearch(e.target.value)}
+                style={{
+                  width: '100%', padding: '7px 12px 7px 34px', fontSize: 13, border: `1px solid ${DT.border}`, borderRadius: 8,
+                  backgroundColor: DT.cardBg, color: DT.textPrimary, outline: 'none',
+                }}
+              />
+            </div>
+
+            <div style={{ width: 1, height: 28, backgroundColor: isDark ? '#334155' : '#E2E8F0' }} />
+
+            {/* R/OT toggle buttons */}
+            <button
+              onClick={() => setShowRegular(!showRegular)}
+              style={{
+                padding: '6px 14px', fontSize: 12, fontWeight: 600, borderRadius: 8,
+                border: `1px solid ${showRegular ? DT.primary : DT.border}`,
+                backgroundColor: showRegular ? (isDark ? '#1E3A5F' : '#DBEAFE') : (isDark ? '#1E293B' : '#FFFFFF'),
+                color: showRegular ? '#2563EB' : (isDark ? '#CBD5E1' : '#334155'),
+                cursor: 'pointer', transition: 'all 0.12s ease',
+              }}
+            >
+              {showRegular ? 'Hide R' : 'Show R'}
+            </button>
+            <button
+              onClick={() => setShowOvertime(!showOvertime)}
+              style={{
+                padding: '6px 14px', fontSize: 12, fontWeight: 600, borderRadius: 8,
+                border: `1px solid ${showOvertime ? '#D97706' : DT.border}`,
+                backgroundColor: showOvertime ? (isDark ? '#78350F' : '#FEF3C7') : (isDark ? '#1E293B' : '#FFFFFF'),
+                color: showOvertime ? '#F59E0B' : (isDark ? '#CBD5E1' : '#334155'),
+                cursor: 'pointer', transition: 'all 0.12s ease',
+              }}
+            >
+              {showOvertime ? 'Hide OT' : 'Show OT'}
+            </button>
+
+            <div style={{ width: 1, height: 28, backgroundColor: isDark ? '#334155' : '#E2E8F0' }} />
+
+            {/* Show All Columns */}
+            <button
+              onClick={() => setShowAllMonthlyColumns(!showAllMonthlyColumns)}
+              style={{
+                padding: '6px 14px', fontSize: 12, fontWeight: 600, borderRadius: 8,
+                border: `1px solid ${showAllMonthlyColumns ? DT.primary : DT.border}`,
+                backgroundColor: showAllMonthlyColumns ? (isDark ? '#1E3A5F' : '#DBEAFE') : (isDark ? '#1E293B' : '#FFFFFF'),
+                color: showAllMonthlyColumns ? '#2563EB' : (isDark ? '#CBD5E1' : '#334155'),
+                cursor: 'pointer', transition: 'all 0.12s ease',
+              }}
+            >
+              {showAllMonthlyColumns ? 'Hide Extra Columns' : 'Show All Columns'}
+            </button>
+
+            <div style={{ flex: 1 }} />
+
+            <span style={{ fontSize: 13, color: isDark ? '#64748B' : '#94A3B8' }}>
+              {filteredMonthlyRows.length} {filteredMonthlyRows.length === 1 ? 'employee' : 'employees'}
+            </span>
+          </div>
+
+          {/* ── Consolidated Grid ── */}
+          {consolidatedLoading ? (
+            <div style={{ textAlign: 'center', padding: 40, color: DT.textSecondary }}>
+              Loading consolidated data...
+            </div>
+          ) : consolidatedError ? (
+            <div style={{ textAlign: 'center', padding: 40, color: DT.danger }}>
+              {consolidatedError}
+            </div>
+          ) : filteredMonthlyRows.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 40, color: isDark ? '#64748B' : '#94A3B8', fontSize: 15 }}>
+              <div style={{ fontSize: 40, marginBottom: 16 }}>--</div>
+              <div style={{ fontWeight: 600, fontSize: 17, color: isDark ? '#F8FAFC' : '#0F172A', marginBottom: 8 }}>
+                No timesheet data
+              </div>
+              <div>No entries found for {monthLabel}</div>
+            </div>
+          ) : (
+            <div style={{ borderRadius: 12, overflow: 'hidden', border: `1px solid ${DT.border}`, marginBottom: 16 }}>
+              <div style={{ display: 'flex', overflow: 'hidden' }}>
+                {/* LEFT: Employee Info (frozen) */}
+                <div style={{ flexShrink: 0 }}>
+                  <table style={{ ...tableStyle, borderRadius: 0 }}>
+                    <thead>
+                      {/* Row 1: main headers */}
+                      <tr>
+                        <th style={{ ...thCenterStyle, width: 36, height: 28, verticalAlign: 'middle' }}>#</th>
+                        <th style={{ ...thStyle, minWidth: 150, height: 28, verticalAlign: 'middle' }}>Employee</th>
+                        <th style={{ ...thStyle, minWidth: 80, height: 28, verticalAlign: 'middle' }}>Emp #</th>
+                        {showAllMonthlyColumns && (
+                          <>
+                            <th style={{ ...thStyle, minWidth: 120, height: 28, verticalAlign: 'middle' }}>Designation</th>
+                            <th style={{ ...thStyle, minWidth: 120, height: 28, verticalAlign: 'middle' }}>Supplier</th>
+                          </>
+                        )}
+                      </tr>
+                      {/* Row 2: sub-header spacer (aligns with R|OT row) */}
+                      <tr>
+                        <th style={{ ...thCenterStyle, height: 22 }} />
+                        <th style={{ ...thStyle, height: 22 }} />
+                        <th style={{ ...thStyle, height: 22 }} />
+                        {showAllMonthlyColumns && (
+                          <>
+                            <th style={{ ...thStyle, height: 22 }} />
+                            <th style={{ ...thStyle, height: 22 }} />
+                          </>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredMonthlyRows.map((row, idx) => (
+                        <tr key={row.employee_key}>
+                          <td style={{ ...tdStyle, textAlign: 'center', color: DT.textMuted, fontSize: 12, height: 40 }}>
+                            {idx + 1}
+                          </td>
+                          <td style={{ ...tdStyle, fontWeight: 600, paddingLeft: 10, height: 40, whiteSpace: 'nowrap' }}>
+                            {row.employee_name}
+                          </td>
+                          <td style={{ ...tdStyle, color: DT.textSecondary, paddingLeft: 10, height: 40, fontSize: 12 }}>
+                            {row.employee_number || '\u2014'}
+                          </td>
+                          {showAllMonthlyColumns && (
+                            <>
+                              <td style={{ ...tdStyle, color: DT.textSecondary, paddingLeft: 10, height: 40, fontSize: 12 }}>
+                                {row.designation || '\u2014'}
+                              </td>
+                              <td style={{ ...tdStyle, color: DT.textSecondary, paddingLeft: 10, height: 40, fontSize: 12 }}>
+                                {row.supplier_name || '\u2014'}
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      ))}
+                      {/* Total row */}
+                      <tr style={{ backgroundColor: totalRowBg }}>
+                        <td style={{ ...tdStyle, height: 40 }} />
+                        <td
+                          colSpan={showAllMonthlyColumns ? 4 : 2}
+                          style={{ ...tdStyle, fontWeight: 700, paddingLeft: 10, fontSize: 13, height: 40 }}
+                        >
+                          Totals
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <span style={{ fontSize: 13, color: DT.textMuted }}>
-                    Showing {gridRows.length} {gridRows.length === 1 ? 'entry' : 'entries'}
-                  </span>
-                  <button
-                    onClick={handleExportCSV}
-                    disabled={gridRows.length === 0}
-                    style={{
-                      ...outlineBtnStyle,
-                      opacity: gridRows.length === 0 ? 0.4 : 1,
-                    }}
-                  >
-                    CSV
-                  </button>
+
+                {/* DIVIDER */}
+                <div style={{ width: 2, flexShrink: 0, backgroundColor: `${DT.primary}50` }} />
+
+                {/* RIGHT: Day columns (scrollable) */}
+                <div style={{ flex: 1, overflowX: 'auto' }}>
+                  <table style={{ ...tableStyle, borderRadius: 0 }}>
+                    <thead>
+                      {/* Row 1: Day name + number */}
+                      <tr>
+                        {monthDays.map((md) => {
+                          const subCols = (showRegular && showOvertime) ? 2 : 1;
+                          return (
+                            <th
+                              key={md.dateStr}
+                              colSpan={subCols}
+                              style={{
+                                ...thCenterStyle,
+                                minWidth: subCols === 2 ? 64 : 36,
+                                height: 28,
+                                verticalAlign: 'middle',
+                                backgroundColor: md.isWeekend ? weekendBg : '#1a2744',
+                                borderLeft: `1px solid ${DT.border}`,
+                              }}
+                            >
+                              <div style={{ fontSize: 11, fontWeight: 600 }}>{md.dayShort.toUpperCase()}</div>
+                              <div style={{ fontSize: 10, fontWeight: 400, marginTop: 1 }}>{md.day}</div>
+                            </th>
+                          );
+                        })}
+                        {/* Summary headers */}
+                        {showRegular && (
+                          <th style={{ ...thCenterStyle, minWidth: 48, height: 28, verticalAlign: 'middle', borderLeft: `2px solid ${DT.primary}40` }}>
+                            <div style={{ fontSize: 10 }}>TOT</div>
+                            <div style={{ fontSize: 9, fontWeight: 400 }}>REG</div>
+                          </th>
+                        )}
+                        {showOvertime && (
+                          <th style={{ ...thCenterStyle, minWidth: 48, height: 28, verticalAlign: 'middle', borderLeft: showRegular ? undefined : `2px solid ${DT.primary}40` }}>
+                            <div style={{ fontSize: 10 }}>TOT</div>
+                            <div style={{ fontSize: 9, fontWeight: 400, color: '#F59E0B' }}>OT</div>
+                          </th>
+                        )}
+                        <th style={{ ...thCenterStyle, minWidth: 52, height: 28, verticalAlign: 'middle', borderLeft: `2px solid ${DT.primary}40` }}>
+                          <div style={{ fontSize: 10 }}>GRAND</div>
+                        </th>
+                      </tr>
+                      {/* Row 2: R | OT sub-headers */}
+                      <tr>
+                        {monthDays.map((md) => {
+                          if (showRegular && showOvertime) {
+                            return (
+                              <React.Fragment key={`sub-${md.dateStr}`}>
+                                <th style={{ ...thCenterStyle, width: 32, height: 22, fontSize: 9, padding: '2px 0', backgroundColor: md.isWeekend ? weekendBg : '#1a2744', borderLeft: `1px solid ${DT.border}` }}>
+                                  R
+                                </th>
+                                <th style={{ ...thCenterStyle, width: 32, height: 22, fontSize: 9, padding: '2px 0', color: '#F59E0B', backgroundColor: md.isWeekend ? weekendBg : '#1a2744' }}>
+                                  OT
+                                </th>
+                              </React.Fragment>
+                            );
+                          }
+                          // Single column — no sub-label needed
+                          return (
+                            <th
+                              key={`sub-${md.dateStr}`}
+                              style={{
+                                ...thCenterStyle, width: 36, height: 22, fontSize: 9, padding: '2px 0',
+                                backgroundColor: md.isWeekend ? weekendBg : '#1a2744',
+                                borderLeft: `1px solid ${DT.border}`,
+                                color: showOvertime ? '#F59E0B' : undefined,
+                              }}
+                            >
+                              {showOvertime ? 'OT' : 'R'}
+                            </th>
+                          );
+                        })}
+                        {showRegular && <th style={{ height: 22, borderLeft: `2px solid ${DT.primary}40` }} />}
+                        {showOvertime && <th style={{ height: 22, borderLeft: showRegular ? undefined : `2px solid ${DT.primary}40` }} />}
+                        <th style={{ height: 22, borderLeft: `2px solid ${DT.primary}40` }} />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredMonthlyRows.map((row) => {
+                        let rowTotalR = 0;
+                        let rowTotalOT = 0;
+                        return (
+                          <tr key={row.employee_key}>
+                            {monthDays.map((md) => {
+                              const total = row.dailyHours[md.dateStr] || 0;
+                              const { regular, overtime } = splitRegularOvertime(total, regularLimit);
+                              rowTotalR += regular;
+                              rowTotalOT += overtime;
+
+                              if (showRegular && showOvertime) {
+                                return (
+                                  <React.Fragment key={md.dateStr}>
+                                    <td style={{ ...tdStyle, textAlign: 'center', height: 40, fontSize: 12, backgroundColor: md.isWeekend ? weekendBg : undefined, borderLeft: `1px solid ${DT.border}`, color: regular > 0 ? DT.textPrimary : '#334155' }}>
+                                      {regular || ''}
+                                    </td>
+                                    <td style={{ ...tdStyle, textAlign: 'center', height: 40, fontSize: 12, backgroundColor: md.isWeekend ? weekendBg : undefined, color: overtime > 0 ? DT.warning : '#334155' }}>
+                                      {overtime || ''}
+                                    </td>
+                                  </React.Fragment>
+                                );
+                              }
+                              const val = showOvertime ? overtime : regular;
+                              return (
+                                <td
+                                  key={md.dateStr}
+                                  style={{
+                                    ...tdStyle, textAlign: 'center', height: 40, fontSize: 12,
+                                    backgroundColor: md.isWeekend ? weekendBg : undefined,
+                                    borderLeft: `1px solid ${DT.border}`,
+                                    color: val > 0 ? (showOvertime ? DT.warning : DT.textPrimary) : '#334155',
+                                  }}
+                                >
+                                  {val || ''}
+                                </td>
+                              );
+                            })}
+                            {showRegular && (
+                              <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 12, height: 40, borderLeft: `2px solid ${DT.primary}40`, color: DT.textPrimary }}>
+                                {rowTotalR}
+                              </td>
+                            )}
+                            {showOvertime && (
+                              <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 12, height: 40, borderLeft: showRegular ? undefined : `2px solid ${DT.primary}40`, color: DT.warning }}>
+                                {rowTotalOT}
+                              </td>
+                            )}
+                            <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 13, height: 40, borderLeft: `2px solid ${DT.primary}40`, color: DT.primary }}>
+                              {rowTotalR + rowTotalOT}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {/* Column totals row */}
+                      <tr style={{ backgroundColor: totalRowBg }}>
+                        {monthDays.map((md) => {
+                          let colR = 0;
+                          let colOT = 0;
+                          for (const r of filteredMonthlyRows) {
+                            const { regular, overtime } = splitRegularOvertime(r.dailyHours[md.dateStr] || 0, regularLimit);
+                            colR += regular;
+                            colOT += overtime;
+                          }
+                          if (showRegular && showOvertime) {
+                            return (
+                              <React.Fragment key={`tot-${md.dateStr}`}>
+                                <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 11, height: 40, borderLeft: `1px solid ${DT.border}` }}>{colR || ''}</td>
+                                <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 11, height: 40, color: DT.warning }}>{colOT || ''}</td>
+                              </React.Fragment>
+                            );
+                          }
+                          const val = showOvertime ? colOT : colR;
+                          return (
+                            <td
+                              key={`tot-${md.dateStr}`}
+                              style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 11, height: 40, borderLeft: `1px solid ${DT.border}`, color: showOvertime ? DT.warning : undefined }}
+                            >
+                              {val || ''}
+                            </td>
+                          );
+                        })}
+                        {(() => {
+                          let grandR = 0;
+                          let grandOT = 0;
+                          for (const r of filteredMonthlyRows) {
+                            for (const md of monthDays) {
+                              const { regular, overtime } = splitRegularOvertime(r.dailyHours[md.dateStr] || 0, regularLimit);
+                              grandR += regular;
+                              grandOT += overtime;
+                            }
+                          }
+                          return (
+                            <>
+                              {showRegular && (
+                                <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 12, height: 40, borderLeft: `2px solid ${DT.primary}40` }}>{grandR}</td>
+                              )}
+                              {showOvertime && (
+                                <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 12, height: 40, color: DT.warning, borderLeft: showRegular ? undefined : `2px solid ${DT.primary}40` }}>{grandOT}</td>
+                              )}
+                              <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 13, height: 40, borderLeft: `2px solid ${DT.primary}40`, color: DT.primary }}>{grandR + grandOT}</td>
+                            </>
+                          );
+                        })()}
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
-            </>
+            </div>
           )}
         </div>
 
-        {/* ── Dialogs + Snackbar ─────────────────────────── */}
+        {/* ── Snackbar ─────────────────────────── */}
         {isWeb && (
           <MuiThemeProvider isDark={isDark}>
-            {/* Add Employee Dialog */}
-            {Dialog && (
-              <Dialog
-                open={addEmployeeOpen}
-                onClose={() => {
-                  setAddEmployeeOpen(false);
-                  setSelectedProfile(null);
-                  setSelectedSupplier(null);
-                  setManualEmployee({ name: '', number: '', designation: '' });
-                  setEmployeeSearchResults([]);
-                }}
-                maxWidth="sm"
-                fullWidth
-                PaperProps={{
-                  sx: {
-                    borderRadius: 3,
-                    backgroundImage: 'none',
-                  },
-                }}
-              >
-                <DialogTitle
-                  sx={{
-                    pb: 1,
-                    pt: 3,
-                    px: 3,
-                    borderBottom: '1px solid',
-                    borderColor: 'divider',
-                  }}
-                >
-                  <div style={{ fontSize: 18, fontWeight: 700 }}>Add Employee</div>
-                  <div style={{ fontSize: 13, fontWeight: 400, opacity: 0.6, marginTop: 2 }}>
-                    Search for an existing employee or enter details manually
-                  </div>
-                </DialogTitle>
-                <DialogContent
-                  sx={{
-                    pt: '24px !important',
-                    pb: 1,
-                    px: 3,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 2,
-                    overflow: 'visible',
-                  }}
-                >
-                  {/* Autocomplete search */}
-                  {Autocomplete && (
-                    <Autocomplete
-                      options={employeeSearchResults}
-                      getOptionLabel={(option: Profile) => `${option.full_name} (${option.email})`}
-                      value={selectedProfile}
-                      onChange={(_: any, newValue: Profile | null) => {
-                        setSelectedProfile(newValue);
-                        if (newValue) {
-                          setManualEmployee({ name: '', number: '', designation: '' });
-                        }
-                      }}
-                      onInputChange={(_: any, inputValue: string) => {
-                        handleSearchEmployees(inputValue);
-                      }}
-                      renderInput={(params: any) => (
-                        <TextField
-                          {...params}
-                          label="Search Employee"
-                          placeholder="Type name or email..."
-                          size="small"
-                          fullWidth
-                        />
-                      )}
-                      noOptionsText="No employees found"
-                      clearOnBlur={false}
-                      filterOptions={(x: any) => x}
-                    />
-                  )}
-
-                  <div
-                    style={{
-                      textAlign: 'center',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: isDark ? DT.textMuted : '#94A3B8',
-                      margin: '4px 0',
-                    }}
-                  >
-                    -- OR enter manually --
-                  </div>
-
-                  <TextField
-                    label="Employee Name"
-                    value={manualEmployee.name}
-                    onChange={(e: any) => {
-                      setManualEmployee((m) => ({ ...m, name: e.target.value }));
-                      if (e.target.value) setSelectedProfile(null);
-                    }}
-                    fullWidth
-                    size="small"
-                    disabled={!!selectedProfile}
-                  />
-                  <div style={{ display: 'flex', gap: 12 }}>
-                    <TextField
-                      label="Employee Number"
-                      value={manualEmployee.number}
-                      onChange={(e: any) => setManualEmployee((m) => ({ ...m, number: e.target.value }))}
-                      fullWidth
-                      size="small"
-                      disabled={!!selectedProfile}
-                    />
-                    <TextField
-                      label="Designation"
-                      value={manualEmployee.designation}
-                      onChange={(e: any) => setManualEmployee((m) => ({ ...m, designation: e.target.value }))}
-                      fullWidth
-                      size="small"
-                      disabled={!!selectedProfile}
-                    />
-                  </div>
-
-                  {/* Supplier picker — applies to both search-selected and manual employees */}
-                  <div
-                    style={{
-                      borderTop: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
-                      paddingTop: 16,
-                      marginTop: 8,
-                    }}
-                  >
-                    <div style={{ fontSize: 12, fontWeight: 600, color: isDark ? DT.textMuted : '#94A3B8', marginBottom: 8 }}>
-                      Supplier / Vendor (optional)
-                    </div>
-                    {Autocomplete && (
-                      <Autocomplete
-                        options={suppliers}
-                        getOptionLabel={(option: Supplier) => `${option.name}${option.code ? ` (${option.code})` : ''}`}
-                        value={selectedSupplier}
-                        onChange={(_: any, newValue: Supplier | null) => setSelectedSupplier(newValue)}
-                        renderInput={(params: any) => (
-                          <TextField
-                            {...params}
-                            label="Select Supplier"
-                            placeholder="Search suppliers..."
-                            size="small"
-                            fullWidth
-                          />
-                        )}
-                        noOptionsText="No suppliers found"
-                        clearOnBlur={false}
-                      />
-                    )}
-                  </div>
-                </DialogContent>
-                <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}>
-                  <MuiButton
-                    onClick={() => {
-                      setAddEmployeeOpen(false);
-                      setSelectedProfile(null);
-                      setSelectedSupplier(null);
-                      setManualEmployee({ name: '', number: '', designation: '' });
-                      setEmployeeSearchResults([]);
-                    }}
-                    sx={{ textTransform: 'none', fontWeight: 600 }}
-                  >
-                    Cancel
-                  </MuiButton>
-                  <MuiButton
-                    variant="contained"
-                    onClick={handleAddEmployee}
-                    disabled={!selectedProfile && !manualEmployee.name.trim()}
-                    sx={{
-                      textTransform: 'none',
-                      fontWeight: 600,
-                      borderRadius: 2,
-                      px: 3,
-                    }}
-                  >
-                    Add Employee
-                  </MuiButton>
-                </DialogActions>
-              </Dialog>
-            )}
-
-            {/* Auto-Fill Dialog */}
-            {Dialog && (
-              <Dialog
-                open={autoFillOpen}
-                onClose={() => setAutoFillOpen(false)}
-                maxWidth="xs"
-                fullWidth
-                PaperProps={{
-                  sx: {
-                    borderRadius: 3,
-                    backgroundImage: 'none',
-                  },
-                }}
-              >
-                <DialogTitle
-                  sx={{
-                    pb: 1,
-                    pt: 3,
-                    px: 3,
-                    borderBottom: '1px solid',
-                    borderColor: 'divider',
-                  }}
-                >
-                  <div style={{ fontSize: 18, fontWeight: 700 }}>Auto-Fill Hours</div>
-                  <div style={{ fontSize: 13, fontWeight: 400, opacity: 0.6, marginTop: 2 }}>
-                    Fill all weekday cells (Sun-Thu) for every employee
-                  </div>
-                </DialogTitle>
-                <DialogContent
-                  sx={{
-                    pt: '24px !important',
-                    pb: 1,
-                    px: 3,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 2,
-                  }}
-                >
-                  <TextField
-                    label="Hours per day"
-                    type="number"
-                    value={autoFillHours}
-                    onChange={(e: any) => setAutoFillHours(e.target.value)}
-                    fullWidth
-                    size="small"
-                    inputProps={{ min: 0, max: 24, step: 0.5 }}
-                  />
-                </DialogContent>
-                <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}>
-                  <MuiButton onClick={() => setAutoFillOpen(false)} sx={{ textTransform: 'none', fontWeight: 600 }}>
-                    Cancel
-                  </MuiButton>
-                  <MuiButton
-                    variant="contained"
-                    onClick={handleAutoFill}
-                    sx={{
-                      textTransform: 'none',
-                      fontWeight: 600,
-                      borderRadius: 2,
-                      px: 3,
-                    }}
-                  >
-                    Fill Hours
-                  </MuiButton>
-                </DialogActions>
-              </Dialog>
-            )}
-
-            {/* Snackbar */}
             {Snackbar && (
               <Snackbar
                 open={snackbar.open}
@@ -1622,183 +1159,17 @@ export default function TimesheetsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background dark:bg-[#0F172A]" edges={['top']}>
-      <ScreenHeader title="Timesheet Entries" />
+      <ScreenHeader title="Monthly Consolidated" />
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 8, flexGrow: 1 }}>
-        {/* Project + Week info */}
-        {availableProjects.length === 0 ? (
-          <View className="flex-1 items-center justify-center py-12">
-            <Text className="text-base font-semibold text-text-primary dark:text-white mb-2">
-              {isHR ? 'No Projects Found' : 'No Project Assignments'}
-            </Text>
-            <Text className="text-sm text-text-muted dark:text-slate-400 text-center px-8">
-              {isHR ? 'No projects have been created yet.' : 'You have not been assigned to any projects yet. Contact your administrator.'}
-            </Text>
-          </View>
-        ) : (
-          <>
-            {/* Project selector (mobile) */}
-            <View className="mb-3 p-4 rounded-xl border border-border dark:border-slate-700 bg-surface dark:bg-slate-800">
-              <Text className="text-xs text-text-muted dark:text-slate-400 mb-1 font-semibold">PROJECT</Text>
-              <Text className="text-base font-bold text-text-primary dark:text-white">
-                {selectedProject ? `${selectedProject.project_number} - ${selectedProject.name}` : 'None selected'}
-              </Text>
-              {selectedProjectId && keeperByProject[selectedProjectId] && (
-                <Text className="text-xs text-amber-400 mt-1 font-semibold">
-                  Assigned to: {keeperByProject[selectedProjectId]}
-                </Text>
-              )}
-            </View>
-
-            {/* Week display (mobile) */}
-            <View className="mb-3 p-4 rounded-xl border border-border dark:border-slate-700 bg-surface dark:bg-slate-800">
-              <View className="flex-row items-center justify-between">
-                <Pressable
-                  onPress={goToPrevWeek}
-                  className="w-10 h-10 items-center justify-center rounded-full active:opacity-70"
-                >
-                  <Text className="text-lg font-bold text-text-primary dark:text-white">{'<'}</Text>
-                </Pressable>
-                <View className="flex-1 items-center">
-                  <Text className="text-xs text-text-muted dark:text-slate-400 font-semibold">WEEK</Text>
-                  <Text className="text-sm font-bold text-text-primary dark:text-white mt-0.5">
-                    {weekLabel}
-                  </Text>
-                </View>
-                <Pressable
-                  onPress={goToNextWeek}
-                  className="w-10 h-10 items-center justify-center rounded-full active:opacity-70"
-                >
-                  <Text className="text-lg font-bold text-text-primary dark:text-white">{'>'}</Text>
-                </Pressable>
-              </View>
-            </View>
-
-            {/* Status (mobile) */}
-            <View className="mb-3 p-3 rounded-xl border border-border dark:border-slate-700 bg-surface dark:bg-slate-800 flex-row items-center justify-between">
-              <Text className="text-xs text-text-muted dark:text-slate-400 font-semibold">STATUS</Text>
-              <View
-                style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 3,
-                  borderRadius: 10,
-                  backgroundColor: getSubmissionBadgeStyle(submissionStatus).bg,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 11,
-                    fontWeight: '700',
-                    color: getSubmissionBadgeStyle(submissionStatus).text,
-                  }}
-                >
-                  {getSubmissionStatusLabel(submissionStatus)}
-                </Text>
-              </View>
-            </View>
-
-            {/* Desktop editing message */}
-            <View className="mb-3 p-4 rounded-xl border border-border dark:border-slate-700 bg-blue-900/20">
-              <Text className="text-sm text-blue-400 text-center font-semibold">
-                Open on desktop for full editing
-              </Text>
-              <Text className="text-xs text-slate-400 text-center mt-1">
-                The timesheet grid is best viewed on a wide screen
-              </Text>
-            </View>
-
-            {/* Read-only employee cards (mobile) */}
-            {entriesLoading ? (
-              <View className="py-8 items-center">
-                <Text className="text-sm text-text-muted dark:text-slate-400">Loading entries...</Text>
-              </View>
-            ) : gridRows.length === 0 ? (
-              <View className="py-8 items-center">
-                <Text className="text-sm text-text-muted dark:text-slate-400">No entries for this week</Text>
-              </View>
-            ) : (
-              gridRows.map((row, idx) => {
-                const rowTotal = computeRowTotalFromMap(row.hours);
-                return (
-                  <View
-                    key={row.key}
-                    className="mb-3 p-4 rounded-xl border border-border dark:border-slate-700 bg-surface dark:bg-slate-800"
-                  >
-                    <View className="flex-row justify-between items-start mb-2">
-                      <View className="flex-1 mr-3">
-                        <Text className="text-base font-bold text-text-primary dark:text-white">
-                          {row.employee_name}
-                        </Text>
-                        <Text className="text-xs text-text-muted dark:text-slate-400 mt-0.5">
-                          {row.designation || 'No designation'}{row.supplier_name ? ` · ${row.supplier_name}` : ''} · {row.shift === 'N' ? 'Night' : 'Day'}
-                        </Text>
-                      </View>
-                      <View className="bg-blue-900/30 px-2 py-1 rounded-md">
-                        <Text className="text-xs font-bold text-blue-400">{rowTotal}h</Text>
-                      </View>
-                    </View>
-
-                    {/* Daily hours */}
-                    <View className="flex-row flex-wrap gap-1 mt-1">
-                      {weekDays.map((day) => {
-                        const h = row.hours[day.dateStr] || 0;
-                        const isWeekendDay = isSaudiWeekend(day.dateStr);
-                        return (
-                          <View
-                            key={day.dateStr}
-                            style={{
-                              width: '13%',
-                              alignItems: 'center',
-                              paddingVertical: 4,
-                              borderRadius: 6,
-                              backgroundColor: isWeekendDay
-                                ? isDark ? '#1e293b' : '#f1f5f9'
-                                : isDark ? '#0f172a' : '#f8fafc',
-                            }}
-                          >
-                            <Text
-                              style={{
-                                fontSize: 10,
-                                fontWeight: '600',
-                                color: isDark ? '#64748b' : '#94a3b8',
-                              }}
-                            >
-                              {day.dayShort}
-                            </Text>
-                            <Text
-                              style={{
-                                fontSize: 13,
-                                fontWeight: '700',
-                                color: h > 0 ? (isDark ? '#FFFFFF' : '#0f172a') : (isDark ? '#475569' : '#cbd5e1'),
-                                marginTop: 2,
-                              }}
-                            >
-                              {h}
-                            </Text>
-                          </View>
-                        );
-                      })}
-                    </View>
-                  </View>
-                );
-              })
-            )}
-
-            {/* Mobile summary */}
-            {gridRows.length > 0 && (
-              <View className="mb-3 p-4 rounded-xl border border-border dark:border-slate-700 bg-surface dark:bg-slate-800">
-                <View className="flex-row justify-between items-center">
-                  <Text className="text-sm font-semibold text-text-muted dark:text-slate-400">
-                    Total ({gridRows.length} {gridRows.length === 1 ? 'employee' : 'employees'})
-                  </Text>
-                  <Text className="text-lg font-bold" style={{ color: DT.primary }}>
-                    {grandTotal}h
-                  </Text>
-                </View>
-              </View>
-            )}
-          </>
-        )}
+        <View className="flex-1 items-center justify-center py-12">
+          <Text className="text-base font-semibold text-text-primary dark:text-white mb-2">
+            Monthly Consolidated View
+          </Text>
+          <Text className="text-sm text-text-muted dark:text-slate-400 text-center px-8">
+            This view is best experienced on a desktop. Open on a wide screen to see the full consolidated hours breakdown.
+          </Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
