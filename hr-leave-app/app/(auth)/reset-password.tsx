@@ -43,67 +43,92 @@ export default function ResetPasswordScreen() {
     defaultValues: { newPassword: '', confirmPassword: '' },
   });
 
-  // On mount, figure out whether the recovery token is good or already used.
-  // Two signals tell us this is valid:
-  //   1. The Supabase client fires a PASSWORD_RECOVERY (or SIGNED_IN with a
-  //      session) event after it parses the URL hash. We listen for that.
-  //   2. getSession() returns a session.
-  // Two signals tell us it's NOT valid:
-  //   - The URL hash already contains an explicit Supabase error
-  //     (error_code=otp_expired etc.)
-  //   - 3 seconds pass with no session and no error → fallback to invalid.
+  // On mount, exchange the recovery tokens in the URL hash for a session.
+  //
+  // The global supabase client is configured with detectSessionInUrl: false
+  // (in services/supabase/client.ts) to avoid Web Lock race errors during
+  // normal app navigation. That means the recovery token in the URL hash
+  // does NOT auto-establish a session — we have to call setSession()
+  // explicitly here using the access_token + refresh_token from the hash.
+  //
+  // Three possible URL shapes coming in:
+  //   #access_token=...&refresh_token=...&type=recovery   → valid recovery
+  //   #error=access_denied&error_code=otp_expired&...      → already used / expired
+  //   (empty / no tokens)                                  → user landed here directly
   useEffect(() => {
     let cancelled = false;
 
-    // Check URL hash for an explicit error from Supabase.
-    if (typeof window !== 'undefined' && window.location?.hash) {
-      const hash = window.location.hash.replace(/^#/, '');
-      const params = new URLSearchParams(hash);
-      const errorCode = params.get('error_code');
+    if (typeof window === 'undefined') return;
+
+    const rawHash = window.location.hash.replace(/^#/, '');
+    const params = new URLSearchParams(rawHash);
+
+    // Path 1 — explicit error from Supabase
+    const errorCode = params.get('error_code');
+    if (errorCode) {
       const errorDescription = params.get('error_description');
-      if (errorCode) {
-        const friendly =
-          errorCode === 'otp_expired'
-            ? 'This reset link has already been used or has expired.'
-            : (errorDescription?.replace(/\+/g, ' ') || 'This reset link is no longer valid.');
-        setLinkErrorReason(friendly);
-        setLinkState('invalid');
-        return;
-      }
+      const friendly =
+        errorCode === 'otp_expired'
+          ? 'This reset link has already been used or has expired.'
+          : (errorDescription?.replace(/\+/g, ' ') || 'This reset link is no longer valid.');
+      setLinkErrorReason(friendly);
+      setLinkState('invalid');
+      return;
     }
 
-    // Subscribe to Supabase auth events. PASSWORD_RECOVERY fires once the
-    // recovery token in the URL hash has been validated and a session built.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (cancelled) return;
-      if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && session) || (event === 'INITIAL_SESSION' && session)) {
-        setLinkState('valid');
-      }
-    });
+    // Path 2 — recovery tokens present, exchange them for a session
+    const accessToken = params.get('access_token');
+    const refreshToken = params.get('refresh_token');
 
-    // Belt-and-braces: also poll once after 600ms — covers the case where
-    // the auth event already fired before this listener was attached.
-    const earlyCheck = setTimeout(async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!cancelled && session) setLinkState('valid');
-    }, 600);
+    if (accessToken && refreshToken) {
+      (async () => {
+        try {
+          const { error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (cancelled) return;
+          if (error) {
+            setLinkErrorReason(error.message || 'Could not verify the reset link.');
+            setLinkState('invalid');
+          } else {
+            setLinkState('valid');
+            // Clean the tokens out of the URL so a back-button doesn't replay them.
+            try {
+              window.history.replaceState({}, document.title, window.location.pathname);
+            } catch {}
+          }
+        } catch (e: any) {
+          if (cancelled) return;
+          setLinkErrorReason(e?.message || 'Could not verify the reset link.');
+          setLinkState('invalid');
+        }
+      })();
+      return;
+    }
 
-    // Fallback: 3 seconds with no event and no session → declare invalid.
-    const fallback = setTimeout(async () => {
-      if (cancelled) return;
-      const { data: { session } } = await supabase.auth.getSession();
-      if (cancelled) return;
-      if (!session) {
-        setLinkErrorReason('This reset link has already been used or has expired.');
+    // Path 3 — no tokens, no error. Maybe an existing session is already in
+    // place (e.g. user opened reset-password manually). Allow them to proceed
+    // if so; otherwise mark invalid.
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (cancelled) return;
+        if (session) {
+          setLinkState('valid');
+        } else {
+          setLinkErrorReason('No reset link detected. Request a new link to continue.');
+          setLinkState('invalid');
+        }
+      } catch {
+        if (cancelled) return;
+        setLinkErrorReason('Could not verify the reset link.');
         setLinkState('invalid');
       }
-    }, 3000);
+    })();
 
     return () => {
       cancelled = true;
-      subscription.unsubscribe();
-      clearTimeout(earlyCheck);
-      clearTimeout(fallback);
     };
   }, []);
 
