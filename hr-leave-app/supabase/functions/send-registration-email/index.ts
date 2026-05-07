@@ -94,7 +94,7 @@ function buildEmail(payload: EmailPayload): { subject: string; html: string } {
         html: wrap(`
           <h2 style="color: #16A34A;">Registration Approved!</h2>
           <p>Hi ${payload.recipientName},</p>
-          <p>Your registration has been approved. You now have full access to the HR System.</p>
+          <p>Your registration has been approved. You now have full access to the Poly-Tech HR Management System.</p>
           <a href="${APP_URL}" style="display: inline-block; background: #2563EB; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin-top: 8px; font-weight: 600;">
             Sign In Now
           </a>

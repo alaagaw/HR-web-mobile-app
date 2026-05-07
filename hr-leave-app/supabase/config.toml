@@ -45,5 +45,5 @@ otp_length = 8
 otp_expiry = 3600
 
 [auth.email.template.recovery]
-subject = "Welcome to HR System — Set your password"
+subject = "Welcome to Poly-Tech HR Management System — Set your password"
 content_path = "./supabase/templates/recovery.html"

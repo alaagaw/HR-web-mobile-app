@@ -166,7 +166,7 @@ async function inviteWithMagicLink(supabase: any, profileId: string, redirectBas
   await supabase.from('notifications').insert({
     user_id: profileId,
     type: 'employee_invited',
-    title: 'Welcome to HR System',
+    title: 'Welcome to Poly-Tech HR Management System',
     body: 'Check your email for a link to set your password and sign in.',
   });
 }
@@ -214,8 +214,8 @@ async function inviteWithTempPassword(
     to: profile.email,
     from: fromAddress,
     subject: isResend
-      ? 'Your HR System password has been reset'
-      : 'Welcome to HR System — Your Account',
+      ? 'Your Poly-Tech HR password has been reset'
+      : 'Welcome to Poly-Tech HR Management System',
     html: buildTempPasswordHtml({
       employeeName: profile.full_name || 'there',
       employeeEmail: profile.email,
@@ -229,7 +229,7 @@ async function inviteWithTempPassword(
   await supabase.from('notifications').insert({
     user_id: profileId,
     type: 'employee_invited',
-    title: isResend ? 'Password reset by HR' : 'Welcome to HR System',
+    title: isResend ? 'Password reset by HR' : 'Welcome to Poly-Tech HR Management System',
     body: isResend
       ? 'Your password has been reset. Check your email for the new temporary password.'
       : 'Your account has been created. Please sign in and change your password.',
@@ -253,25 +253,38 @@ function buildTempPasswordHtml(params: {
   isResend: boolean;
   appUrl: string;
 }): string {
-  const heading = params.isResend ? 'Your password has been reset' : `Welcome, ${params.employeeName}!`;
+  const heading = params.isResend
+    ? 'Your password has been reset'
+    : `Welcome to Poly-Tech HR Management System, ${params.employeeName}!`;
   const intro = params.isResend
     ? `${params.hrName} has reset your password. Use the temporary password below to sign in, then change it immediately.`
-    : `Your HR System account has been created by ${params.hrName}. Use the credentials below to sign in. You'll be prompted to change your password right away.`;
+    : `Your account has been created by ${params.hrName}. Use the credentials below to sign in. You'll be prompted to change your password right away.`;
 
   return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #0F172A;">
-      <h2 style="color: #1E40AF; margin-top: 0;">${heading}</h2>
-      <p>${intro}</p>
-      <div style="background: #F1F5F9; border-radius: 8px; padding: 16px; margin: 16px 0;">
-        <p style="margin: 4px 0;"><strong>Email:</strong> ${params.employeeEmail}</p>
-        <p style="margin: 4px 0;"><strong>Temporary Password:</strong> <code style="font-size: 15px;">${params.tempPassword}</code></p>
+    <div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 0 auto; color: #0F172A; background: #FFFFFF; border-radius: 12px; overflow: hidden;">
+      <div style="background: #0F172A;">
+        <img src="${params.appUrl}/PolyTech_background.png"
+             alt="Poly-Tech"
+             width="600"
+             style="display: block; width: 100%; max-width: 600px; height: auto; border: 0;">
       </div>
-      <a href="${params.appUrl}" style="display: inline-block; background: #2563EB; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin-top: 8px; font-weight: 600;">
-        Open HR System
-      </a>
-      <p style="margin-top: 24px; font-size: 12px; color: #64748B;">
-        If you weren't expecting this email, please contact ${params.hrName}.
-      </p>
+      <div style="padding: 32px 28px;">
+        <h2 style="color: #1E40AF; margin: 0 0 12px; font-size: 22px;">${heading}</h2>
+        <p style="margin: 0 0 20px; line-height: 1.5;">${intro}</p>
+        <div style="background: #F1F5F9; border-radius: 8px; padding: 16px; margin: 16px 0;">
+          <p style="margin: 4px 0;"><strong>Email:</strong> ${params.employeeEmail}</p>
+          <p style="margin: 4px 0;"><strong>Temporary Password:</strong> <code style="font-size: 15px;">${params.tempPassword}</code></p>
+        </div>
+        <p style="text-align: center; margin: 28px 0;">
+          <a href="${params.appUrl}" style="display: inline-block; background: #2563EB; color: #FFFFFF; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px;">
+            Open Poly-Tech HR
+          </a>
+        </p>
+        <hr style="margin: 28px 0; border: none; border-top: 1px solid #E2E8F0;">
+        <p style="font-size: 12px; color: #94A3B8; margin: 0;">
+          If you weren't expecting this email, please contact ${params.hrName}.
+        </p>
+      </div>
     </div>
   `;
 }

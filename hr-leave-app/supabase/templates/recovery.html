@@ -1,19 +1,39 @@
-<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #0F172A;">
-  <h2 style="color: #1E40AF; margin-top: 0;">Welcome to HR System!</h2>
-  <p>Hi,</p>
-  <p>You've been added as an employee by HR. Click the button below to set your password and sign in.</p>
-  <p style="text-align: center; margin: 28px 0;">
-    <a href="{{ .ConfirmationURL }}"
-       style="display: inline-block; background: #2563EB; color: #ffffff; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600;">
-      Set Your Password
-    </a>
-  </p>
-  <p style="font-size: 13px; color: #64748B;">
-    Or copy this link:<br>
-    <a href="{{ .ConfirmationURL }}" style="color: #2563EB; word-break: break-all;">{{ .ConfirmationURL }}</a>
-  </p>
-  <hr style="margin: 28px 0; border: none; border-top: 1px solid #E2E8F0;">
-  <p style="font-size: 12px; color: #94A3B8;">
-    If you didn't expect this email, you can safely ignore it.
-  </p>
+<div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 0 auto; color: #0F172A; background: #FFFFFF; border-radius: 12px; overflow: hidden;">
+
+  <!-- Hero image -->
+  <div style="background: #0F172A;">
+    <img src="{{ .SiteURL }}/PolyTech_background.png"
+         alt="Poly-Tech"
+         width="600"
+         style="display: block; width: 100%; max-width: 600px; height: auto; border: 0;">
+  </div>
+
+  <!-- Body -->
+  <div style="padding: 32px 28px;">
+    <h2 style="color: #1E40AF; margin: 0 0 12px; font-size: 22px;">
+      Welcome to Poly-Tech HR Management System!
+    </h2>
+    <p style="margin: 0 0 16px; line-height: 1.5;">Hi,</p>
+    <p style="margin: 0 0 20px; line-height: 1.5;">
+      You've been added as an employee by HR. Click the button below to set your password and sign in.
+    </p>
+
+    <p style="text-align: center; margin: 28px 0;">
+      <a href="{{ .ConfirmationURL }}"
+         style="display: inline-block; background: #2563EB; color: #FFFFFF; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px;">
+        Set Your Password
+      </a>
+    </p>
+
+    <p style="font-size: 13px; color: #64748B; margin: 16px 0 0;">
+      Or copy this link into your browser:<br>
+      <a href="{{ .ConfirmationURL }}" style="color: #2563EB; word-break: break-all;">{{ .ConfirmationURL }}</a>
+    </p>
+
+    <hr style="margin: 28px 0; border: none; border-top: 1px solid #E2E8F0;">
+
+    <p style="font-size: 12px; color: #94A3B8; margin: 0;">
+      If you didn't expect this email, you can safely ignore it.
+    </p>
+  </div>
 </div>
