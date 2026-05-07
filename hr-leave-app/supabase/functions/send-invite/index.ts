@@ -134,11 +134,12 @@ serve(async (req: Request) => {
 async function inviteWithMagicLink(supabase: any, profileId: string, redirectBase: string): Promise<void> {
   const { data: profile, error: profileErr } = await supabase
     .from('profiles')
-    .select('id, email, full_name, registration_status')
+    .select('id, email, full_name, registration_status, is_active')
     .eq('id', profileId)
     .single();
   if (profileErr || !profile) throw new Error('Profile not found');
   if (!profile.email) throw new Error('Profile has no email address');
+  if (!profile.is_active) throw new Error('Cannot invite an inactive employee — reactivate first');
 
   // Trigger Supabase's built-in password-recovery email. We use the anon-key
   // client because resetPasswordForEmail is a public unauthenticated RPC.
@@ -183,14 +184,16 @@ async function inviteWithTempPassword(
 ): Promise<void> {
   const { data: profile, error: profileErr } = await supabase
     .from('profiles')
-    .select('id, email, full_name, registration_status')
+    .select('id, email, full_name, registration_status, is_active')
     .eq('id', profileId)
     .single();
   if (profileErr || !profile) throw new Error('Profile not found');
   if (!profile.email) throw new Error('Profile has no email address');
+  if (!profile.is_active) throw new Error('Cannot invite an inactive employee — reactivate first');
 
   const tempPassword = generateTempPassword();
-  const isResend = profile.registration_status === 'active';
+  // "Resend" framing applies to anyone who's already past the not_invited stage.
+  const isResend = profile.registration_status !== 'not_invited';
 
   // Reset the password (the auth user already exists from create-employee).
   const { error: pwErr } = await supabase.auth.admin.updateUserById(profileId, {

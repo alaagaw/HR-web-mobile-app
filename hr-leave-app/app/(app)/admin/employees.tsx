@@ -392,24 +392,18 @@ function WebEmployeesTable({
         open={!!menuAnchor}
         onClose={closeMenu}
       >
-        {menuStatus === 'not_invited' && (
+        {/* HR can send / resend an invite at any time, as long as the
+            employee is still active. Label adapts based on status. */}
+        {menuRow?.is_active && (
           <MenuItem
             onClick={() => {
               if (menuRow) onSendInvite(menuRow.id);
               closeMenu();
             }}
           >
-            Send Invite
-          </MenuItem>
-        )}
-        {menuStatus === 'active' && (
-          <MenuItem
-            onClick={() => {
-              if (menuRow) onSendInvite(menuRow.id);
-              closeMenu();
-            }}
-          >
-            Resend Invite (regenerate password)
+            {menuStatus === 'not_invited'
+              ? 'Send Invite'
+              : 'Resend Invite (regenerate password)'}
           </MenuItem>
         )}
         <MenuItem
@@ -472,10 +466,11 @@ function EditEmployeeDialog({
     !!state.supervisor_id &&
     !!state.manager_id;
 
-  // Conditional "Send invite now" — only applicable when the employee has
-  // never been invited yet (status = not_invited). For Active employees,
-  // the row's 3-dot menu has "Resend Invite" instead.
-  const canShowSendInviteNow = emp.registration_status === 'not_invited';
+  // "Send invite now" — available for any active employee. For not_invited
+  // it's the first invite; for everything else it regenerates the password
+  // and re-sends the email.
+  const canShowSendInviteNow = emp.is_active;
+  const isFirstInvite = emp.registration_status === 'not_invited';
 
   return (
     <Dialog
@@ -647,7 +642,7 @@ function EditEmployeeDialog({
           <MenuItem value="inactive">Inactive</MenuItem>
         </MuiTextField>
 
-        {/* Send invite now — only for Not-Invited employees */}
+        {/* Send invite now — available for any active employee (first send or resend) */}
         {canShowSendInviteNow && (
           <div style={{ marginTop: 8, padding: 12, borderRadius: 8, border: '1px dashed rgba(148,163,184,0.5)' }}>
             <FormControlLabel
@@ -659,9 +654,13 @@ function EditEmployeeDialog({
               }
               label={
                 <span style={{ fontSize: 13 }}>
-                  <strong>Send invite email after saving.</strong>{' '}
+                  <strong>
+                    {isFirstInvite ? 'Send invite email after saving.' : 'Resend invite email after saving (regenerates password).'}
+                  </strong>{' '}
                   <span style={{ opacity: 0.7 }}>
-                    Use this once you've finished filling in the missing fields for a Not-Invited employee.
+                    {isFirstInvite
+                      ? "Use this once you've finished filling in the missing fields for a Not-Invited employee."
+                      : 'Useful if the employee lost the original email or you just changed their email address.'}
                   </span>
                 </span>
               }
@@ -1062,13 +1061,16 @@ export default function EmployeesScreen() {
           );
       }
 
-      // 4. Optional: HR finished a Not-Invited row and ticked "Send invite now".
+      // 4. Optional: HR ticked "Send invite now". Works for any active
+      //    employee — first invite for not_invited, resend (regenerates
+      //    password) for everyone else.
       let inviteSummary = '';
-      if (dialog.send_invite_now && dialog.employee.registration_status === 'not_invited') {
+      if (dialog.send_invite_now && dialog.is_active) {
         const results = await registrationService.sendInvites([employeeId]);
         const result = results[0];
+        const verb = dialog.employee.registration_status === 'not_invited' ? 'invite emailed' : 'invite resent';
         inviteSummary = result?.success
-          ? ' and invite emailed'
+          ? ` and ${verb}`
           : ` but invite email failed: ${result?.error || 'unknown error'}`;
       }
 
@@ -1136,12 +1138,14 @@ export default function EmployeesScreen() {
 
   const handleSendInvites = async (ids: string[]) => {
     if (ids.length === 0) return;
+    // HR can send / resend an invite to any active employee at any time.
+    // Inactive employees are blocked — reactivate first.
     const eligibleIds = ids.filter((id) => {
       const emp = employees.find((e) => e.id === id);
-      return emp && (emp.registration_status === 'not_invited' || emp.registration_status === 'active');
+      return emp && emp.is_active;
     });
     if (eligibleIds.length === 0) {
-      setSuccessMsg('No invite-eligible rows selected.');
+      setSuccessMsg('No invite-eligible rows selected (employees must be active).');
       return;
     }
 
