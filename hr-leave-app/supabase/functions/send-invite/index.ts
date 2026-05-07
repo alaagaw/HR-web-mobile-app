@@ -263,8 +263,8 @@ function buildTempPasswordHtml(params: {
   return `
     <div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 0 auto; color: #0F172A; background: #FFFFFF; border-radius: 12px; overflow: hidden;">
       <div style="background: #0F172A;">
-        <img src="${params.appUrl}/PolyTech_background.png"
-             alt="Poly-Tech"
+        <img src="${params.appUrl}/Poly-Tech_HR_Management_System.png"
+             alt="Poly-Tech HR Management System"
              width="600"
              style="display: block; width: 100%; max-width: 600px; height: auto; border: 0;">
       </div>
