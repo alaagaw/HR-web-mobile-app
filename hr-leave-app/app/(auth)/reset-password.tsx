@@ -8,6 +8,7 @@ import { createClient } from '@supabase/supabase-js';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Banner } from '@/components/ui/banner';
+import { useAuthStore } from '@/stores/auth-store';
 import { changePasswordSchema, type ChangePasswordFormData } from '@/lib/validators';
 
 /**
@@ -164,6 +165,24 @@ export default function ResetPasswordScreen() {
       });
       if (updateErr) throw updateErr;
       setDone(true);
+
+      // Wipe the persisted Zustand auth store BEFORE the hard navigation.
+      //
+      // Why: the store persists `user` to AsyncStorage. After window.location
+      // reloads the page, Zustand restores that cached user — which may be
+      // STALE (e.g. for a user who just bulk-demoted themselves to
+      // `pending_info`, the cached value still says `active`). Index.tsx
+      // would route based on the stale status, briefly mounting the dashboard
+      // and triggering errors before fresh auth re-validates.
+      //
+      // Clearing the store forces Index.tsx to wait for the auth listener
+      // to fire with a fresh profile fetch, then route correctly.
+      try {
+        useAuthStore.getState().clear();
+      } catch {
+        /* non-fatal — worst case we get the brief dashboard flash again */
+      }
+
       // Force a hard navigation so the global client re-reads the session
       // from localStorage and the auth guard sees the user as signed in.
       // window.location.replace doesn't add a history entry, which is the
