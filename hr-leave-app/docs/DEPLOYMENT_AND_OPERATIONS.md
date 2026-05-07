@@ -32,10 +32,14 @@ How to deploy, what NOT to do, and the gotchas we already paid the price for.
 | Linked CLI workdir | `hr-leave-app/` (where `supabase/` lives) | `supabase link --project-ref ...` |
 | `INVITE_MODE` | `magic_link` | Edge Function secrets |
 | `APP_URL` | `https://gaw-hr.vercel.app` | Edge Function secrets (fallback only — web client overrides via `window.location.origin`) |
+| `RESEND_API_KEY` | `re_***` (set 2026-05-08) | Edge Function secrets |
+| `EMAIL_FROM` | `HR System <noreply@polytech-hr.com>` | Edge Function secrets |
+| `EMAIL_PROVIDER` | `resend` | Edge Function secrets |
 | Site URL | `https://gaw-hr.vercel.app` | Auth → URL Configuration |
 | Redirect URLs | `https://gaw-hr.vercel.app/reset-password`, `http://localhost:8081/reset-password` | Auth → URL Configuration |
-| SMTP | Supabase default (`noreply@mail.app.supabase.io`, ~3/hr limit) | Auth → SMTP Settings (will switch to Resend in Setup 3.B) |
-| Email template `recovery` | "Welcome to HR System — Set your password" | `supabase/templates/recovery.html` (also editable in Dashboard) |
+| SMTP | **Resend via `polytech-hr.com`** — sender `noreply@polytech-hr.com`, host `smtp.resend.com`, port 465 (Setup 3.A.bis, 2026-05-08) | Auth → Notifications → Email → SMTP |
+| Email template `recovery` | "Welcome to Poly-Tech HR Management System — Set your password" with hero banner | `supabase/templates/recovery.html` + `supabase/config.toml` |
+| Email branding | "Poly-Tech HR Management System" with `PolyTech_background.png` hero banner | hardcoded in templates and Edge Function HTML |
 
 ---
 
@@ -198,32 +202,36 @@ There is no warning, no "are you sure you want to overwrite these other fields" 
 
 ## 7. Setup phases (where we are vs. where we're going)
 
-### ✅ Setup 3.A — Done
+### ✅ Setup 3.A — Done (2026-05-07)
 
 - Migrations 014, 015, 016 applied
 - Edge Function secrets set: `INVITE_MODE=magic_link`, `APP_URL=https://gaw-hr.vercel.app`
 - Site URL + Redirect URLs configured
-- Edge Functions deployed: `create-employee`, `send-invite`, `send-registration-email`
+- Edge Functions deployed: `create-employee`, `send-invite`, `send-registration-email`, `update-employee-email`
 - Email template "Reset Password" customized as a welcome message
 - End-to-end invite flow verified working
 
-### ⏳ Setup 3.B — Pending (Resend domain verification)
+### ✅ Setup 3.A.bis — Done (2026-05-08)
 
-When the polytech.com.sa DNS owner adds the records:
+The Supabase default SMTP (`noreply@mail.app.supabase.io`) hit a rate limit during testing AND was suspected (likely correctly) of having its links pre-fetched by Gmail link scanners. To unblock without waiting on the polytech.com.sa DNS owner, we bought a throwaway domain and routed through Resend:
 
-1. Add `RESEND_API_KEY` as Edge Function secret
-2. Add `EMAIL_FROM=HR System <noreply@polytech.com.sa>` as Edge Function secret
-3. Plug Resend SMTP into Supabase Auth → SMTP Settings:
-   - host: `smtp.resend.com`
-   - port: `465`
-   - user: `resend`
-   - password: the API key
-   - sender: `noreply@polytech.com.sa`
-4. (Optional) Switch `INVITE_MODE` to `temp_password` if you want HR-from-address branded invites instead of "set your own password" links.
+- Bought `polytech-hr.com` from Cloudflare (~$10/yr)
+- Verified the domain in Resend via Cloudflare auto-configure (DKIM, SPF MX, SPF TXT)
+- Generated a Resend API key
+- Plugged Resend SMTP into Supabase Auth → SMTP Settings (sender `noreply@polytech-hr.com`)
+- Added `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_PROVIDER=resend` as Edge Function secrets
+- Email branded as "Poly-Tech HR Management System" with hero banner image (`PolyTech_background.png`)
+- Verified end-to-end: invite to Yahoo, click link, set password, sign in — works.
 
-After 3.B: same flow, but emails come from `noreply@polytech.com.sa`, deliverability jumps, and the rate limit goes from ~3/hr to Resend's quota (100/day on free, 50k/mo on $20 tier).
+### ⏳ Setup 3.B — Pending (DNS owner)
 
-No code change required for 3.B. It's pure Supabase Dashboard config.
+When the polytech.com.sa DNS owner adds Resend's records and the domain shows ✅ Verified in Resend:
+
+1. Supabase Dashboard → Authentication → Notifications → Email → SMTP Settings → change **Sender email** from `noreply@polytech-hr.com` to `noreply@polytech.com.sa`. Save.
+2. Edge Function secrets → update `EMAIL_FROM` to `HR System <noreply@polytech.com.sa>`.
+3. (Optional) Cancel auto-renew on `polytech-hr.com` in Cloudflare if you don't want it as a permanent fallback.
+
+That's it. No code change. The infrastructure is identical — only the sender domain swaps.
 
 ---
 
@@ -263,3 +271,75 @@ supabase config push       # NO --yes, so you can inspect the diff first
 - **GitHub Actions to auto-deploy Edge Functions on push**: would require a `SUPABASE_ACCESS_TOKEN` GitHub secret and a workflow that runs `supabase functions deploy` whenever files in `supabase/functions/**` change. ~30 min one-time setup, eliminates the "remember to run the CLI" step. Worth doing once the function code stabilizes.
 - **Migrations via `supabase db push`** instead of Dashboard SQL Editor: requires the migrations to be in a clean state and the link to be working. Less risky than auth config pushes, but still requires care. Currently we paste SQL manually — works fine for a small project.
 - **Preview deployments per PR**: Vercel already does this for the frontend. Would also need a way to provision Supabase preview environments — non-trivial.
+
+---
+
+## 10. The recovery-client gotcha — read this if you change supabase auth code
+
+### What happened (2026-05-08)
+
+The reset-password page kept showing "Reset link unavailable" on perfectly valid recovery links. Multiple cascading causes — diagnosed by adding console.log statements and reading the actual behaviour:
+
+1. The global supabase client (in `services/supabase/client.ts`) is initialized with `detectSessionInUrl: false` — done deliberately to avoid bugs elsewhere, but it means the client doesn't auto-process recovery tokens in the URL hash.
+2. The same client also has a no-op `lock` override (line 31) — done to prevent "signal is aborted" errors during normal app navigation. But that no-op breaks `supabase.auth.setSession()` for the recovery flow: the call hangs forever, never resolving, never throwing.
+3. So manually calling `setSession()` with the tokens from the URL hash (the obvious workaround for #1) didn't work either.
+
+### How we fixed it
+
+[`app/(auth)/reset-password.tsx`](../app/(auth)/reset-password.tsx) creates a **dedicated supabase client** just for the recovery flow, with SDK defaults (Web Lock + `detectSessionInUrl: true`). That client parses the URL hash automatically on construction and fires `PASSWORD_RECOVERY` / `SIGNED_IN` events. We listen for those.
+
+Both clients share the same localStorage key (`sb-<project-ref>-auth-token`), so once the recovery client establishes a session, the global client picks it up on the next page load. After password update, we hard-navigate to `/` (`window.location.replace('/')`) so the global client re-initializes and the auth guard sees the new session.
+
+### Rules going forward
+
+1. **Don't enable `detectSessionInUrl: true` on the global client without testing every flow** — it was disabled for a reason; turning it on may resurrect old bugs.
+2. **Don't remove the no-op `lock` override on the global client without testing every flow** — same reason.
+3. **If you need recovery / magic-link / OAuth callback handling on a new page**, follow the same pattern: a dedicated client just for that page with default settings. Don't fight the global client.
+
+---
+
+## 11. Known issues / optional polish
+
+These don't block anything but are worth fixing eventually.
+
+### 11.1 Brief error flash before redirect after password set
+
+**Symptom:** After successfully setting a new password on `/reset-password`, the page shows "Password updated. Redirecting…" and then for a fraction of a second some red error text flashes in DevTools / on screen before the hard navigation to `/` completes.
+
+**Severity:** Cosmetic. The password actually saves; the user can sign in with the new password (verified). The flash is too brief for most users to read.
+
+**Likely causes (un-confirmed):**
+- The global supabase client trying to react to the localStorage change made by the recoveryClient
+- React unmounting subscriptions while a Promise is mid-flight during the navigation
+- Background token-refresh tick from the recoveryClient firing during teardown
+
+**To investigate when ready:** Open DevTools → Console → enable **"Preserve log"** before submitting the new password. Then read the red lines that appear just before navigation. Paste them into the next session and we'll fix the specific thing instead of guessing.
+
+### 11.2 Delete the deprecated `invite-employee` Edge Function
+
+**Status:** The function still exists at `supabase/functions/invite-employee/index.ts` and is still deployed to Supabase. It's no longer called by the new UI (which uses `create-employee` + `send-invite` instead).
+
+**To safely delete:**
+
+1. Verify nothing in the codebase references it:
+   ```bash
+   grep -r "invite-employee" hr-leave-app --exclude-dir=node_modules
+   # Expected: only the function's own folder and old docs.
+   ```
+2. Remove the local folder: `rm -rf hr-leave-app/supabase/functions/invite-employee`
+3. Delete the deployed function in Supabase Dashboard → Edge Functions → invite-employee → Delete
+4. Commit the deletion.
+
+The `services/supabase/registration.ts` still has an `inviteEmployee()` method that calls this function for backward compatibility. If nothing in the UI calls `registrationService.inviteEmployee()` anymore (only `createEmployee` + `sendInvites`), that method can be removed too.
+
+### 11.3 Untested code paths from this session
+
+These were shipped but not verified end-to-end by the user yet:
+
+- Edit Employee dialog full field parity (all 11 fields, especially `emp_code` populating from `employee_documents`)
+- Supervisor "Show all employees" toggle behaviour
+- Email change via the `update-employee-email` Edge Function (HR changes someone's auth email)
+- "Forgot password?" flow from sign-in screen
+- Profile self-edit triggering Supabase email confirmation flow (`auth.updateUser({email})`)
+- Bulk send invites to multiple selected rows at once
+- RLS lockdown rejecting a privileged self-update (try changing your own role via direct API to confirm)

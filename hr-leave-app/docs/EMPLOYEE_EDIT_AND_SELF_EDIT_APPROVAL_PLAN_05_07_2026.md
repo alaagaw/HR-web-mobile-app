@@ -2,8 +2,20 @@
 
 Two related features for managing employee profile changes:
 
-- **Feature 1 — HR Edit Employee dialog parity (DONE).** HR can edit every field that exists in the New Employee form, plus toggle Status, plus optionally send the invite email when finishing a Not-Invited record.
-- **Feature 2 — Employee self-edit approval workflow (TO BUILD).** When a non-HR employee edits their own profile, the change submits as a request that HR reviews from the Tasks tab. Approve / Reject / Return-for-clarification, with a mandatory justification and optional PDF/image attachment.
+- **Feature 1 — HR Edit Employee dialog parity ✅ SHIPPED.** HR can edit every field that exists in the New Employee form, plus toggle Status, plus optionally send the invite email at any time on any active employee.
+- **Feature 2 — Employee self-edit approval workflow ⏳ NOT STARTED.** When a non-HR employee edits their own profile, the change submits as a request that HR reviews from the Tasks tab. Approve / Reject / Return-for-clarification, with a mandatory justification and optional PDF/image attachment.
+
+---
+
+## 🚦 Status as of 2026-05-08
+
+| Feature | Status | Commit(s) |
+|---|---|---|
+| Feature 1 — Edit Employee dialog parity | ✅ Shipped | `60f0db2` (initial), `bda5fda` (workday hours), `0c230d1` (lift status gate so HR can send/resend at any time) |
+| Feature 1 follow-on — Allow Send Invite at any time | ✅ Shipped | `0c230d1` — backend gate dropped, frontend menu shows for any active employee, Edit dialog "Send invite now" available for any active employee |
+| Feature 1 follow-on — Email rebrand to "Poly-Tech HR Management System" + hero banner image | ✅ Shipped | `9d2de56` |
+| Feature 2 — Employee self-edit approval | ⏳ Not started — needs answers to the 6 questions in §2.2 below |
+| End-to-end test of Feature 1 (all 11 fields, supervisor toggle, email change, send-invite-now) | ⏳ Code shipped, partial test only (single-invite verified; full field parity not exercised by user yet) |
 
 ---
 

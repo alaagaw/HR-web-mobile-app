@@ -4,6 +4,20 @@
 
 ---
 
+## 🚦 Status as of 2026-05-08
+
+| Phase | Status |
+|---|---|
+| Phase 1 — Implementation | ✅ **COMPLETE.** All migrations, Edge Functions, frontend screens, RLS policies, and types shipped. |
+| Setup 3.A — Get the system live without DNS | ✅ **COMPLETE.** Migrations applied, Edge Functions deployed, INVITE_MODE=magic_link, URL config set, all 5 secrets in place. |
+| Setup 3.A.bis — Working SMTP via Resend | ✅ **COMPLETE.** Routed around the polytech.com.sa wait by buying a throwaway domain `polytech-hr.com` ($10), verified in Resend, plugged into Supabase Auth → SMTP. Now sending from `noreply@polytech-hr.com` to any recipient. |
+| Setup 3.B — Verify polytech.com.sa | ⏳ **PENDING** — blocked on the polytech.com.sa DNS owner. When done, swap Sender field in Supabase → SMTP from `noreply@polytech-hr.com` to `noreply@polytech.com.sa`. Zero code change. |
+| End-to-end test | ✅ Magic-link invite flow verified working: HR creates → email arrives → password set → signed in as new employee. |
+
+> **Lesson learned during 3.A:** the recovery flow had two cascading bugs (bad client lock + URL hash auto-detect disabled) that I initially mis-attributed to Gmail link prefetching. Final fix in commit `2d6c809` uses a dedicated supabase client just for the reset-password page. See [DEPLOYMENT_AND_OPERATIONS.md §6](DEPLOYMENT_AND_OPERATIONS.md) for the supabase config push gotcha and §10 for the recovery-client gotcha.
+
+---
+
 ## 1. Decisions locked in
 
 | Topic | Decision | Rationale |
@@ -122,36 +136,36 @@ Order matters: M1 (adapter) and M8 (RLS) come first because everything else depe
 
 ### 4.1 Email infrastructure
 
-- [ ] **M1.a** Create `supabase/functions/_shared/email.ts` exporting `sendEmail({ to, subject, html, from? })` — provider chosen by `EMAIL_PROVIDER` env var, defaulting to `resend`.
-- [ ] **M1.b** Create `supabase/functions/_shared/providers/resend.ts` — wraps the Resend REST call; throws on non-2xx.
-- [ ] **M1.c** Add provider stubs (commented placeholder) for `brevo.ts` and `sendgrid.ts` so the swap path is documented.
+- [x] **M1.a** Create `supabase/functions/_shared/email.ts` exporting `sendEmail({ to, subject, html, from? })` — provider chosen by `EMAIL_PROVIDER` env var, defaulting to `resend`.
+- [x] **M1.b** Create `supabase/functions/_shared/providers/resend.ts` — wraps the Resend REST call; throws on non-2xx.
+- [x] **M1.c** Add provider stubs (commented placeholder) for `brevo.ts` and `sendgrid.ts` so the swap path is documented.
 
 ### 4.2 Edge Function refactors + split
 
-- [ ] **M11.a + B1 + B2** Create new `supabase/functions/create-employee/index.ts`:
+- [x] **M11.a + B1 + B2** Create new `supabase/functions/create-employee/index.ts`:
   - HR-only check (same as today).
   - Validate the expanded payload (full_name, email, emp_code, phone, role, department, supervisor_id, manager_id, job_title, start_date).
   - Insert/upsert a `profiles` row with `registration_status = 'not_invited'`. **No `auth.users` row, no email yet.**
   - Insert `employee_documents` row with the `emp_code` (so it doesn't get the `PENDING-<timestamp>` placeholder anymore).
   - Returns the new profile.
-- [ ] **M11.b** Create new `supabase/functions/send-invite/index.ts`:
+- [x] **M11.b** Create new `supabase/functions/send-invite/index.ts`:
   - HR-only check.
   - Accepts `{ profile_ids: string[] }` (single or batch).
   - For each profile id: generate temp password → `auth.admin.createUser` → trigger creates auth row + profile already exists → set `must_change_password = true` and `registration_status = 'active'` → call default leave balances RPC → call `sendEmail` via the shared adapter (From = inviting HR's address; Pattern A) → record per-id success/failure.
   - Returns `{ results: [{ profile_id, success, error? }] }` so the UI can show partial-success.
   - Re-throw / surface failures so UI doesn't fake-succeed.
-- [ ] **M11.c** Delete or deprecate the old `invite-employee/index.ts` once the two new functions are live and the UI is switched over.
-- [ ] **4.2.b** Refactor `send-registration-email/index.ts` to use the shared `_shared/email.ts` module too.
+- [x] **M11.c** Delete or deprecate the old `invite-employee/index.ts` once the two new functions are live and the UI is switched over.
+- [x] **4.2.b** Refactor `send-registration-email/index.ts` to use the shared `_shared/email.ts` module too.
 
 ### 4.3 Forgot / reset password
 
-- [ ] **M2** Add `authService.resetPasswordForEmail(email)` calling `supabase.auth.resetPasswordForEmail(email, { redirectTo: '<APP_URL>/reset-password' })`.
-- [ ] **M3** Add "Forgot password?" link below the password input on `sign-in.tsx` (web + mobile branches) → routes to `/forgot-password`.
-- [ ] **M4** Build `app/(auth)/forgot-password.tsx`:
+- [x] **M2** Add `authService.resetPasswordForEmail(email)` calling `supabase.auth.resetPasswordForEmail(email, { redirectTo: '<APP_URL>/reset-password' })`.
+- [x] **M3** Add "Forgot password?" link below the password input on `sign-in.tsx` (web + mobile branches) → routes to `/forgot-password`.
+- [x] **M4** Build `app/(auth)/forgot-password.tsx`:
   - Single email input + submit button.
   - On success: show "If an account exists for that email, a reset link has been sent." (don't disclose whether the email exists)
   - "Back to sign in" link.
-- [ ] **M5** Build `app/(auth)/reset-password.tsx`:
+- [x] **M5** Build `app/(auth)/reset-password.tsx`:
   - This is where Supabase's recovery link lands.
   - Two fields: new password + confirm.
   - On submit: `supabase.auth.updateUser({ password })` then route to dashboard.
@@ -159,16 +173,16 @@ Order matters: M1 (adapter) and M8 (RLS) come first because everything else depe
 
 ### 4.4 Profile self-service
 
-- [ ] **M6** Add a "Change Password" row in Profile (web + mobile) — opens a small dialog (web) or screen (mobile) with old/new/confirm fields. Calls `authService.changePassword(newPassword)`. (The existing `change-password.tsx` is for the forced first-login flow; this is the voluntary one accessed any time.)
-- [ ] **M7** Build mobile Edit Profile UI in `profile.tsx` (mobile branch is read-only today). Same fields and rules as the web dialog: `full_name`, `phone`, `email` editable; `role`/`department`/`supervisor`/`manager` shown but disabled.
-- [ ] **B4** Fix email-change handling in the Edit Profile save path:
+- [x] **M6** Add a "Change Password" row in Profile (web + mobile) — opens a small dialog (web) or screen (mobile) with old/new/confirm fields. Calls `authService.changePassword(newPassword)`. (The existing `change-password.tsx` is for the forced first-login flow; this is the voluntary one accessed any time.)
+- [x] **M7** Build mobile Edit Profile UI in `profile.tsx` (mobile branch is read-only today). Same fields and rules as the web dialog: `full_name`, `phone`, `email` editable; `role`/`department`/`supervisor`/`manager` shown but disabled.
+- [x] **B4** Fix email-change handling in the Edit Profile save path:
   - If `email` changed → call `supabase.auth.updateUser({ email })` (Supabase emails confirmation link to **both** old and new addresses).
   - Only update `profiles.email` after Supabase confirms (or via a DB trigger on `auth.users` email change).
   - Show user a "We sent a confirmation link to your new email" notice.
 
 ### 4.4.5 Admin: invite form + employee table changes
 
-- [ ] **M12.a** Expand the "Invite / New Employee" dialog (`admin/employees.tsx`):
+- [x] **M12.a** Expand the "Invite / New Employee" dialog (`admin/employees.tsx`):
   - Add fields: **Employee Code** (required), **Phone** (required), **Job Title** (required), **Start Date** (required date picker).
   - Rename "Supervisor" → **"Supervisor / Reports To"**, make required.
     - Default: autocomplete filtered to Supervisor / Manager / HR / HR Director roles (the curated list — covers the 95% case).
@@ -177,22 +191,22 @@ Order matters: M1 (adapter) and M8 (RLS) come first because everything else depe
   - Update validation in `isValid` to enforce all new required fields.
   - Update the dialog title from "Invite Employee" to **"New Employee"**.
   - Add a **"Send invite email now"** checkbox at the bottom (default: unchecked, i.e., create-only by default; if checked, immediately calls `send-invite` after `create-employee`).
-- [ ] **M12.b** Update `registrationService` to expose `createEmployee()` (calls `create-employee`) and `sendInvites(profileIds: string[])` (calls `send-invite`). Keep `inviteEmployee()` as a thin wrapper that calls both for backward compat (or delete it once UI is migrated).
-- [ ] **M13.a** Add **Status badge column** to the employee DataGrid: "Not Invited" (amber), "Active" (green), "Inactive" (gray).
-- [ ] **M13.b** Enable `checkboxSelection` on the MUI DataGrid. Track selected row IDs in component state.
-- [ ] **M13.c** When ≥1 row is selected, show a sticky toolbar with **"Send Invite(s) (N)"** button. Disabled if any selected row is already `active` (with a tooltip explaining). On click → confirmation dialog → call `sendInvites(ids)` → show per-row success/failure summary.
-- [ ] **M13.d** Add a per-row action menu (3-dot) with **"Send Invite"** (when status = `not_invited`) and **"Resend Invite"** (when status = `active`, regenerates password and re-sends).
+- [x] **M12.b** Update `registrationService` to expose `createEmployee()` (calls `create-employee`) and `sendInvites(profileIds: string[])` (calls `send-invite`). Keep `inviteEmployee()` as a thin wrapper that calls both for backward compat (or delete it once UI is migrated).
+- [x] **M13.a** Add **Status badge column** to the employee DataGrid: "Not Invited" (amber), "Active" (green), "Inactive" (gray).
+- [x] **M13.b** Enable `checkboxSelection` on the MUI DataGrid. Track selected row IDs in component state.
+- [x] **M13.c** When ≥1 row is selected, show a sticky toolbar with **"Send Invite(s) (N)"** button. Disabled if any selected row is already `active` (with a tooltip explaining). On click → confirmation dialog → call `sendInvites(ids)` → show per-row success/failure summary.
+- [x] **M13.d** Add a per-row action menu (3-dot) with **"Send Invite"** (when status = `not_invited`) and **"Resend Invite"** (when status = `active`, regenerates password and re-sends).
 
 ### 4.5 Database / RLS / Sync triggers
 
-- [ ] **M8 + B3** Migration `014_profiles_self_update_lockdown.sql`:
+- [x] **M8 + B3** Migration `014_profiles_self_update_lockdown.sql`:
   - `DROP POLICY profiles_update_own ON profiles;`
   - Replace with two narrower policies:
     - `profiles_update_own_safe_fields` — `USING (auth.uid() = id)` `WITH CHECK (auth.uid() = id AND <only-safe-columns-changed-check>)`. The check uses old/new comparisons via `OLD`/`NEW` (or relies on `WITH CHECK` plus a column-list grant — pick one approach).
   - **Alternative approach (cleaner):** revoke direct UPDATE on the locked columns, use a SECURITY DEFINER function `update_my_profile(full_name, phone)` and call that from the client.
   - Verify HR's `profiles_update_hr` still works for changing role/supervisor on others.
 
-- [ ] **M9 + B5** Migration `015_auth_profiles_sync.sql` — keep the two tables consistent automatically:
+- [x] **M9 + B5** Migration `015_auth_profiles_sync.sql` — keep the two tables consistent automatically:
   - **Trigger A — email sync (`auth.users` → `profiles`):**
     ```sql
     CREATE OR REPLACE FUNCTION sync_profile_email()
@@ -219,21 +233,21 @@ Order matters: M1 (adapter) and M8 (RLS) come first because everything else depe
 
 ### 4.6 End-to-end test (manual)
 
-- [ ] **T1** HR signs in → invites a new employee with a real Gmail address → email arrives in Gmail inbox (not spam) within 60s.
-- [ ] **T2** New employee opens email → temp password works → forced change-password screen appears → sets new password → lands on dashboard.
-- [ ] **T3** Employee opens Profile → edits name + phone → saves → sees changes immediately.
-- [ ] **T4** Employee tries to PATCH `role = 'hr_director'` via direct API call → RLS rejects (verify in Supabase logs).
-- [ ] **T5** Employee changes email → Supabase sends confirmation to old + new → confirmation completes → can sign in with new email.
-- [ ] **T6** Employee signs out → "Forgot password?" → enters email → reset link arrives → clicks link → lands on `/reset-password` → sets new password → signs in successfully.
-- [ ] **T7** HR tries to invite an email that already has an active account → gets clear "already exists" error.
-- [ ] **T8** Adoption path: someone self-registered (status `pending_approval`) → HR uses Invite with same email → existing record adopted, status becomes `active`.
-- [ ] **T9** Email sync verification: employee changes email → confirms via Supabase link → query both `auth.users` and `profiles` → both show the new email. Then run the backfill query → 0 rows updated (proves no drift remains).
-- [ ] **T10** Create-without-invite path: HR fills full New Employee form → submits without checking "Send invite now" → row appears in employee table with "Not Invited" amber badge → no email sent → no `auth.users` row created.
-- [ ] **T11** Batch send: HR selects 3 "Not Invited" rows → clicks "Send Invite(s) (3)" → all 3 receive emails → all 3 statuses flip to "Active" → Supabase `auth.users` shows 3 new rows.
-- [ ] **T12** Partial-failure handling: simulate one bad email in a batch → other invites succeed, the bad one shows error in the result summary → no half-broken state in DB.
-- [ ] **T13** Resend invite: pick an Active employee → click "Resend Invite" from row menu → new temp password generated, new email sent → old password still works until they change it (or we choose to invalidate; document the call).
-- [ ] **T14** Required-field enforcement: try to submit New Employee form missing emp_code / phone / job_title / start_date / supervisor / manager → form blocks submission with clear errors.
-- [ ] **T15** Supervisor field — default state: dropdown shows ONLY users with role Supervisor/Manager/HR/HRDirector. Toggle "Show all employees" → dropdown now includes regular employees too, searchable. Selecting a regular employee saves correctly.
+- [x] **T1** HR signs in → invites a new employee → email arrives within 60s. (Verified end-to-end on Yahoo + Gmail recipients.)
+- [x] **T2** New employee opens email → magic-link works → sets password on `/reset-password` → lands on dashboard. (Verified end-to-end. Note: switched to magic_link mode rather than temp_password.)
+- [ ] **T3** Employee opens Profile → edits name + phone → saves → sees changes immediately. (Code shipped, not exercised by user yet.)
+- [ ] **T4** Employee tries to PATCH `role = 'hr_director'` via direct API call → RLS rejects. (Migration 014 deployed; not exercised.)
+- [ ] **T5** Employee changes email → Supabase sends confirmation → completes → can sign in with new email. (Code shipped; not exercised.)
+- [ ] **T6** "Forgot password?" from sign-in → reset email → set new password → signed in. (Code shipped; not exercised end-to-end yet.)
+- [ ] **T7** HR tries to invite an email that already has an active account → clear error. (Edge Function does this check; not exercised.)
+- [ ] **T8** Adoption path for an existing self-registration. (Old `invite-employee` still has this; new `create-employee` rejects duplicates instead. Behaviour deliberately changed.)
+- [ ] **T9** Email sync verification (`auth.users.email` ↔ `profiles.email` via trigger 015). (Migration deployed; not yet exercised.)
+- [x] **T10** Create-without-invite path: row appears as **Not Invited**, no email sent. (Verified.)
+- [ ] **T11** Batch send 3 invites at once via the toolbar. (Not exercised — single-invite testing only so far.)
+- [ ] **T12** Partial-failure handling on batch send. (Not exercised.)
+- [ ] **T13** Resend invite from row menu on an Active employee. (Code shipped; not exercised.)
+- [ ] **T14** Required-field enforcement on New Employee form. (Code shipped; not exercised.)
+- [ ] **T15** Supervisor field "Show all employees" toggle behaviour. (Code shipped; not exercised.)
 
 ---
 
@@ -277,12 +291,19 @@ Order matters: M1 (adapter) and M8 (RLS) come first because everything else depe
 
 ---
 
-## 7. Estimate
+## 7. Estimate (final, after the fact)
 
-- **Implementation work:** done.
-- **Setup 3.A (TODAY, no DNS):** ~5 min — apply migrations + set 3 env vars + deploy 3 functions.
-- **Setup 3.B (LATER, with Resend):** ~15 min wall-clock + DNS propagation wait for the domain owner.
-- **End-to-end testing:** ~45 min.
+- **Implementation work:** ✅ Done.
+- **Setup 3.A (Supabase deploy):** ✅ Done.
+- **Setup 3.A.bis (Resend with throwaway `polytech-hr.com`):** ✅ Done. Took ~30 min total (Cloudflare domain purchase, Resend auto-config of DNS, Edge Function secrets, Supabase Auth → SMTP wiring).
+- **Setup 3.B (Resend with `polytech.com.sa`):** ⏳ Pending DNS owner. ~5 min to swap the Sender field once they're done.
+- **End-to-end testing:** Partially complete — invite flow verified, several other tests still pending (see §4.6).
+- **Bugs hit during 3.A that took extra time to fix:**
+  - `MUI X DataGrid v8` selection-model API change → crash on Manage Employees (fixed `0d57838`)
+  - React error #300 from a hooks-order violation in profile.tsx (fixed `a556e89`)
+  - AuthGuard auto-redirecting off `/reset-password` (fixed `60cdd84`)
+  - `setSession()` hanging on the global supabase client because of the no-op lock + `detectSessionInUrl: false` (fixed `2d6c809` by using a dedicated recovery client)
+  - The `supabase config push` "section overwrite" gotcha that briefly nuked Auth settings (recovered immediately, see DEPLOYMENT_AND_OPERATIONS.md §6)
 
 ---
 
