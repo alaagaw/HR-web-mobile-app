@@ -13,6 +13,13 @@ export { ErrorBoundary } from 'expo-router';
 
 SplashScreen.preventAutoHideAsync();
 
+// Auth pages that must remain reachable regardless of auth state.
+// reset-password handles Supabase's recovery flow — the user IS authenticated
+// (via a recovery token), but the entire purpose of the page is to let them
+// set a new password before any other routing kicks in. forgot-password is
+// exempt for the rare case a signed-in user hits "Forgot password?" anyway.
+const AUTH_EXEMPT_ROUTES = ['(auth)/reset-password', '(auth)/forgot-password'];
+
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, user } = useAuth();
   const segments = useSegments();
@@ -23,12 +30,16 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
     const inAuthGroup = segments[0] === '(auth)';
     const currentPath = segments.join('/');
+    const isExemptRoute = AUTH_EXEMPT_ROUTES.includes(currentPath);
 
     // Not authenticated → go to sign-in (unless already on an auth page)
     if (!isAuthenticated && !inAuthGroup) {
       router.replace('/(auth)/sign-in' as any);
       return;
     }
+
+    // Exempt auth routes always render, even for authenticated users.
+    if (isExemptRoute) return;
 
     if (isAuthenticated && user) {
       // 1. Must change password (HR-invited users)
