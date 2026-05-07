@@ -339,8 +339,12 @@ function WebEmployeesTable({
         columns={columns}
         getRowId={(row: any) => row.id}
         checkboxSelection
-        rowSelectionModel={selectedIds}
-        onRowSelectionModelChange={(model: any) => onSelectionChange(model as string[])}
+        rowSelectionModel={{ type: 'include', ids: new Set(selectedIds) }}
+        onRowSelectionModelChange={(model: any) => {
+          // MUI X DataGrid v8 returns { type, ids: Set } instead of an array.
+          const ids = model?.ids instanceof Set ? Array.from(model.ids) : (Array.isArray(model) ? model : []);
+          onSelectionChange(ids as string[]);
+        }}
         disableRowSelectionOnClick
         disableColumnFilter
         disableColumnMenu
