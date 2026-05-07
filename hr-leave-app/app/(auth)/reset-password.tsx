@@ -60,8 +60,23 @@ export default function ResetPasswordScreen() {
 
     if (typeof window === 'undefined') return;
 
+    const log = (...args: any[]) => {
+      // Diagnostic logging — visible in browser DevTools console.
+      // Remove once the recovery flow is confirmed stable.
+      // eslint-disable-next-line no-console
+      console.log('[reset-password]', ...args);
+    };
+
     const rawHash = window.location.hash.replace(/^#/, '');
     const params = new URLSearchParams(rawHash);
+
+    log('hash params seen:', {
+      has_access_token: !!params.get('access_token'),
+      has_refresh_token: !!params.get('refresh_token'),
+      type: params.get('type'),
+      error_code: params.get('error_code'),
+      raw_keys: Array.from(params.keys()),
+    });
 
     // Path 1 — explicit error from Supabase
     const errorCode = params.get('error_code');
@@ -71,23 +86,38 @@ export default function ResetPasswordScreen() {
         errorCode === 'otp_expired'
           ? 'This reset link has already been used or has expired.'
           : (errorDescription?.replace(/\+/g, ' ') || 'This reset link is no longer valid.');
+      log('path 1 — explicit error', errorCode);
       setLinkErrorReason(friendly);
       setLinkState('invalid');
       return;
     }
+
+    // Hard fallback: if we're still 'checking' after 6 seconds, surface a
+    // diagnostic message so the user isn't stuck staring at the spinner.
+    const hardFallback = setTimeout(() => {
+      if (cancelled) return;
+      log('hard fallback fired — setSession never resolved');
+      setLinkErrorReason(
+        'Reset link verification took too long. Please request a new link, or open the browser console for details.'
+      );
+      setLinkState('invalid');
+    }, 6000);
 
     // Path 2 — recovery tokens present, exchange them for a session
     const accessToken = params.get('access_token');
     const refreshToken = params.get('refresh_token');
 
     if (accessToken && refreshToken) {
+      log('path 2 — calling setSession with both tokens');
       (async () => {
         try {
-          const { error } = await supabase.auth.setSession({
+          const { data, error } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
           });
+          log('setSession resolved', { hasSession: !!data?.session, error: error?.message });
           if (cancelled) return;
+          clearTimeout(hardFallback);
           if (error) {
             setLinkErrorReason(error.message || 'Could not verify the reset link.');
             setLinkState('invalid');
@@ -99,29 +129,80 @@ export default function ResetPasswordScreen() {
             } catch {}
           }
         } catch (e: any) {
+          log('setSession threw', e?.message);
           if (cancelled) return;
+          clearTimeout(hardFallback);
           setLinkErrorReason(e?.message || 'Could not verify the reset link.');
           setLinkState('invalid');
         }
       })();
-      return;
+
+      return () => {
+        cancelled = true;
+        clearTimeout(hardFallback);
+      };
     }
 
-    // Path 3 — no tokens, no error. Maybe an existing session is already in
-    // place (e.g. user opened reset-password manually). Allow them to proceed
-    // if so; otherwise mark invalid.
+    // Path 2b — only access_token (no refresh_token). Try a different
+    // approach: write minimal session info to storage and ask Supabase
+    // to refresh from it. As a last resort, try setSession with empty
+    // refresh_token (some flows allow this).
+    if (accessToken && !refreshToken) {
+      log('path 2b — access_token only, attempting setSession without refresh_token');
+      (async () => {
+        try {
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: '',
+          } as any);
+          log('setSession (no refresh) resolved', { hasSession: !!data?.session, error: error?.message });
+          if (cancelled) return;
+          clearTimeout(hardFallback);
+          if (error || !data?.session) {
+            setLinkErrorReason(
+              error?.message ||
+                'Reset link is missing the refresh token. Please request a new link.'
+            );
+            setLinkState('invalid');
+          } else {
+            setLinkState('valid');
+            try {
+              window.history.replaceState({}, document.title, window.location.pathname);
+            } catch {}
+          }
+        } catch (e: any) {
+          log('setSession (no refresh) threw', e?.message);
+          if (cancelled) return;
+          clearTimeout(hardFallback);
+          setLinkErrorReason(e?.message || 'Could not verify the reset link.');
+          setLinkState('invalid');
+        }
+      })();
+
+      return () => {
+        cancelled = true;
+        clearTimeout(hardFallback);
+      };
+    }
+
+    // Path 3 — no tokens at all in the hash
+    log('path 3 — no tokens in URL hash, checking existing session');
     (async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
+        log('getSession resolved', { hasSession: !!session });
         if (cancelled) return;
+        clearTimeout(hardFallback);
         if (session) {
           setLinkState('valid');
         } else {
           setLinkErrorReason('No reset link detected. Request a new link to continue.');
           setLinkState('invalid');
         }
-      } catch {
+      } catch (e: any) {
+        log('getSession threw', e?.message);
         if (cancelled) return;
+        clearTimeout(hardFallback);
         setLinkErrorReason('Could not verify the reset link.');
         setLinkState('invalid');
       }
@@ -129,6 +210,7 @@ export default function ResetPasswordScreen() {
 
     return () => {
       cancelled = true;
+      clearTimeout(hardFallback);
     };
   }, []);
 
