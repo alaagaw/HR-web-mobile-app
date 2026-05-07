@@ -109,6 +109,7 @@ interface InviteDialogState {
   manager_id: string | null;
   job_title: string;
   start_date: string;
+  workday_hours: string;
   send_invite_now: boolean;
   show_all_supervisors: boolean;
   show_all_managers: boolean;
@@ -128,6 +129,7 @@ const INITIAL_INVITE: InviteDialogState = {
   manager_id: null,
   job_title: '',
   start_date: '',
+  workday_hours: '8',
   send_invite_now: false,
   show_all_supervisors: false,
   show_all_managers: false,
@@ -590,6 +592,9 @@ function InviteEmployeeDialog({
     ? activeEmployees
     : activeEmployees.filter((e) => MANAGER_DEFAULT_ROLES.includes(e.role));
 
+  const workdayHoursNum = parseFloat(state.workday_hours);
+  const workdayHoursValid = !isNaN(workdayHoursNum) && workdayHoursNum > 0 && workdayHoursNum <= 24;
+
   const isValid =
     state.email.trim().length > 0 &&
     state.full_name.trim().length > 0 &&
@@ -598,6 +603,7 @@ function InviteEmployeeDialog({
     state.department.trim().length > 0 &&
     state.job_title.trim().length > 0 &&
     state.start_date.trim().length > 0 &&
+    workdayHoursValid &&
     !!state.supervisor_id &&
     !!state.manager_id;
 
@@ -671,7 +677,7 @@ function InviteEmployeeDialog({
           />
         </div>
 
-        {/* Role + department */}
+        {/* Role + Workday Hours */}
         <div style={{ display: 'flex', gap: 12 }}>
           <Autocomplete
             options={ROLE_OPTIONS}
@@ -684,18 +690,28 @@ function InviteEmployeeDialog({
             )}
             fullWidth size="small" disableClearable
           />
-          <Autocomplete
-            freeSolo forcePopupIcon
-            options={departments}
-            value={state.department || null}
-            onChange={(_: any, val: string | null) => onChange('department', val || '')}
-            onInputChange={(_: any, val: string) => onChange('department', val)}
-            renderInput={(params: any) => (
-              <MuiTextField {...params} label="Department" size="small" required placeholder="Search or type..." />
-            )}
-            fullWidth size="small"
+          <MuiTextField
+            label="Workday Hours"
+            value={state.workday_hours}
+            onChange={(e: any) => onChange('workday_hours', e.target.value)}
+            fullWidth size="small" required type="number"
+            inputProps={{ min: 1, max: 24, step: 0.5 }}
+            helperText="Standard daily hours (default 8)"
           />
         </div>
+
+        {/* Department */}
+        <Autocomplete
+          freeSolo forcePopupIcon
+          options={departments}
+          value={state.department || null}
+          onChange={(_: any, val: string | null) => onChange('department', val || '')}
+          onInputChange={(_: any, val: string) => onChange('department', val)}
+          renderInput={(params: any) => (
+            <MuiTextField {...params} label="Department" size="small" required placeholder="Search or type..." />
+          )}
+          fullWidth size="small"
+        />
 
         {/* Supervisor / Reports To — with toggle */}
         <div>
@@ -884,6 +900,7 @@ export default function EmployeesScreen() {
           manager_id: invite.manager_id!,
           job_title: invite.job_title.trim(),
           start_date: invite.start_date,
+          workday_hours: parseFloat(invite.workday_hours) || 8,
         },
         user!.id
       );

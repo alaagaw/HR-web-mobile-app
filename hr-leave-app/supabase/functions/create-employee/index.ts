@@ -37,6 +37,7 @@ interface CreateEmployeePayload {
   manager_id: string;
   job_title: string;
   start_date: string;
+  workday_hours: number;
   invited_by: string;
 }
 
@@ -107,6 +108,12 @@ serve(async (req: Request) => {
     const newProfileId = newUser.user.id;
 
     // 6. Update the auto-created profile with the org-chart and identity fields.
+    //    Workday hours defaults to the trigger's 8.00 if not provided or invalid.
+    const workdayHours =
+      typeof payload.workday_hours === 'number' && payload.workday_hours > 0 && payload.workday_hours <= 24
+        ? payload.workday_hours
+        : 8;
+
     const { data: updatedProfile, error: updateErr } = await supabase
       .from('profiles')
       .update({
@@ -118,6 +125,7 @@ serve(async (req: Request) => {
         manager_id: payload.manager_id,
         job_title: payload.job_title.trim(),
         start_date: payload.start_date,
+        workday_hours: workdayHours,
         invited_by: payload.invited_by,
         registration_status: 'not_invited',
         must_change_password: false,

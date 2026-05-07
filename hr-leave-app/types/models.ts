@@ -357,6 +357,7 @@ export interface CreateEmployeeData {
   manager_id: string;
   job_title: string;
   start_date: string;
+  workday_hours: number;
 }
 
 /** Per-id result returned by the batch send-invite Edge Function. */
