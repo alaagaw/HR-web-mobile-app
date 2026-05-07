@@ -117,18 +117,87 @@ export const changePasswordSchema = z
 
 export type ChangePasswordFormData = z.infer<typeof changePasswordSchema>;
 
-export const registrationFormSchema = z.object({
-  full_name: z.string().min(2, 'Full name is required'),
-  phone: z.string().min(5, 'Phone number is required'),
-  iqama_number: z.string().min(1, 'Iqama number is required'),
-  iqama_expiry: z.string().min(1, 'Iqama expiry date is required'),
-  passport_number: z.string().min(1, 'Passport number is required'),
-  passport_expiry: z.string().min(1, 'Passport expiry date is required'),
-  insurance_number: z.string().min(1, 'Insurance number is required'),
-  insurance_expiry: z.string().min(1, 'Insurance expiry date is required'),
-  occupation: z.string().min(1, 'Occupation is required'),
-  birth_date: z.string().min(1, 'Date of birth is required'),
-});
+/**
+ * Schema for the employee registration completion form
+ * (post-Phase-A flow: HR creates employee → invite sent → employee
+ * sets password → lands here → fills personal data → HR approves).
+ *
+ * Fields HR controls (employee_code, role, dept, supervisor, manager,
+ * job_title, start_date, workday_hours) are NOT in this schema —
+ * the form displays them read-only.
+ */
+export const registrationFormSchema = z
+  .object({
+    // Personal — employee owns these
+    full_name: z.string().min(2, 'Full name is required'),
+    phone: z.string().min(5, 'Phone number is required'),
+    nationality: z.string().min(2, 'Nationality is required'),
+    birth_date: z.string().min(1, 'Date of birth is required'),
+
+    // Primary ID — the document the employee chose to upload
+    id_type: z.enum(['national_id', 'iqama', 'passport'], {
+      errorMap: () => ({ message: 'Please select your ID type' }),
+    }),
+    id_document_url: z.string().min(1, 'Please upload a scan/photo of your ID'),
+
+    // Conditional based on id_type — set in superRefine below
+    national_id_number: z.string().optional().nullable(),
+    iqama_number: z.string().optional().nullable(),
+    iqama_expiry: z.string().optional().nullable(),
+    passport_number: z.string().optional().nullable(),
+    passport_expiry: z.string().optional().nullable(),
+
+    // Insurance — required (everyone has it)
+    insurance_number: z.string().min(1, 'Insurance number is required'),
+    insurance_expiry: z.string().min(1, 'Insurance expiry date is required'),
+
+    // Legacy field — auto-set from job_title now, but keep in schema
+    // so submitRegistration's existing payload keeps working.
+    occupation: z.string().optional().default(''),
+  })
+  .superRefine((data, ctx) => {
+    // The chosen primary ID's number + expiry are required.
+    if (data.id_type === 'national_id') {
+      if (!data.national_id_number?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['national_id_number'],
+          message: 'National ID number is required',
+        });
+      }
+      // National IDs typically don't expire — no expiry check
+    } else if (data.id_type === 'iqama') {
+      if (!data.iqama_number?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['iqama_number'],
+          message: 'Iqama number is required',
+        });
+      }
+      if (!data.iqama_expiry?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['iqama_expiry'],
+          message: 'Iqama expiry is required',
+        });
+      }
+    } else if (data.id_type === 'passport') {
+      if (!data.passport_number?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['passport_number'],
+          message: 'Passport number is required',
+        });
+      }
+      if (!data.passport_expiry?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['passport_expiry'],
+          message: 'Passport expiry is required',
+        });
+      }
+    }
+  });
 
 export type RegistrationFormSchemaData = z.infer<typeof registrationFormSchema>;
 

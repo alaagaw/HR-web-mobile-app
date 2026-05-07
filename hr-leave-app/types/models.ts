@@ -347,36 +347,37 @@ export interface RenewalTaskFilters {
  * Submitted by the employee from /registration-form when their profile
  * is at status `pending_info`.
  *
- * NOTE: shape is in transition.
- * - The existing form (registration-form.tsx) populates the legacy
- *   fields (iqama/passport/insurance/occupation/birth_date) — those
- *   are kept required for backward compatibility.
- * - The Phase B rewrite will populate the new fields (nationality,
- *   id_type, national_id_number, id_document_url) — currently OPTIONAL
- *   so the old form keeps compiling. Will be flipped to required once
- *   the new form is in place.
+ * Phase B shape: the form has a mandatory primary ID (id_type +
+ * id_document_url + the matching number/expiry) plus optional
+ * supplementary documents. Only fields that apply to the chosen ID
+ * type are populated; the rest come through as null.
  */
 export interface RegistrationFormData {
   // Profile-level (employee-editable, HR pre-fills some)
   full_name: string;
   phone: string;
+  nationality: string;
+  birth_date: string;
   email?: string;
 
-  // Legacy required fields (current form)
-  iqama_number: string;
-  iqama_expiry: string;
-  passport_number: string;
-  passport_expiry: string;
+  // Primary identification
+  id_type: IdType;
+  id_document_url: string;
+
+  // Conditional ID number/expiry — populated based on id_type
+  national_id_number: string | null;
+  iqama_number: string | null;
+  iqama_expiry: string | null;
+  passport_number: string | null;
+  passport_expiry: string | null;
+
+  // Insurance — required for everyone
   insurance_number: string;
   insurance_expiry: string;
-  occupation: string;
-  birth_date: string;
 
-  // NEW fields (optional during transition; required after Phase B)
-  nationality?: string;
-  id_type?: IdType;
-  national_id_number?: string | null;
-  id_document_url?: string;
+  // Auto-derived from job_title at create-employee time, kept editable here
+  // for backward compat with the legacy submitRegistration payload.
+  occupation?: string;
 }
 
 /**
