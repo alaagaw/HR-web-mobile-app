@@ -647,6 +647,11 @@ export default function ProfileScreen() {
   const { theme, setTheme } = useThemeStore();
   const [editOpen, setEditOpen] = useState(false);
   const [departments, setDepartments] = useState<string[]>([]);
+  // NOTE: every useState/useCallback must be declared before the
+  // `if (!user) return null` early return below. Otherwise on
+  // sign-out (when user becomes null) the hook order changes
+  // between renders → React error #300.
+  const [changePwOpen, setChangePwOpen] = useState(false);
 
   const isHR = user?.role === 'hr' || user?.role === 'hr_director';
 
@@ -704,8 +709,6 @@ export default function ProfileScreen() {
       alert(`Profile updated.${pendingEmailNotice}`);
     }
   };
-
-  const [changePwOpen, setChangePwOpen] = useState(false);
 
   // ─── Web Layout ──────────────────────────────────────────────────
 
