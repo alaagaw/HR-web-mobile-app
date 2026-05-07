@@ -13,14 +13,16 @@ import { changePasswordSchema, type ChangePasswordFormData } from '@/lib/validat
 /**
  * Landing page for Supabase's password-recovery email link.
  *
- * Supabase appends a recovery token to the URL hash and creates a session
- * automatically. We then call updateUser({ password }) and route home.
+ * Uses a dedicated `recoveryClient` instead of the global supabase client
+ * because the global one has detectSessionInUrl: false + a no-op lock
+ * (set in services/supabase/client.ts to avoid bugs elsewhere) — those
+ * overrides hang setSession() forever during recovery. The dedicated
+ * client uses SDK defaults; both clients share the same localStorage
+ * key so the session set here is visible to the global client too.
  *
- * Recovery tokens are SINGLE-USE. If the user clicks the same link twice,
- * the second click arrives without a session — we detect that on mount
- * and show a clear "link already used / expired" message with a button
- * to request a fresh link, instead of letting the user fill out the form
- * and then hit the cryptic "Auth session missing!" error on submit.
+ * Recovery tokens are SINGLE-USE. The page detects already-used / expired
+ * links via the URL hash and shows a "request a new link" screen instead
+ * of letting the user submit and hit a cryptic auth error.
  */
 type LinkState = 'checking' | 'valid' | 'invalid';
 
@@ -69,39 +71,26 @@ export default function ResetPasswordScreen() {
     defaultValues: { newPassword: '', confirmPassword: '' },
   });
 
-  // On mount, exchange the recovery tokens in the URL hash for a session.
+  // On mount: detect whether the URL hash carries a fresh recovery session,
+  // an explicit error, or nothing.
   //
-  // The global supabase client is configured with detectSessionInUrl: false
-  // (in services/supabase/client.ts) to avoid Web Lock race errors during
-  // normal app navigation. That means the recovery token in the URL hash
-  // does NOT auto-establish a session — we have to call setSession()
-  // explicitly here using the access_token + refresh_token from the hash.
+  // The dedicated recoveryClient was created with detectSessionInUrl=true,
+  // so on construction it parses the hash and fires PASSWORD_RECOVERY /
+  // SIGNED_IN events. We listen for those to mark the link valid.
   //
-  // Three possible URL shapes coming in:
-  //   #access_token=...&refresh_token=...&type=recovery   → valid recovery
-  //   #error=access_denied&error_code=otp_expired&...      → already used / expired
-  //   (empty / no tokens)                                  → user landed here directly
+  // Three URL shapes:
+  //   #access_token=...&refresh_token=...&type=recovery  → valid
+  //   #error=...&error_code=otp_expired                   → invalid
+  //   (empty)                                             → invalid (no link)
   useEffect(() => {
     let cancelled = false;
 
     if (typeof window === 'undefined') return;
 
-    const log = (...args: any[]) => {
-      // eslint-disable-next-line no-console
-      console.log('[reset-password]', ...args);
-    };
-
     const rawHash = window.location.hash.replace(/^#/, '');
     const params = new URLSearchParams(rawHash);
 
-    log('hash params seen:', {
-      has_access_token: !!params.get('access_token'),
-      has_refresh_token: !!params.get('refresh_token'),
-      type: params.get('type'),
-      error_code: params.get('error_code'),
-    });
-
-    // Explicit error from Supabase
+    // Explicit error in URL — surface a friendly message.
     const errorCode = params.get('error_code');
     if (errorCode) {
       const errorDescription = params.get('error_description');
@@ -114,22 +103,18 @@ export default function ResetPasswordScreen() {
       return;
     }
 
-    // Hard fallback so we never stick on "Verifying"
+    // Hard fallback — never let the user stare at "Verifying" forever.
     const hardFallback = setTimeout(() => {
       if (cancelled) return;
-      log('hard fallback fired — recovery client never produced a session');
       setLinkErrorReason(
         'Reset link verification took too long. Please request a new link.'
       );
       setLinkState('invalid');
     }, 6000);
 
-    // Listen for the recoveryClient to surface a session. Because the client
-    // was created with detectSessionInUrl=true, it parses the URL hash on
-    // construction and fires PASSWORD_RECOVERY / SIGNED_IN events.
+    // Listen for the recoveryClient to surface a session.
     const { data: { subscription } } = recoveryClient.auth.onAuthStateChange(
       (event, session) => {
-        log('auth event from recoveryClient:', event, { hasSession: !!session });
         if (cancelled) return;
         if (
           (event === 'PASSWORD_RECOVERY') ||
@@ -138,7 +123,6 @@ export default function ResetPasswordScreen() {
         ) {
           clearTimeout(hardFallback);
           setLinkState('valid');
-          // Clean tokens out of the URL so back-button doesn't replay them.
           try {
             window.history.replaceState({}, document.title, window.location.pathname);
           } catch {}
@@ -151,13 +135,12 @@ export default function ResetPasswordScreen() {
     const earlyCheck = setTimeout(async () => {
       try {
         const { data: { session } } = await recoveryClient.auth.getSession();
-        log('early getSession poll:', { hasSession: !!session });
         if (!cancelled && session) {
           clearTimeout(hardFallback);
           setLinkState('valid');
         }
-      } catch (e: any) {
-        log('early getSession threw', e?.message);
+      } catch {
+        /* swallow — the hard fallback will handle it */
       }
     }, 800);
 
@@ -174,8 +157,8 @@ export default function ResetPasswordScreen() {
     setLoading(true);
     try {
       // Use the recoveryClient (which holds the recovery session) to update
-      // the password. The global supabase client shares the same storage key
-      // and will pick up the new session on the next reload.
+      // the password. The global supabase client shares the same storage
+      // key and will pick up the new session when the page reloads.
       const { error: updateErr } = await recoveryClient.auth.updateUser({
         password: data.newPassword,
       });
@@ -183,13 +166,15 @@ export default function ResetPasswordScreen() {
       setDone(true);
       // Force a hard navigation so the global client re-reads the session
       // from localStorage and the auth guard sees the user as signed in.
+      // window.location.replace doesn't add a history entry, which is the
+      // right behaviour for a one-time recovery flow.
       setTimeout(() => {
         if (typeof window !== 'undefined') {
-          window.location.assign('/');
+          window.location.replace('/');
         } else {
           router.replace('/(app)/(tabs)/dashboard' as any);
         }
-      }, 800);
+      }, 600);
     } catch (err: any) {
       const msg = err?.message || '';
       setError(
