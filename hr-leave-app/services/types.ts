@@ -20,6 +20,8 @@ import type {
   RenewalTaskFilters,
   RegistrationFormData,
   InviteEmployeeData,
+  CreateEmployeeData,
+  SendInviteResult,
   PendingRegistration,
   ApproveRegistrationData,
   Project,
@@ -50,6 +52,8 @@ export interface AuthService {
   signOut(): Promise<void>;
   getSession(): Promise<Profile | null>;
   onAuthStateChange(callback: (user: Profile | null) => void): () => void;
+  resetPasswordForEmail(email: string): Promise<void>;
+  updateEmail(newEmail: string): Promise<void>;
 }
 
 export interface LeaveService {
@@ -155,8 +159,12 @@ export interface RegistrationService {
   approveRegistration(userId: string, data: ApproveRegistrationData, approvedBy: string): Promise<Profile>;
   rejectRegistration(userId: string, reason: string, rejectedBy: string): Promise<Profile>;
 
-  // HR invite (calls Edge Function)
+  // HR invite (legacy single-step; calls Edge Function — kept for backward compat)
   inviteEmployee(data: InviteEmployeeData, invitedBy: string): Promise<void>;
+
+  // HR create-then-invite (new two-step workflow + batch send)
+  createEmployee(data: CreateEmployeeData, invitedBy: string): Promise<Profile>;
+  sendInvites(profileIds: string[]): Promise<SendInviteResult[]>;
 }
 
 // ============================================================

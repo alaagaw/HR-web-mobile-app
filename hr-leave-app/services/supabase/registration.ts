@@ -1,6 +1,6 @@
 import { supabase } from './client';
 import type { RegistrationService } from '../types';
-import type { Profile, PendingRegistration } from '@/types/models';
+import type { Profile, PendingRegistration, SendInviteResult } from '@/types/models';
 import { RegistrationStatus } from '@/types/enums';
 
 const EDGE_FUNCTION_URL =
@@ -277,5 +277,31 @@ export const registrationService: RegistrationService = {
       ...data,
       invited_by: invitedBy,
     });
+  },
+
+  async createEmployee(data, invitedBy) {
+    const result = await callEdgeFunction('create-employee', {
+      ...data,
+      invited_by: invitedBy,
+    });
+    return result.profile as Profile;
+  },
+
+  async sendInvites(profileIds) {
+    // On web, tell the Edge Function which origin to redirect employees back to
+    // after they click the magic-link in the email. This way `localhost` users
+    // get a localhost link and Vercel users get a Vercel link automatically —
+    // no manual config flip. Supabase's Redirect URL allowlist still validates
+    // the URL, so this can't be abused.
+    const appUrl =
+      typeof window !== 'undefined' && window.location?.origin
+        ? window.location.origin
+        : undefined;
+
+    const result = await callEdgeFunction('send-invite', {
+      profile_ids: profileIds,
+      ...(appUrl ? { app_url: appUrl } : {}),
+    });
+    return (result.results ?? []) as SendInviteResult[];
   },
 };

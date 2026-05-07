@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { View, Text, ScrollView, Pressable, Platform } from 'react-native';
+import { View, Text, ScrollView, Pressable, Platform, Modal, TextInput, Alert, KeyboardAvoidingView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
@@ -378,6 +378,105 @@ function WebThemeCard({
   );
 }
 
+/** Change Password Dialog (voluntary; separate from forced first-login flow) */
+function ChangePasswordDialog({
+  open,
+  onClose,
+  onChange,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onChange: (newPassword: string) => Promise<void>;
+}) {
+  const [newPw, setNewPw] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const reset = () => {
+    setNewPw('');
+    setConfirmPw('');
+    setError(null);
+    setSubmitting(false);
+    setDone(false);
+  };
+
+  const handleClose = () => {
+    if (!submitting) {
+      reset();
+      onClose();
+    }
+  };
+
+  const handleSubmit = async () => {
+    setError(null);
+    if (newPw.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+    if (newPw !== confirmPw) {
+      setError('Passwords do not match.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await onChange(newPw);
+      setDone(true);
+      setTimeout(() => { handleClose(); }, 1200);
+    } catch (err: any) {
+      setError(err.message || 'Failed to change password');
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3, backgroundImage: 'none' } }}>
+      <DialogTitle sx={{ pb: 1, pt: 3, px: 3, fontWeight: 700, fontSize: 18, borderBottom: '1px solid', borderColor: 'divider' }}>
+        Change Password
+      </DialogTitle>
+      <DialogContent sx={{ pt: '24px !important', pb: 1, px: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {done ? (
+          <div style={{ padding: 12, borderRadius: 8, background: 'rgba(34,197,94,0.15)', color: '#16A34A', fontWeight: 600, fontSize: 14, textAlign: 'center' }}>
+            Password updated successfully.
+          </div>
+        ) : (
+          <>
+            {error && (
+              <div style={{ padding: 10, borderRadius: 8, background: 'rgba(239,68,68,0.12)', color: '#DC2626', fontSize: 13 }}>
+                {error}
+              </div>
+            )}
+            <MuiTextField
+              label="New Password"
+              type="password"
+              value={newPw}
+              onChange={(e: any) => setNewPw(e.target.value)}
+              fullWidth size="small"
+              placeholder="At least 8 characters"
+            />
+            <MuiTextField
+              label="Confirm New Password"
+              type="password"
+              value={confirmPw}
+              onChange={(e: any) => setConfirmPw(e.target.value)}
+              fullWidth size="small"
+            />
+          </>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+        <MuiButton onClick={handleClose} disabled={submitting} sx={{ textTransform: 'none', fontWeight: 600 }}>
+          Cancel
+        </MuiButton>
+        <MuiButton variant="contained" onClick={handleSubmit} disabled={submitting || done || !newPw || !confirmPw} sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, px: 3 }}>
+          {submitting ? 'Updating…' : 'Update Password'}
+        </MuiButton>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 /** Edit Profile Dialog */
 function EditProfileDialog({
   open,
@@ -540,7 +639,7 @@ function EditProfileDialog({
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, signOut } = useAuth();
+  const { user, signOut, updateEmail, changePassword } = useAuth();
   const setUser = require('@/stores/auth-store').useAuthStore.getState().setUser;
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -576,10 +675,37 @@ export default function ProfileScreen() {
   };
 
   const handleSaveProfile = async (data: Record<string, string>) => {
-    const updated = await userService.updateProfile(user.id, data);
+    // Email change must go through Supabase auth.updateUser so the
+    // confirmation flow runs. profiles.email is then synced automatically
+    // by the migration-015 trigger after the user clicks the link.
+    // We do NOT write profiles.email here in that case.
+    const emailChanged = data.email && data.email.trim() !== (user.email || '').trim();
+
+    let pendingEmailNotice = '';
+    if (emailChanged) {
+      try {
+        await updateEmail(data.email.trim());
+        pendingEmailNotice =
+          ' We sent confirmation links to both your old and new email addresses — your email will change once you click the link.';
+      } catch (err: any) {
+        // Show the error to the user instead of silently dropping the change
+        alert(`Email change failed: ${err.message || 'unknown error'}`);
+        return;
+      }
+    }
+
+    // Strip email from the profiles update; trigger handles it.
+    const { email: _ignored, ...profileFields } = data;
+    const updated = await userService.updateProfile(user.id, profileFields);
     setUser(updated);
     setEditOpen(false);
+
+    if (pendingEmailNotice) {
+      alert(`Profile updated.${pendingEmailNotice}`);
+    }
   };
+
+  const [changePwOpen, setChangePwOpen] = useState(false);
 
   // ─── Web Layout ──────────────────────────────────────────────────
 
@@ -610,6 +736,33 @@ export default function ProfileScreen() {
                 isDark={isDark}
               />
               <WebThemeCard theme={theme} setTheme={setTheme} isDark={isDark} />
+
+              {/* Change Password row */}
+              <div
+                onClick={() => setChangePwOpen(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '14px 18px',
+                  borderRadius: 14,
+                  cursor: 'pointer',
+                  border: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
+                  backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={(e: any) => { e.currentTarget.style.backgroundColor = isDark ? '#334155' : '#F8FAFC'; }}
+                onMouseLeave={(e: any) => { e.currentTarget.style.backgroundColor = isDark ? '#1E293B' : '#FFFFFF'; }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Shield size={18} color={isDark ? '#94A3B8' : '#475569'} />
+                  <span style={{ fontSize: 14, fontWeight: 600, color: isDark ? '#F1F5F9' : '#0F172A' }}>
+                    Change Password
+                  </span>
+                </div>
+                <span style={{ fontSize: 18, color: isDark ? '#64748B' : '#94A3B8' }}>›</span>
+              </div>
+
               {/* Sign Out */}
               <div
                 onClick={signOut}
@@ -649,6 +802,17 @@ export default function ProfileScreen() {
               />
             </MuiThemeProvider>
           )}
+
+          {/* Change Password Dialog */}
+          {changePwOpen && (
+            <MuiThemeProvider isDark={isDark}>
+              <ChangePasswordDialog
+                open={changePwOpen}
+                onClose={() => setChangePwOpen(false)}
+                onChange={changePassword}
+              />
+            </MuiThemeProvider>
+          )}
         </div>
       </div>
     );
@@ -669,6 +833,13 @@ export default function ProfileScreen() {
 
       {/* Info rows */}
       <Card className="mb-4">
+        <View className="flex-row items-center justify-between mb-2">
+          <Text className="text-sm font-semibold text-text-primary dark:text-white">Personal Info</Text>
+          <Pressable onPress={() => setEditOpen(true)} className="flex-row items-center" hitSlop={8}>
+            <Pencil size={14} color="#2563EB" />
+            <Text className="text-sm font-semibold text-primary ml-1">Edit</Text>
+          </Pressable>
+        </View>
         <InfoRow icon={Mail} label="Email" value={user.email} />
         <InfoRow icon={Phone} label="Phone" value={user.phone || 'Not set'} />
         <InfoRow icon={Building} label="Department" value={user.department || 'Not set'} />
@@ -730,11 +901,180 @@ export default function ProfileScreen() {
         </View>
       </Card>
 
+      {/* Change Password */}
+      <Pressable
+        onPress={() => setChangePwOpen(true)}
+        className="flex-row items-center justify-between p-4 mb-4 rounded-xl bg-white dark:bg-slate-800 border border-border dark:border-slate-700"
+      >
+        <View className="flex-row items-center">
+          <Shield size={18} color={isDark ? '#94A3B8' : '#475569'} />
+          <Text className="text-sm font-semibold text-text-primary dark:text-white ml-2">
+            Change Password
+          </Text>
+        </View>
+        <Text className="text-lg text-text-muted dark:text-slate-500">›</Text>
+      </Pressable>
+
       {/* Sign out */}
       <Button variant="destructive" onPress={signOut} fullWidth>
         Sign Out
       </Button>
+
+      {/* Mobile Edit Profile Modal */}
+      <MobileEditProfileModal
+        visible={editOpen}
+        user={user}
+        isDark={isDark}
+        onClose={() => setEditOpen(false)}
+        onSave={handleSaveProfile}
+      />
+
+      {/* Mobile Change Password Modal */}
+      <MobileChangePasswordModal
+        visible={changePwOpen}
+        isDark={isDark}
+        onClose={() => setChangePwOpen(false)}
+        onChange={changePassword}
+      />
     </ScrollView>
+  );
+}
+
+// ─── Mobile Modals ───────────────────────────────────────────────────
+
+function MobileEditProfileModal({
+  visible,
+  user,
+  isDark,
+  onClose,
+  onSave,
+}: {
+  visible: boolean;
+  user: any;
+  isDark: boolean;
+  onClose: () => void;
+  onSave: (data: Record<string, string>) => Promise<void>;
+}) {
+  const [fullName, setFullName] = useState(user.full_name || '');
+  const [phone, setPhone] = useState(user.phone || '');
+  const [email, setEmail] = useState(user.email || '');
+  const [saving, setSaving] = useState(false);
+
+  // Reset fields whenever the modal reopens
+  const handleOpen = () => {
+    setFullName(user.full_name || '');
+    setPhone(user.phone || '');
+    setEmail(user.email || '');
+  };
+  // Re-init on each show
+  if (visible && fullName === '' && (user.full_name || '') !== '') handleOpen();
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onSave({ full_name: fullName, phone, email });
+    } catch (err: any) {
+      Alert.alert('Save failed', err.message || 'Could not save profile changes');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputCls = `border rounded-lg px-3 py-3 text-base mb-3 ${
+    isDark ? 'border-slate-600 text-white bg-slate-800' : 'border-border text-text-primary bg-white'
+  }`;
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 bg-background dark:bg-slate-900">
+        <ScrollView contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
+          <Text className="text-xl font-bold text-text-primary dark:text-white mb-1">Edit Profile</Text>
+          <Text className="text-sm text-text-muted dark:text-slate-400 mb-5">
+            You can change name, phone, and email. Role / supervisor / manager are HR-only.
+          </Text>
+
+          <Text className="text-sm font-semibold text-text-primary dark:text-white mb-1">Full Name</Text>
+          <TextInput value={fullName} onChangeText={setFullName} className={inputCls} placeholder="Your full name" placeholderTextColor={isDark ? '#64748B' : '#94A3B8'} />
+
+          <Text className="text-sm font-semibold text-text-primary dark:text-white mb-1">Phone</Text>
+          <TextInput value={phone} onChangeText={setPhone} className={inputCls} placeholder="+966 50 123 4567" placeholderTextColor={isDark ? '#64748B' : '#94A3B8'} keyboardType="phone-pad" />
+
+          <Text className="text-sm font-semibold text-text-primary dark:text-white mb-1">Email</Text>
+          <TextInput value={email} onChangeText={setEmail} className={inputCls} placeholder="you@example.com" placeholderTextColor={isDark ? '#64748B' : '#94A3B8'} autoCapitalize="none" keyboardType="email-address" />
+          <Text className="text-xs text-text-muted dark:text-slate-400 -mt-2 mb-4">
+            Changing email requires confirming via a link sent to both your old and new addresses.
+          </Text>
+
+          <View className="flex-row gap-3 mt-2">
+            <Button variant="secondary" onPress={onClose} fullWidth>Cancel</Button>
+            <Button onPress={handleSave} loading={saving} fullWidth>Save</Button>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+function MobileChangePasswordModal({
+  visible,
+  isDark,
+  onClose,
+  onChange,
+}: {
+  visible: boolean;
+  isDark: boolean;
+  onClose: () => void;
+  onChange: (newPassword: string) => Promise<void>;
+}) {
+  const [newPw, setNewPw] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (newPw.length < 8) {
+      Alert.alert('Invalid password', 'Password must be at least 8 characters.');
+      return;
+    }
+    if (newPw !== confirmPw) {
+      Alert.alert('Passwords do not match', 'Please re-enter the new password.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await onChange(newPw);
+      Alert.alert('Password updated', 'Your password has been changed.');
+      setNewPw(''); setConfirmPw('');
+      onClose();
+    } catch (err: any) {
+      Alert.alert('Failed to change password', err.message || 'Try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const inputCls = `border rounded-lg px-3 py-3 text-base mb-3 ${
+    isDark ? 'border-slate-600 text-white bg-slate-800' : 'border-border text-text-primary bg-white'
+  }`;
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 bg-background dark:bg-slate-900">
+        <ScrollView contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
+          <Text className="text-xl font-bold text-text-primary dark:text-white mb-5">Change Password</Text>
+
+          <Text className="text-sm font-semibold text-text-primary dark:text-white mb-1">New Password</Text>
+          <TextInput value={newPw} onChangeText={setNewPw} className={inputCls} secureTextEntry placeholder="At least 8 characters" placeholderTextColor={isDark ? '#64748B' : '#94A3B8'} />
+
+          <Text className="text-sm font-semibold text-text-primary dark:text-white mb-1">Confirm New Password</Text>
+          <TextInput value={confirmPw} onChangeText={setConfirmPw} className={inputCls} secureTextEntry placeholderTextColor={isDark ? '#64748B' : '#94A3B8'} />
+
+          <View className="flex-row gap-3 mt-2">
+            <Button variant="secondary" onPress={onClose} fullWidth>Cancel</Button>
+            <Button onPress={handleSubmit} loading={submitting} fullWidth>Update</Button>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 

@@ -1,11 +1,21 @@
+// ============================================================
+// send-registration-email Edge Function
+//
+// Notification emails for the self-registration approval workflow:
+//   - registration_submitted  → HR is notified a new applicant submitted
+//   - registration_approved   → applicant is told they're in
+//   - registration_rejected   → applicant is told why they were declined
+//
+// Uses the shared sendEmail adapter so the provider is swappable.
+// ============================================================
+
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { sendEmail } from '../_shared/email.ts';
 
-const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!;
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const APP_URL = Deno.env.get('APP_URL') || 'http://localhost:8081';
-const EMAIL_FROM = Deno.env.get('EMAIL_FROM') || 'HR System <noreply@yourdomain.com>';
+const APP_URL = Deno.env.get('APP_URL') ?? 'http://localhost:8081';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -30,43 +40,20 @@ serve(async (req: Request) => {
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Verify caller is authenticated
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) throw new Error('Missing authorization header');
 
     const callerToken = authHeader.replace('Bearer ', '');
-    const {
-      data: { user: caller },
-    } = await supabase.auth.getUser(callerToken);
+    const { data: { user: caller } } = await supabase.auth.getUser(callerToken);
     if (!caller) throw new Error('Invalid token');
 
     const payload: EmailPayload = await req.json();
-
     if (!payload.type || !payload.recipientEmail) {
       throw new Error('type and recipientEmail are required');
     }
 
     const { subject, html } = buildEmail(payload);
-
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: EMAIL_FROM,
-        to: [payload.recipientEmail],
-        subject,
-        html,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Resend API error:', errorText);
-      throw new Error(`Email send failed: ${errorText}`);
-    }
+    await sendEmail({ to: payload.recipientEmail, subject, html });
 
     return new Response(
       JSON.stringify({ success: true }),
@@ -75,17 +62,14 @@ serve(async (req: Request) => {
   } catch (error: any) {
     return new Response(
       JSON.stringify({ error: error.message }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
 
 function buildEmail(payload: EmailPayload): { subject: string; html: string } {
   const wrap = (body: string) => `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #0F172A;">
       ${body}
     </div>
   `;
@@ -98,7 +82,7 @@ function buildEmail(payload: EmailPayload): { subject: string; html: string } {
           <h2 style="color: #F59E0B;">New Employee Registration</h2>
           <p><strong>${payload.data?.employeeName || 'An employee'}</strong> has submitted a registration request and is waiting for your review.</p>
           <p>Please review their information and approve or reject their registration.</p>
-          <a href="${APP_URL}" style="display: inline-block; background: #2563EB; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin-top: 8px;">
+          <a href="${APP_URL}" style="display: inline-block; background: #2563EB; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin-top: 8px; font-weight: 600;">
             Open Admin Panel
           </a>
         `),
@@ -111,7 +95,7 @@ function buildEmail(payload: EmailPayload): { subject: string; html: string } {
           <h2 style="color: #16A34A;">Registration Approved!</h2>
           <p>Hi ${payload.recipientName},</p>
           <p>Your registration has been approved. You now have full access to the HR System.</p>
-          <a href="${APP_URL}" style="display: inline-block; background: #2563EB; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin-top: 8px;">
+          <a href="${APP_URL}" style="display: inline-block; background: #2563EB; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin-top: 8px; font-weight: 600;">
             Sign In Now
           </a>
         `),

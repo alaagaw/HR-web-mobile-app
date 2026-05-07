@@ -31,6 +31,8 @@ export interface Profile {
   supervisor_id: string | null;
   manager_id: string | null;
   department: string | null;
+  job_title: string | null;
+  start_date: string | null;
   workday_hours: number;
   is_active: boolean;
   registration_status: RegistrationStatus;
@@ -341,6 +343,27 @@ export interface InviteEmployeeData {
   department: string;
   supervisor_id: string | null;
   manager_id: string | null;
+}
+
+/** Full payload for create-employee (HR creates the row; invite may follow). */
+export interface CreateEmployeeData {
+  email: string;
+  full_name: string;
+  emp_code: string;
+  phone: string;
+  role: Role;
+  department: string;
+  supervisor_id: string;
+  manager_id: string;
+  job_title: string;
+  start_date: string;
+}
+
+/** Per-id result returned by the batch send-invite Edge Function. */
+export interface SendInviteResult {
+  profile_id: string;
+  success: boolean;
+  error?: string;
 }
 
 export interface PendingRegistration extends Profile {

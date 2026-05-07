@@ -70,6 +70,7 @@ export enum NotificationType {
 }
 
 export enum RegistrationStatus {
+  NotInvited = 'not_invited',
   EmailUnverified = 'email_unverified',
   PendingInfo = 'pending_info',
   PendingApproval = 'pending_approval',

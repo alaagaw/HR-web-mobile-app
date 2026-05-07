@@ -58,6 +58,14 @@ export function useAuth() {
     setUser(updatedProfile);
   }, []);
 
+  const resetPasswordForEmail = useCallback(async (email: string) => {
+    await authService.resetPasswordForEmail(email);
+  }, []);
+
+  const updateEmail = useCallback(async (newEmail: string) => {
+    await authService.updateEmail(newEmail);
+  }, []);
+
   const signOut = useCallback(async () => {
     await authService.signOut();
     clear();
@@ -77,5 +85,7 @@ export function useAuth() {
     signUp,
     signOut,
     changePassword,
+    resetPasswordForEmail,
+    updateEmail,
   };
 }

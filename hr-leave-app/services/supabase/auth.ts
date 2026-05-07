@@ -98,6 +98,30 @@ export const authService: AuthService = {
     }
   },
 
+  async resetPasswordForEmail(email) {
+    // Build the redirect target so the recovery link lands on /reset-password.
+    // On web we can use window.location.origin; on native we fall back to the
+    // EXPO_PUBLIC_APP_URL env var (set in Supabase URL Configuration too).
+    const origin =
+      typeof window !== 'undefined' && window.location?.origin
+        ? window.location.origin
+        : process.env.EXPO_PUBLIC_APP_URL || '';
+    const redirectTo = `${origin}/reset-password`;
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
+    });
+    if (error) throw new Error(error.message);
+  },
+
+  async updateEmail(newEmail) {
+    // Supabase sends a confirmation link to BOTH the old and new addresses;
+    // auth.users.email only changes after confirmation, then trigger
+    // sync_profile_email() (migration 015) updates profiles.email automatically.
+    const { error } = await supabase.auth.updateUser({ email: newEmail });
+    if (error) throw new Error(error.message);
+  },
+
   async signOut() {
     const { error } = await supabase.auth.signOut();
     if (error) throw new Error(error.message);

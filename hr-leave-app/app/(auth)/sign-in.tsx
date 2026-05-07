@@ -22,11 +22,13 @@ function WebSignIn({
   loading,
   onSubmit,
   onSignUp,
+  onForgotPassword,
 }: {
   error: string | null;
   loading: boolean;
   onSubmit: (data: { email: string; password: string }) => void;
   onSignUp: () => void;
+  onForgotPassword: () => void;
 }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -356,6 +358,23 @@ function WebSignIn({
               )}
             </div>
 
+            {/* Forgot password link */}
+            <div style={{ textAlign: 'right', marginTop: -12, marginBottom: 16 }}>
+              <span
+                onClick={onForgotPassword}
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: '#2563EB',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = '#3B82F6'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = '#2563EB'; }}
+              >
+                Forgot password?
+              </span>
+            </div>
+
             {/* Submit */}
             <button
               type="submit"
@@ -472,6 +491,7 @@ export default function SignInScreen() {
         loading={loading}
         onSubmit={onSubmit}
         onSignUp={() => router.push('/(auth)/sign-up' as any)}
+        onForgotPassword={() => router.push('/(auth)/forgot-password' as any)}
       />
     );
   }
@@ -555,6 +575,15 @@ export default function SignInScreen() {
                 />
               )}
             />
+
+            <Pressable
+              onPress={() => router.push('/(auth)/forgot-password' as any)}
+              className="mt-1 mb-2 self-end"
+            >
+              <Text className="text-sm font-semibold text-primary">
+                Forgot password?
+              </Text>
+            </Pressable>
 
             <View className="mt-2">
               <Button onPress={handleSubmit(onSubmit)} loading={loading} fullWidth>
