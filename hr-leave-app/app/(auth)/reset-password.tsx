@@ -44,12 +44,18 @@ export default function ResetPasswordScreen() {
   });
 
   // On mount, figure out whether the recovery token is good or already used.
-  // Supabase parses the URL hash on its own as the page loads; we just need
-  // to wait for it to settle, then check getSession().
+  // Two signals tell us this is valid:
+  //   1. The Supabase client fires a PASSWORD_RECOVERY (or SIGNED_IN with a
+  //      session) event after it parses the URL hash. We listen for that.
+  //   2. getSession() returns a session.
+  // Two signals tell us it's NOT valid:
+  //   - The URL hash already contains an explicit Supabase error
+  //     (error_code=otp_expired etc.)
+  //   - 3 seconds pass with no session and no error → fallback to invalid.
   useEffect(() => {
     let cancelled = false;
 
-    // First, look at the URL hash for an explicit error returned by Supabase.
+    // Check URL hash for an explicit error from Supabase.
     if (typeof window !== 'undefined' && window.location?.hash) {
       const hash = window.location.hash.replace(/^#/, '');
       const params = new URLSearchParams(hash);
@@ -66,28 +72,38 @@ export default function ResetPasswordScreen() {
       }
     }
 
-    // Otherwise, check whether Supabase managed to set up a session from the
-    // recovery token. A small timeout lets the auth client process the hash.
-    const timer = setTimeout(async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (cancelled) return;
-        if (session) {
-          setLinkState('valid');
-        } else {
-          setLinkErrorReason('This reset link has already been used or has expired.');
-          setLinkState('invalid');
-        }
-      } catch {
-        if (cancelled) return;
-        setLinkErrorReason('Could not verify the reset link.');
+    // Subscribe to Supabase auth events. PASSWORD_RECOVERY fires once the
+    // recovery token in the URL hash has been validated and a session built.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (cancelled) return;
+      if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && session) || (event === 'INITIAL_SESSION' && session)) {
+        setLinkState('valid');
+      }
+    });
+
+    // Belt-and-braces: also poll once after 600ms — covers the case where
+    // the auth event already fired before this listener was attached.
+    const earlyCheck = setTimeout(async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!cancelled && session) setLinkState('valid');
+    }, 600);
+
+    // Fallback: 3 seconds with no event and no session → declare invalid.
+    const fallback = setTimeout(async () => {
+      if (cancelled) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (cancelled) return;
+      if (!session) {
+        setLinkErrorReason('This reset link has already been used or has expired.');
         setLinkState('invalid');
       }
-    }, 250);
+    }, 3000);
 
     return () => {
       cancelled = true;
-      clearTimeout(timer);
+      subscription.unsubscribe();
+      clearTimeout(earlyCheck);
+      clearTimeout(fallback);
     };
   }, []);
 
