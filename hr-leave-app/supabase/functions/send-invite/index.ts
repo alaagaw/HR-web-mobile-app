@@ -143,31 +143,41 @@ async function inviteWithMagicLink(supabase: any, profileId: string, redirectBas
 
   // Trigger Supabase's built-in password-recovery email. We use the anon-key
   // client because resetPasswordForEmail is a public unauthenticated RPC.
-  // Supabase auto-sends the email via the SMTP configured in Auth → SMTP
-  // Settings (or its own built-in mailer if none is set yet).
   const supabaseAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const { error: rpcErr } = await supabaseAnon.auth.resetPasswordForEmail(profile.email, {
     redirectTo: `${redirectBase}/reset-password`,
   });
   if (rpcErr) throw new Error(`Supabase mailer rejected: ${rpcErr.message}`);
 
-  // Mark the profile active. The user can sign in once they've set a password
-  // via the recovery link. (must_change_password is left false because they're
-  // setting their own password directly on the reset page — no second step.)
-  await supabase
-    .from('profiles')
-    .update({
-      registration_status: 'active',
-      must_change_password: false,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', profileId);
+  // Status routing:
+  //   - First-time invite (status was `not_invited`):
+  //       → bump to `pending_info` so the AuthGuard routes them to the
+  //         registration form on first sign-in. They fill in nationality,
+  //         primary ID, etc., then submit → `pending_approval` → HR
+  //         approves → `active`.
+  //   - Resend to anyone already past not_invited (active, pending_info,
+  //     pending_approval): leave their current status alone — we only
+  //     reset their password, we don't change where they are in the
+  //     onboarding flow.
+  const isFirstTimeInvite = profile.registration_status === 'not_invited';
+  const updates: Record<string, unknown> = {
+    must_change_password: false,
+    updated_at: new Date().toISOString(),
+  };
+  if (isFirstTimeInvite) {
+    updates.registration_status = 'pending_info';
+  }
+  await supabase.from('profiles').update(updates).eq('id', profileId);
 
   await supabase.from('notifications').insert({
     user_id: profileId,
     type: 'employee_invited',
-    title: 'Welcome to Poly-Tech HR Management System',
-    body: 'Check your email for a link to set your password and sign in.',
+    title: isFirstTimeInvite
+      ? 'Welcome to Poly-Tech HR Management System'
+      : 'Password reset link sent',
+    body: isFirstTimeInvite
+      ? "Check your email for a link to set your password. After signing in you'll be asked to verify your profile information."
+      : 'Check your email for a fresh sign-in link.',
   });
 }
 

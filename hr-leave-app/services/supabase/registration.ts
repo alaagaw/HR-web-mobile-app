@@ -1,6 +1,11 @@
 import { supabase } from './client';
 import type { RegistrationService } from '../types';
-import type { Profile, PendingRegistration, SendInviteResult } from '@/types/models';
+import type {
+  Profile,
+  PendingRegistration,
+  SendInviteResult,
+  RequestProfileVerificationResult,
+} from '@/types/models';
 import { RegistrationStatus } from '@/types/enums';
 
 const EDGE_FUNCTION_URL =
@@ -33,12 +38,15 @@ export const registrationService: RegistrationService = {
   // ── Self-registration flow ───────────────────────────────────
 
   async submitRegistration(userId, data) {
-    // 1. Update profile with name and phone
+    // 1. Update profile (full_name, phone, nationality). Email change goes
+    //    through the auth flow separately if needed; trigger 015 syncs back
+    //    to profiles.email.
     const { error: profileError } = await supabase
       .from('profiles')
       .update({
         full_name: data.full_name,
         phone: data.phone,
+        nationality: data.nationality,
         registration_status: RegistrationStatus.PendingApproval,
         updated_at: new Date().toISOString(),
       })
@@ -46,25 +54,44 @@ export const registrationService: RegistrationService = {
 
     if (profileError) throw new Error(profileError.message);
 
-    // 2. Upsert employee_documents
+    // 2. Upsert employee_documents — including the new primary-ID fields
+    //    (id_type, national_id_number, id_document_url). occupation is
+    //    auto-derived from job_title at create-employee time and not
+    //    re-collected here. emp_code is HR-managed; only set it (with a
+    //    PENDING placeholder) for self-registered users who don't have
+    //    an HR-created profile yet.
+    const { data: existingDoc } = await supabase
+      .from('employee_documents')
+      .select('emp_code')
+      .eq('employee_id', userId)
+      .maybeSingle();
+
+    const docPayload: Record<string, unknown> = {
+      employee_id: userId,
+      // New fields — only set if the (Phase B) form provided them
+      ...(data.id_type ? { id_type: data.id_type } : {}),
+      ...(data.national_id_number !== undefined ? { national_id_number: data.national_id_number } : {}),
+      ...(data.id_document_url ? { id_document_url: data.id_document_url } : {}),
+      // Legacy fields — current form always sets these
+      iqama_number: data.iqama_number,
+      iqama_expiry: data.iqama_expiry,
+      passport_number: data.passport_number,
+      passport_expiry: data.passport_expiry,
+      insurance_number: data.insurance_number,
+      insurance_expiry: data.insurance_expiry,
+      occupation: data.occupation,
+      birth_date: data.birth_date,
+      updated_at: new Date().toISOString(),
+    };
+    if (!existingDoc) {
+      // Self-registered (no HR-pre-created row) — placeholder so the NOT NULL
+      // emp_code constraint is satisfied; HR replaces it on approval.
+      docPayload.emp_code = `PENDING-${Date.now()}`;
+    }
+
     const { error: docError } = await supabase
       .from('employee_documents')
-      .upsert(
-        {
-          employee_id: userId,
-          emp_code: `PENDING-${Date.now()}`,
-          iqama_number: data.iqama_number,
-          iqama_expiry: data.iqama_expiry,
-          passport_number: data.passport_number,
-          passport_expiry: data.passport_expiry,
-          insurance_number: data.insurance_number,
-          insurance_expiry: data.insurance_expiry,
-          occupation: data.occupation,
-          birth_date: data.birth_date,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'employee_id' }
-      );
+      .upsert(docPayload, { onConflict: 'employee_id' });
 
     if (docError) throw new Error(docError.message);
 
@@ -303,5 +330,24 @@ export const registrationService: RegistrationService = {
       ...(appUrl ? { app_url: appUrl } : {}),
     });
     return (result.results ?? []) as SendInviteResult[];
+  },
+
+  async requestProfileVerification(profileIds) {
+    // Bulk demote selected active employees back to `pending_info` so the
+    // AuthGuard routes them through the registration form on next sign-in.
+    // Also fires an email asking them to log in and complete their profile.
+    //
+    // Implementation lives in a dedicated Edge Function so we can do the
+    // status update + magic-link email atomically with HR auth check.
+    const appUrl =
+      typeof window !== 'undefined' && window.location?.origin
+        ? window.location.origin
+        : undefined;
+
+    const result = await callEdgeFunction('request-profile-verification', {
+      profile_ids: profileIds,
+      ...(appUrl ? { app_url: appUrl } : {}),
+    });
+    return (result.results ?? []) as RequestProfileVerificationResult[];
   },
 };

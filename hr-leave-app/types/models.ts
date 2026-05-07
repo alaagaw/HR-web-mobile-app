@@ -33,12 +33,20 @@ export interface Profile {
   department: string | null;
   job_title: string | null;
   start_date: string | null;
+  nationality: string | null;
   workday_hours: number;
   is_active: boolean;
   registration_status: RegistrationStatus;
   must_change_password: boolean;
   invited_by: string | null;
   registration_note: string | null;
+  /**
+   * Snapshot of the values HR entered when creating this employee.
+   * Used by the HR Pending Registrations review screen to highlight
+   * (yellow tint) any field the employee changed during their
+   * registration form submission.
+   */
+  hr_original_values: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 }
@@ -54,10 +62,19 @@ export interface ProfileSummary {
 // EMPLOYEE DOCUMENTS (Iqama, Passport, Insurance, etc.)
 // ============================================================
 
+/** Which document the employee selected as their primary ID. */
+export type IdType = 'national_id' | 'iqama' | 'passport';
+
 export interface EmployeeDocument {
   id: string;
   employee_id: string;
   emp_code: string;
+  /** Primary ID type chosen by the employee at registration. */
+  id_type: IdType | null;
+  /** Saudi national ID number — only relevant when id_type='national_id'. */
+  national_id_number: string | null;
+  /** Storage URL (signed) of the uploaded scan of the primary ID. */
+  id_document_url: string | null;
   iqama_number: string | null;
   passport_number: string | null;
   insurance_number: string | null;
@@ -76,6 +93,9 @@ export interface EmployeeDocument {
 }
 
 export interface EmployeeDocumentDraft {
+  id_type?: IdType | null;
+  national_id_number?: string | null;
+  id_document_url?: string | null;
   iqama_number?: string | null;
   passport_number?: string | null;
   insurance_number?: string | null;
@@ -323,9 +343,26 @@ export interface RenewalTaskFilters {
 // REGISTRATION
 // ============================================================
 
+/**
+ * Submitted by the employee from /registration-form when their profile
+ * is at status `pending_info`.
+ *
+ * NOTE: shape is in transition.
+ * - The existing form (registration-form.tsx) populates the legacy
+ *   fields (iqama/passport/insurance/occupation/birth_date) — those
+ *   are kept required for backward compatibility.
+ * - The Phase B rewrite will populate the new fields (nationality,
+ *   id_type, national_id_number, id_document_url) — currently OPTIONAL
+ *   so the old form keeps compiling. Will be flipped to required once
+ *   the new form is in place.
+ */
 export interface RegistrationFormData {
+  // Profile-level (employee-editable, HR pre-fills some)
   full_name: string;
   phone: string;
+  email?: string;
+
+  // Legacy required fields (current form)
   iqama_number: string;
   iqama_expiry: string;
   passport_number: string;
@@ -334,6 +371,23 @@ export interface RegistrationFormData {
   insurance_expiry: string;
   occupation: string;
   birth_date: string;
+
+  // NEW fields (optional during transition; required after Phase B)
+  nationality?: string;
+  id_type?: IdType;
+  national_id_number?: string | null;
+  id_document_url?: string;
+}
+
+/**
+ * Sent to the bulk re-registration RPC. Demotes selected active
+ * employees back to `pending_info` so they're forced through the
+ * registration form to verify/complete their profile.
+ */
+export interface RequestProfileVerificationResult {
+  profile_id: string;
+  success: boolean;
+  error?: string;
 }
 
 export interface InviteEmployeeData {
@@ -349,8 +403,18 @@ export interface InviteEmployeeData {
 export interface CreateEmployeeData {
   email: string;
   full_name: string;
-  emp_code: string;
-  phone: string;
+  /**
+   * Optional. If omitted, the create-employee Edge Function generates the
+   * next code via the Postgres `emp_code_seq` sequence (atomic, race-free).
+   * HR can override (e.g. when importing existing employees with legacy
+   * codes) by passing a value.
+   */
+  emp_code?: string;
+  /**
+   * Optional. The employee fills it in during the registration form;
+   * HR no longer required to know it at creation time.
+   */
+  phone?: string;
   role: Role;
   department: string;
   supervisor_id: string;

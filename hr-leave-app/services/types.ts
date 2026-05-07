@@ -22,6 +22,7 @@ import type {
   InviteEmployeeData,
   CreateEmployeeData,
   SendInviteResult,
+  RequestProfileVerificationResult,
   PendingRegistration,
   ApproveRegistrationData,
   Project,
@@ -165,6 +166,10 @@ export interface RegistrationService {
   // HR create-then-invite (new two-step workflow + batch send)
   createEmployee(data: CreateEmployeeData, invitedBy: string): Promise<Profile>;
   sendInvites(profileIds: string[]): Promise<SendInviteResult[]>;
+
+  // Bulk demote active employees back to pending_info so they're forced
+  // through the registration form again to verify/complete their profile.
+  requestProfileVerification(profileIds: string[]): Promise<RequestProfileVerificationResult[]>;
 }
 
 // ============================================================
