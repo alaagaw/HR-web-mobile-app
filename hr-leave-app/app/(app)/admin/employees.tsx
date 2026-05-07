@@ -9,7 +9,8 @@ import { ScreenHeader } from '@/components/layout/screen-header';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
-import { userService, registrationService } from '@/services';
+import { userService, registrationService, documentService } from '@/services';
+import { supabase } from '@/services/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { getRoleLabel, getInitials } from '@/lib/utils';
 import { Role } from '@/types/enums';
@@ -66,12 +67,21 @@ interface EditDialogState {
   employee: Profile | null;
   full_name: string;
   email: string;
+  emp_code: string;
   phone: string;
-  department: string;
+  job_title: string;
+  start_date: string;
   role: Role;
+  department: string;
+  supervisor_id: string | null;
+  manager_id: string | null;
   workday_hours: string;
   is_active: boolean;
+  show_all_supervisors: boolean;
+  show_all_managers: boolean;
+  send_invite_now: boolean;
   submitting: boolean;
+  error: string;
 }
 
 const INITIAL_DIALOG: EditDialogState = {
@@ -79,12 +89,21 @@ const INITIAL_DIALOG: EditDialogState = {
   employee: null,
   full_name: '',
   email: '',
+  emp_code: '',
   phone: '',
-  department: '',
+  job_title: '',
+  start_date: '',
   role: Role.Employee,
+  department: '',
+  supervisor_id: null,
+  manager_id: null,
   workday_hours: '8',
   is_active: true,
+  show_all_supervisors: false,
+  show_all_managers: false,
+  send_invite_now: false,
   submitting: false,
+  error: '',
 };
 
 const ROLE_OPTIONS = [
@@ -413,93 +432,123 @@ function EditEmployeeDialog({
   onClose,
   onChange,
   onSubmit,
+  employees,
   departments,
 }: {
   state: EditDialogState;
   onClose: () => void;
   onChange: (field: string, value: any) => void;
   onSubmit: () => void;
+  employees: Profile[];
   departments: string[];
 }) {
   const emp = state.employee;
   if (!emp) return null;
 
-  const isValid = state.full_name.trim().length > 0 && state.email.trim().length > 0;
+  // Same role-filtered defaults as the New Employee dialog, plus the
+  // "Show all employees" override toggle.
+  const activeEmployees = employees.filter((e) => e.is_active && e.id !== emp.id);
+
+  const supervisorOptions = state.show_all_supervisors
+    ? activeEmployees
+    : activeEmployees.filter((e) => SUPERVISOR_DEFAULT_ROLES.includes(e.role));
+
+  const managerOptions = state.show_all_managers
+    ? activeEmployees
+    : activeEmployees.filter((e) => MANAGER_DEFAULT_ROLES.includes(e.role));
+
+  const workdayHoursNum = parseFloat(state.workday_hours);
+  const workdayHoursValid = !isNaN(workdayHoursNum) && workdayHoursNum > 0 && workdayHoursNum <= 24;
+
+  const isValid =
+    state.email.trim().length > 0 &&
+    state.full_name.trim().length > 0 &&
+    state.emp_code.trim().length > 0 &&
+    state.phone.trim().length > 0 &&
+    state.department.trim().length > 0 &&
+    state.job_title.trim().length > 0 &&
+    state.start_date.trim().length > 0 &&
+    workdayHoursValid &&
+    !!state.supervisor_id &&
+    !!state.manager_id;
+
+  // Conditional "Send invite now" — only applicable when the employee has
+  // never been invited yet (status = not_invited). For Active employees,
+  // the row's 3-dot menu has "Resend Invite" instead.
+  const canShowSendInviteNow = emp.registration_status === 'not_invited';
 
   return (
     <Dialog
       open={state.open}
       onClose={onClose}
-      maxWidth="sm"
+      maxWidth="md"
       fullWidth
-      PaperProps={{
-        sx: {
-          borderRadius: 3,
-          backgroundImage: 'none',
-        },
-      }}
+      PaperProps={{ sx: { borderRadius: 3, backgroundImage: 'none' } }}
     >
-      <DialogTitle
-        sx={{
-          pb: 1,
-          pt: 3,
-          px: 3,
-          borderBottom: '1px solid',
-          borderColor: 'divider',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>Edit Employee</div>
-            <div style={{ fontSize: 13, fontWeight: 400, opacity: 0.6, marginTop: 2 }}>
-              {emp.full_name} · {emp.department || 'No department'}
-            </div>
-          </div>
+      <DialogTitle sx={{ pb: 1, pt: 3, px: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
+        <div style={{ fontSize: 18, fontWeight: 700 }}>Edit Employee</div>
+        <div style={{ fontSize: 13, fontWeight: 400, opacity: 0.6, marginTop: 2 }}>
+          {emp.full_name} · {emp.department || 'No department'}
         </div>
       </DialogTitle>
       <DialogContent sx={{ pt: '24px !important', pb: 1, px: 3, display: 'flex', flexDirection: 'column', gap: 2, overflow: 'visible' }}>
+        {state.error && (
+          <MuiAlert severity="error" sx={{ mb: 1 }}>
+            {state.error}
+          </MuiAlert>
+        )}
+
+        {/* Identity row */}
         <div style={{ display: 'flex', gap: 12 }}>
           <MuiTextField
             label="Full Name"
             value={state.full_name}
             onChange={(e: any) => onChange('full_name', e.target.value)}
-            fullWidth
-            size="small"
-            required
+            fullWidth size="small" required
           />
           <MuiTextField
             label="Email"
             value={state.email}
             onChange={(e: any) => onChange('email', e.target.value)}
-            fullWidth
-            size="small"
-            required
-            type="email"
+            fullWidth size="small" required type="email"
+            helperText="Changing email re-points the auth account immediately."
           />
         </div>
+
+        {/* Code + phone */}
         <div style={{ display: 'flex', gap: 12 }}>
+          <MuiTextField
+            label="Employee Code"
+            value={state.emp_code}
+            onChange={(e: any) => onChange('emp_code', e.target.value)}
+            fullWidth size="small" required placeholder="e.g. 70150"
+          />
           <MuiTextField
             label="Phone"
             value={state.phone}
             onChange={(e: any) => onChange('phone', e.target.value)}
-            fullWidth
-            size="small"
-            placeholder="e.g. +971 50 123 4567"
-          />
-          <Autocomplete
-            freeSolo
-            forcePopupIcon
-            options={departments}
-            value={state.department}
-            onChange={(_: any, val: string | null) => onChange('department', val || '')}
-            onInputChange={(_: any, val: string) => onChange('department', val)}
-            renderInput={(params: any) => (
-              <MuiTextField {...params} label="Department" size="small" placeholder="Search or type..." />
-            )}
-            fullWidth
-            size="small"
+            fullWidth size="small" required placeholder="e.g. +966 50 123 4567"
           />
         </div>
+
+        {/* Job title + start date */}
+        <div style={{ display: 'flex', gap: 12 }}>
+          <MuiTextField
+            label="Job Title"
+            value={state.job_title}
+            onChange={(e: any) => onChange('job_title', e.target.value)}
+            fullWidth size="small" required placeholder="e.g. Site Engineer"
+          />
+          <MuiTextField
+            label="Start Date"
+            value={state.start_date}
+            onChange={(e: any) => onChange('start_date', e.target.value)}
+            fullWidth size="small" required type="date"
+            InputLabelProps={{ shrink: true }}
+          />
+        </div>
+
+        {/* Role + Workday Hours */}
         <div style={{ display: 'flex', gap: 12 }}>
           <Autocomplete
             options={ROLE_OPTIONS}
@@ -508,33 +557,118 @@ function EditEmployeeDialog({
             getOptionLabel={(opt: any) => opt.label}
             isOptionEqualToValue={(opt: any, val: any) => opt.value === val.value}
             renderInput={(params: any) => (
-              <MuiTextField {...params} label="Role" size="small" placeholder="Search role..." />
+              <MuiTextField {...params} label="Role" size="small" required />
             )}
-            fullWidth
-            size="small"
-            disableClearable
+            fullWidth size="small" disableClearable
           />
           <MuiTextField
             label="Workday Hours"
             value={state.workday_hours}
             onChange={(e: any) => onChange('workday_hours', e.target.value)}
-            fullWidth
-            size="small"
-            type="number"
+            fullWidth size="small" required type="number"
             inputProps={{ min: 1, max: 24, step: 0.5 }}
+            helperText="Standard daily hours (default 8)"
           />
         </div>
+
+        {/* Department */}
+        <Autocomplete
+          freeSolo forcePopupIcon
+          options={departments}
+          value={state.department || null}
+          onChange={(_: any, val: string | null) => onChange('department', val || '')}
+          onInputChange={(_: any, val: string) => onChange('department', val)}
+          renderInput={(params: any) => (
+            <MuiTextField {...params} label="Department" size="small" required placeholder="Search or type..." />
+          )}
+          fullWidth size="small"
+        />
+
+        {/* Supervisor / Reports To */}
+        <div>
+          <Autocomplete
+            options={supervisorOptions}
+            value={supervisorOptions.find((e) => e.id === state.supervisor_id) || null}
+            onChange={(_: any, val: Profile | null) => onChange('supervisor_id', val?.id || null)}
+            getOptionLabel={(opt: Profile) => `${opt.full_name} (${getRoleLabel(opt.role)})`}
+            isOptionEqualToValue={(opt: Profile, val: Profile) => opt.id === val.id}
+            renderInput={(params: any) => (
+              <MuiTextField {...params} label="Supervisor / Reports To" size="small" required placeholder="Search by name, email, or department..." />
+            )}
+            fullWidth size="small"
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={state.show_all_supervisors}
+                onChange={(e: any) => onChange('show_all_supervisors', e.target.checked)}
+                size="small"
+              />
+            }
+            label={<span style={{ fontSize: 12, opacity: 0.75 }}>Show all employees (default: only supervisors / managers / HR)</span>}
+            sx={{ ml: 0, mt: 0.5 }}
+          />
+        </div>
+
+        {/* Manager */}
+        <div>
+          <Autocomplete
+            options={managerOptions}
+            value={managerOptions.find((e) => e.id === state.manager_id) || null}
+            onChange={(_: any, val: Profile | null) => onChange('manager_id', val?.id || null)}
+            getOptionLabel={(opt: Profile) => `${opt.full_name} (${getRoleLabel(opt.role)})`}
+            isOptionEqualToValue={(opt: Profile, val: Profile) => opt.id === val.id}
+            renderInput={(params: any) => (
+              <MuiTextField {...params} label="Manager" size="small" required placeholder="Search by name, email, or department..." />
+            )}
+            fullWidth size="small"
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={state.show_all_managers}
+                onChange={(e: any) => onChange('show_all_managers', e.target.checked)}
+                size="small"
+              />
+            }
+            label={<span style={{ fontSize: 12, opacity: 0.75 }}>Show all employees (default: only managers / HR Director)</span>}
+            sx={{ ml: 0, mt: 0.5 }}
+          />
+        </div>
+
+        {/* Status (extra over the New form) */}
         <MuiTextField
           label="Status"
           value={state.is_active ? 'active' : 'inactive'}
           onChange={(e: any) => onChange('is_active', e.target.value === 'active')}
-          fullWidth
-          size="small"
-          select
+          fullWidth size="small" select
         >
           <MenuItem value="active">Active</MenuItem>
           <MenuItem value="inactive">Inactive</MenuItem>
         </MuiTextField>
+
+        {/* Send invite now — only for Not-Invited employees */}
+        {canShowSendInviteNow && (
+          <div style={{ marginTop: 8, padding: 12, borderRadius: 8, border: '1px dashed rgba(148,163,184,0.5)' }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={state.send_invite_now}
+                  onChange={(e: any) => onChange('send_invite_now', e.target.checked)}
+                />
+              }
+              label={
+                <span style={{ fontSize: 13 }}>
+                  <strong>Send invite email after saving.</strong>{' '}
+                  <span style={{ opacity: 0.7 }}>
+                    Use this once you've finished filling in the missing fields for a Not-Invited employee.
+                  </span>
+                </span>
+              }
+              sx={{ ml: 0 }}
+            />
+          </div>
+        )}
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}>
         <MuiButton
@@ -548,14 +682,11 @@ function EditEmployeeDialog({
           variant="contained"
           onClick={onSubmit}
           disabled={!isValid || state.submitting}
-          sx={{
-            textTransform: 'none',
-            fontWeight: 600,
-            borderRadius: 2,
-            px: 3,
-          }}
+          sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, px: 3 }}
         >
-          {state.submitting ? 'Saving...' : 'Save Changes'}
+          {state.submitting
+            ? (state.send_invite_now ? 'Saving + Sending...' : 'Saving...')
+            : (state.send_invite_now ? 'Save + Send Invite' : 'Save Changes')}
         </MuiButton>
       </DialogActions>
     </Dialog>
@@ -835,19 +966,36 @@ export default function EmployeesScreen() {
   const { invalidate } = useAutoRefresh(() => { loadEmployees(); }, []);
 
   // --- Dialog handlers ---
-  const handleOpenEdit = (emp: Profile) => {
+  const handleOpenEdit = async (emp: Profile) => {
+    // Open immediately with the profile fields we already have, then fetch
+    // emp_code from employee_documents and merge it in. UX: user sees the
+    // dialog instantly; the employee_code field populates within ~100ms.
     setDialog({
+      ...INITIAL_DIALOG,
       open: true,
       employee: emp,
       full_name: emp.full_name,
       email: emp.email,
+      emp_code: '',
       phone: emp.phone || '',
-      department: emp.department || '',
+      job_title: emp.job_title || '',
+      start_date: emp.start_date || '',
       role: emp.role,
+      department: emp.department || '',
+      supervisor_id: emp.supervisor_id,
+      manager_id: emp.manager_id,
       workday_hours: String(emp.workday_hours),
       is_active: emp.is_active,
-      submitting: false,
     });
+
+    try {
+      const doc = await documentService.getDocumentByEmployee(emp.id);
+      if (doc?.emp_code) {
+        setDialog((s) => (s.employee?.id === emp.id ? { ...s, emp_code: doc.emp_code } : s));
+      }
+    } catch {
+      // Non-fatal — emp_code stays empty and HR will see the required-field warning.
+    }
   };
 
   const handleCloseDialog = () => {
@@ -855,27 +1003,84 @@ export default function EmployeesScreen() {
   };
 
   const handleChange = (field: string, value: any) => {
-    setDialog((s) => ({ ...s, [field]: value }));
+    setDialog((s) => ({ ...s, [field]: value, error: '' }));
   };
 
   const handleSubmitEdit = async () => {
     if (!dialog.employee) return;
-    setDialog((s) => ({ ...s, submitting: true }));
+    setDialog((s) => ({ ...s, submitting: true, error: '' }));
+
+    const employeeId = dialog.employee.id;
+    const oldEmail = dialog.employee.email;
+    const newEmail = dialog.email.trim().toLowerCase();
+    const emailChanged = newEmail !== oldEmail.toLowerCase();
+
     try {
-      await userService.updateProfile(dialog.employee.id, {
+      // 1. If the email changed, route through the admin Edge Function so
+      //    auth.users.email + profiles.email stay in sync (trigger 015 handles
+      //    the profiles side after auth confirms).
+      if (emailChanged) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Not authenticated');
+        const response = await fetch(
+          `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/update-employee-email`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ profile_id: employeeId, new_email: newEmail }),
+          }
+        );
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Failed to change email');
+      }
+
+      // 2. Update the profile row (every other field).
+      await userService.updateProfile(employeeId, {
         full_name: dialog.full_name.trim(),
-        email: dialog.email.trim(),
         phone: dialog.phone.trim() || null,
+        job_title: dialog.job_title.trim() || null,
+        start_date: dialog.start_date || null,
         department: dialog.department.trim() || null,
         role: dialog.role,
+        supervisor_id: dialog.supervisor_id,
+        manager_id: dialog.manager_id,
         workday_hours: parseFloat(dialog.workday_hours) || 8,
         is_active: dialog.is_active,
       });
+
+      // 3. emp_code lives in employee_documents — upsert separately.
+      const newEmpCode = dialog.emp_code.trim();
+      if (newEmpCode) {
+        await supabase
+          .from('employee_documents')
+          .upsert(
+            { employee_id: employeeId, emp_code: newEmpCode, updated_at: new Date().toISOString() },
+            { onConflict: 'employee_id' }
+          );
+      }
+
+      // 4. Optional: HR finished a Not-Invited row and ticked "Send invite now".
+      let inviteSummary = '';
+      if (dialog.send_invite_now && dialog.employee.registration_status === 'not_invited') {
+        const results = await registrationService.sendInvites([employeeId]);
+        const result = results[0];
+        inviteSummary = result?.success
+          ? ' and invite emailed'
+          : ` but invite email failed: ${result?.error || 'unknown error'}`;
+      }
+
       setDialog(INITIAL_DIALOG);
-      setSuccessMsg(`${dialog.full_name} updated successfully`);
+      setSuccessMsg(`${dialog.full_name} updated successfully${inviteSummary}`);
       invalidate();
-    } catch {
-      setDialog((s) => ({ ...s, submitting: false }));
+    } catch (err: any) {
+      setDialog((s) => ({
+        ...s,
+        submitting: false,
+        error: err.message || 'Failed to save changes',
+      }));
     }
   };
 
@@ -1077,6 +1282,7 @@ export default function EmployeesScreen() {
                   onClose={handleCloseDialog}
                   onChange={handleChange}
                   onSubmit={handleSubmitEdit}
+                  employees={employees}
                   departments={[...new Set(employees.map((e) => e.department).filter(Boolean) as string[])]}
                 />
                 <InviteEmployeeDialog
