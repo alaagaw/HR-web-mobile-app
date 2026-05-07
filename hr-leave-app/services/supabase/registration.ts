@@ -38,21 +38,22 @@ export const registrationService: RegistrationService = {
   // ── Self-registration flow ───────────────────────────────────
 
   async submitRegistration(userId, data) {
-    // 1. Update profile (full_name, phone, nationality). Email change goes
-    //    through the auth flow separately if needed; trigger 015 syncs back
-    //    to profiles.email.
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .update({
-        full_name: data.full_name,
-        phone: data.phone,
-        nationality: data.nationality,
-        registration_status: RegistrationStatus.PendingApproval,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', userId);
+    // 1. Profile update (full_name, phone, nationality + status flip to
+    //    pending_approval) goes through the SECURITY DEFINER RPC
+    //    `submit_my_registration` because the RLS lockdown in migration
+    //    014 forbids the employee from changing nationality or
+    //    registration_status directly.
+    const { data: rpcData, error: rpcError } = await supabase.rpc(
+      'submit_my_registration',
+      {
+        p_full_name: data.full_name,
+        p_phone: data.phone,
+        p_nationality: data.nationality ?? '',
+      }
+    );
 
-    if (profileError) throw new Error(profileError.message);
+    if (rpcError) throw new Error(rpcError.message);
+    if (!rpcData) throw new Error('submit_my_registration returned no data');
 
     // 2. Upsert employee_documents — including the new primary-ID fields
     //    (id_type, national_id_number, id_document_url). occupation is
