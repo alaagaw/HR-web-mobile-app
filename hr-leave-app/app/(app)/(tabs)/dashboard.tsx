@@ -44,6 +44,7 @@ let DialogTitle: any;
 let DialogContent: any;
 let DialogActions: any;
 let TextField: any;
+let ReviewRegistrationDialog: any;
 if (isWeb) {
   const dg = require('@mui/x-data-grid');
   DataGrid = dg.DataGrid;
@@ -55,6 +56,7 @@ if (isWeb) {
   DialogContent = require('@mui/material/DialogContent').default;
   DialogActions = require('@mui/material/DialogActions').default;
   TextField = require('@mui/material/TextField').default;
+  ReviewRegistrationDialog = require('@/components/dialogs/review-registration-dialog').ReviewRegistrationDialog;
 }
 
 // ─── Enterprise Design Tokens ────────────────────────────────────────
@@ -743,9 +745,20 @@ export default function DashboardScreen() {
   const { notifications, fetchNotifications } = useNotifications(user?.id);
   const unreadCount = useNotificationStore((s) => s.unreadCount);
 
-  // Pending profile registrations — visible to HR users only.
+  // Pending profile registrations — visible to HR users only. The dialog
+  // is mounted inline below so HR can approve/reject without leaving the
+  // dashboard (matches the inline Approve/Reject pattern used for leave
+  // requests).
   const isHR = user?.role === Role.HR || user?.role === Role.HRDirector;
   const [pendingRegistrations, setPendingRegistrations] = useState<PendingRegistration[]>([]);
+  const [reviewingReg, setReviewingReg] = useState<PendingRegistration | null>(null);
+
+  const refreshPendingRegistrations = () => {
+    if (!isHR) return;
+    registrationService.getPendingRegistrations()
+      .then((regs) => setPendingRegistrations(regs.filter((r) => r.registration_status === 'pending_approval')))
+      .catch(() => { /* silent */ });
+  };
 
   useAutoRefresh(() => {
     if (!user) return;
@@ -760,13 +773,8 @@ export default function DashboardScreen() {
     }
     fetchRenewalTasks(user.id);
 
-    // HR-only: fetch full list of pending profile registrations so we can
-    // surface each one inside the Action Required card with a Review button.
-    if (isHR) {
-      registrationService.getPendingRegistrations()
-        .then((regs) => setPendingRegistrations(regs.filter((r) => r.registration_status === 'pending_approval')))
-        .catch(() => { /* silent */ });
-    }
+    // HR-only: surface pending profile registrations inside Action Required.
+    refreshPendingRegistrations();
   }, [user?.id]);
 
   // Keep sidebar badge in sync
@@ -1023,13 +1031,25 @@ export default function DashboardScreen() {
               onApprove={handleApprove}
               onViewRequest={handleRowPress}
               onRenew={(task) => { setRenewDialog({ open: true, task }); setNewExpiry(''); }}
-              onReviewRegistration={() => router.push('/(app)/admin/registrations' as any)}
+              onReviewRegistration={(reg: PendingRegistration) => setReviewingReg(reg)}
               onViewAllNotifications={() => router.push('/(app)/notifications' as any)}
               onViewAllApprovals={() => router.push('/(app)/(tabs)/tasks' as any)}
               onViewAllRenewals={() => router.push('/(app)/(tabs)/tasks' as any)}
               onViewAllRegistrations={() => router.push('/(app)/admin/registrations' as any)}
             />
           </div>
+
+          {/* Review Registration dialog — mounted inline so HR can act
+              without navigating away from the dashboard. */}
+          {isHR && ReviewRegistrationDialog && (
+            <ReviewRegistrationDialog
+              open={!!reviewingReg}
+              registration={reviewingReg}
+              currentUserId={user?.id}
+              onClose={() => setReviewingReg(null)}
+              onProcessed={refreshPendingRegistrations}
+            />
+          )}
 
           {/* Recent Requests — full width */}
           <div
