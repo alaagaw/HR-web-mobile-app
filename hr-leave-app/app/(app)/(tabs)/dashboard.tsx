@@ -14,7 +14,6 @@ import {
   ArrowRight,
   ChevronRight,
   Bell,
-  Users,
 } from 'lucide-react-native';
 import { StatsCard } from '@/components/dashboard/stats-card';
 import { RequestCard } from '@/components/leave/request-card';
@@ -31,7 +30,7 @@ import { registrationService } from '@/services';
 import { Role, LeaveStatus, LeaveType, RenewalTaskStatus } from '@/types/enums';
 import { getStatusLabel, getLeaveTypeLabel, getLeaveTypeMuiColor } from '@/lib/state-machine';
 import { formatHours, formatDaysHours, formatDateRange, formatPendingSince, getRoleLabel } from '@/lib/utils';
-import type { LeaveRequest, AppNotification, RenewalTask } from '@/types/models';
+import type { LeaveRequest, AppNotification, RenewalTask, PendingRegistration } from '@/types/models';
 
 const isWeb = Platform.OS === 'web';
 
@@ -148,30 +147,42 @@ function ActionRequiredCard({
   pendingApprovals,
   renewalTasks,
   notifications,
+  pendingRegistrations,
   isDark,
   isApprover,
+  isHR,
   onApprove,
   onViewRequest,
   onRenew,
+  onReviewRegistration,
   onViewAllNotifications,
   onViewAllApprovals,
   onViewAllRenewals,
+  onViewAllRegistrations,
 }: {
   pendingApprovals: LeaveRequest[];
   renewalTasks: RenewalTask[];
   notifications: AppNotification[];
+  pendingRegistrations: PendingRegistration[];
   isDark: boolean;
   isApprover: boolean;
+  isHR: boolean;
   onApprove: (request: LeaveRequest) => void;
   onViewRequest: (request: LeaveRequest) => void;
   onRenew: (task: RenewalTask) => void;
+  onReviewRegistration: (reg: PendingRegistration) => void;
   onViewAllNotifications: () => void;
   onViewAllApprovals: () => void;
   onViewAllRenewals: () => void;
+  onViewAllRegistrations: () => void;
 }) {
   const tk = t(isDark);
   const unreadCount = useNotificationStore((s) => s.unreadCount);
-  const totalCount = (isApprover ? pendingApprovals.length : 0) + renewalTasks.length + (unreadCount || 0);
+  const totalCount =
+    (isApprover ? pendingApprovals.length : 0) +
+    renewalTasks.length +
+    (isHR ? pendingRegistrations.length : 0) +
+    (unreadCount || 0);
   const recent = notifications.slice(0, 3);
 
   return (
@@ -400,8 +411,88 @@ function ActionRequiredCard({
         </div>
       )}
 
+      {/* Pending Profile Registrations — HR only */}
+      {isHR && pendingRegistrations.length > 0 && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px 10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: isDark ? '#E2E8F0' : '#334155' }}>
+                Pending Profile Registrations
+              </span>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  backgroundColor: DT.warningBorder,
+                  color: '#FFFFFF',
+                  borderRadius: 8,
+                  padding: '1px 7px',
+                }}
+              >
+                {pendingRegistrations.length}
+              </span>
+            </div>
+            {pendingRegistrations.length > 4 && (
+              <span
+                onClick={onViewAllRegistrations}
+                style={{ fontSize: 12, fontWeight: 600, color: tk.accent, cursor: 'pointer' }}
+              >
+                View All
+              </span>
+            )}
+          </div>
+          {pendingRegistrations.slice(0, 4).map((reg) => (
+            <div
+              key={reg.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 20px',
+                borderBottom: `1px solid ${isDark ? DT.cardBorder : '#F1F5F9'}`,
+                backgroundColor: isDark ? DT.subBg : '#FAFBFC',
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: tk.textPrimary }}>
+                    {reg.full_name || '—'}
+                  </span>
+                  <span style={{ fontSize: 13, color: tk.textSecondary }}>
+                    {reg.email}
+                  </span>
+                </div>
+                <div style={{ fontSize: 13, color: tk.textMuted }}>
+                  Submitted {new Date(reg.created_at).toLocaleDateString()}
+                  {reg.department && <> · {reg.department}</>}
+                </div>
+              </div>
+              <MuiButton
+                variant="contained"
+                size="small"
+                onClick={(e: any) => {
+                  e.stopPropagation();
+                  onReviewRegistration(reg);
+                }}
+                sx={{
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  fontSize: 13,
+                  borderRadius: '8px',
+                  px: 2,
+                  py: 0.5,
+                  minWidth: 0,
+                }}
+              >
+                Review
+              </MuiButton>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* No action required fallback */}
-      {(!isApprover || pendingApprovals.length === 0) && renewalTasks.length === 0 && (
+      {(!isApprover || pendingApprovals.length === 0) && renewalTasks.length === 0 && (!isHR || pendingRegistrations.length === 0) && (
         <div
           style={{
             padding: '20px',
@@ -652,9 +743,9 @@ export default function DashboardScreen() {
   const { notifications, fetchNotifications } = useNotifications(user?.id);
   const unreadCount = useNotificationStore((s) => s.unreadCount);
 
-  // Pending registration count — visible to HR users only.
+  // Pending profile registrations — visible to HR users only.
   const isHR = user?.role === Role.HR || user?.role === Role.HRDirector;
-  const [pendingRegCount, setPendingRegCount] = useState(0);
+  const [pendingRegistrations, setPendingRegistrations] = useState<PendingRegistration[]>([]);
 
   useAutoRefresh(() => {
     if (!user) return;
@@ -669,10 +760,11 @@ export default function DashboardScreen() {
     }
     fetchRenewalTasks(user.id);
 
-    // HR-only: fetch count of pending profile registrations.
+    // HR-only: fetch full list of pending profile registrations so we can
+    // surface each one inside the Action Required card with a Review button.
     if (isHR) {
       registrationService.getPendingRegistrations()
-        .then((regs) => setPendingRegCount(regs.length))
+        .then((regs) => setPendingRegistrations(regs.filter((r) => r.registration_status === 'pending_approval')))
         .catch(() => { /* silent */ });
     }
   }, [user?.id]);
@@ -918,62 +1010,24 @@ export default function DashboardScreen() {
             </div>
           </div>
 
-          {/* HR-only: pending profile registrations banner. */}
-          {isHR && pendingRegCount > 0 && (
-            <div
-              onClick={() => router.push('/(app)/admin/registrations' as any)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 14,
-                padding: '14px 18px',
-                marginBottom: 16,
-                borderRadius: 14,
-                cursor: 'pointer',
-                backgroundColor: isDark ? 'rgba(245,158,11,0.12)' : '#FFFBEB',
-                border: `1px solid ${isDark ? 'rgba(245,158,11,0.35)' : '#FDE68A'}`,
-              }}
-            >
-              <div
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 10,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: isDark ? 'rgba(245,158,11,0.2)' : '#FEF3C7',
-                  flexShrink: 0,
-                }}
-              >
-                <Users size={18} color={isDark ? '#FCD34D' : '#D97706'} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: isDark ? '#FCD34D' : '#92400E' }}>
-                  {pendingRegCount} pending profile registration{pendingRegCount === 1 ? '' : 's'}
-                </div>
-                <div style={{ fontSize: 12, color: isDark ? '#F59E0B' : '#B45309', marginTop: 2 }}>
-                  Employees waiting for HR to review their submitted info. Click to open Pending Registrations.
-                </div>
-              </div>
-              <ChevronRight size={18} color={isDark ? '#FCD34D' : '#D97706'} />
-            </div>
-          )}
-
           {/* Action Required — full width */}
           <div style={{ marginBottom: 28 }}>
             <ActionRequiredCard
               pendingApprovals={pendingApprovals}
               renewalTasks={renewalTasks}
               notifications={notifications}
+              pendingRegistrations={isHR ? pendingRegistrations : []}
               isDark={isDark}
               isApprover={!!isApprover}
+              isHR={!!isHR}
               onApprove={handleApprove}
               onViewRequest={handleRowPress}
               onRenew={(task) => { setRenewDialog({ open: true, task }); setNewExpiry(''); }}
+              onReviewRegistration={() => router.push('/(app)/admin/registrations' as any)}
               onViewAllNotifications={() => router.push('/(app)/notifications' as any)}
               onViewAllApprovals={() => router.push('/(app)/(tabs)/tasks' as any)}
               onViewAllRenewals={() => router.push('/(app)/(tabs)/tasks' as any)}
+              onViewAllRegistrations={() => router.push('/(app)/admin/registrations' as any)}
             />
           </div>
 
