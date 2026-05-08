@@ -14,6 +14,7 @@ import {
   ArrowRight,
   ChevronRight,
   Bell,
+  Users,
 } from 'lucide-react-native';
 import { StatsCard } from '@/components/dashboard/stats-card';
 import { RequestCard } from '@/components/leave/request-card';
@@ -26,6 +27,7 @@ import { useRenewalTasks } from '@/hooks/use-renewal-tasks';
 import { useNotifications } from '@/hooks/use-notifications';
 import { useNotificationStore } from '@/stores/notification-store';
 import { useTaskStore } from '@/stores/task-store';
+import { registrationService } from '@/services';
 import { Role, LeaveStatus, LeaveType, RenewalTaskStatus } from '@/types/enums';
 import { getStatusLabel, getLeaveTypeLabel, getLeaveTypeMuiColor } from '@/lib/state-machine';
 import { formatHours, formatDaysHours, formatDateRange, formatPendingSince, getRoleLabel } from '@/lib/utils';
@@ -650,6 +652,10 @@ export default function DashboardScreen() {
   const { notifications, fetchNotifications } = useNotifications(user?.id);
   const unreadCount = useNotificationStore((s) => s.unreadCount);
 
+  // Pending registration count — visible to HR users only.
+  const isHR = user?.role === Role.HR || user?.role === Role.HRDirector;
+  const [pendingRegCount, setPendingRegCount] = useState(0);
+
   useAutoRefresh(() => {
     if (!user) return;
     fetchBalance(user.id);
@@ -662,6 +668,13 @@ export default function DashboardScreen() {
       fetchPendingApprovals(user.id, user.role);
     }
     fetchRenewalTasks(user.id);
+
+    // HR-only: fetch count of pending profile registrations.
+    if (isHR) {
+      registrationService.getPendingRegistrations()
+        .then((regs) => setPendingRegCount(regs.length))
+        .catch(() => { /* silent */ });
+    }
   }, [user?.id]);
 
   // Keep sidebar badge in sync
@@ -904,6 +917,48 @@ export default function DashboardScreen() {
               </span>
             </div>
           </div>
+
+          {/* HR-only: pending profile registrations banner. */}
+          {isHR && pendingRegCount > 0 && (
+            <div
+              onClick={() => router.push('/(app)/admin/registrations' as any)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 14,
+                padding: '14px 18px',
+                marginBottom: 16,
+                borderRadius: 14,
+                cursor: 'pointer',
+                backgroundColor: isDark ? 'rgba(245,158,11,0.12)' : '#FFFBEB',
+                border: `1px solid ${isDark ? 'rgba(245,158,11,0.35)' : '#FDE68A'}`,
+              }}
+            >
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: isDark ? 'rgba(245,158,11,0.2)' : '#FEF3C7',
+                  flexShrink: 0,
+                }}
+              >
+                <Users size={18} color={isDark ? '#FCD34D' : '#D97706'} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: isDark ? '#FCD34D' : '#92400E' }}>
+                  {pendingRegCount} pending profile registration{pendingRegCount === 1 ? '' : 's'}
+                </div>
+                <div style={{ fontSize: 12, color: isDark ? '#F59E0B' : '#B45309', marginTop: 2 }}>
+                  Employees waiting for HR to review their submitted info. Click to open Pending Registrations.
+                </div>
+              </div>
+              <ChevronRight size={18} color={isDark ? '#FCD34D' : '#D97706'} />
+            </div>
+          )}
 
           {/* Action Required — full width */}
           <div style={{ marginBottom: 28 }}>
