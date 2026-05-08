@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { View, Text, FlatList, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { registrationService, userService } from '@/services';
+import { supabase } from '@/services/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { getRoleLabel } from '@/lib/utils';
 import { Role, RegistrationStatus } from '@/types/enums';
@@ -57,6 +58,64 @@ const ROLE_OPTIONS = [
   { value: Role.HR, label: 'HR' },
   { value: Role.HRDirector, label: 'HR Director' },
 ];
+
+// ─── Dialog helpers ────────────────────────────────────────────────
+
+function prettyIdType(t: string | null | undefined): string {
+  if (t === 'national_id') return 'Saudi National ID';
+  if (t === 'iqama')       return 'Iqama (Residence Permit)';
+  if (t === 'passport')    return 'Passport';
+  return '—';
+}
+
+/**
+ * Diff highlight: render value with a yellow tint if it differs from the
+ * HR-original snapshot. Plain text otherwise.
+ */
+function hl(value: any, original: any, isDark: boolean, bold: boolean = false): any {
+  const display = value ?? '—';
+  const changed =
+    original !== undefined &&
+    original !== null &&
+    String(original) !== '' &&
+    String(value) !== String(original);
+  if (!changed) {
+    return bold ? <span style={{ fontWeight: 700 }}>{display}</span> : display;
+  }
+  return (
+    <span
+      title={`Originally: ${String(original)}`}
+      style={{
+        backgroundColor: isDark ? 'rgba(245,158,11,0.25)' : 'rgba(254,243,199,0.9)',
+        color: isDark ? '#FBBF24' : '#92400E',
+        padding: '1px 6px',
+        borderRadius: 4,
+        fontWeight: bold ? 700 : 500,
+      }}
+    >
+      {display}
+    </span>
+  );
+}
+
+// Small read-only labelled value used inside the dialog grid.
+function Field({ label, value, bg }: { label: string; value: any; bg: boolean }) {
+  return (
+    <div style={{
+      padding: '8px 12px',
+      borderRadius: 8,
+      background: bg ? 'rgba(255,255,255,0.03)' : '#F8FAFC',
+      border: `1px solid ${bg ? 'rgba(255,255,255,0.06)' : '#E2E8F0'}`,
+    }}>
+      <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.6, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 500 }}>
+        {value || '—'}
+      </div>
+    </div>
+  );
+}
 
 interface ReviewDialogState {
   open: boolean;
@@ -118,12 +177,36 @@ export default function RegistrationsScreen() {
 
   const { invalidate } = useAutoRefresh(() => { fetchData(); }, []);
 
+  const [idDocSignedUrl, setIdDocSignedUrl] = useState<string>('');
+
   const openReview = (reg: PendingRegistration) => {
+    // Pre-fill the HR-controlled fields from the existing profile/document
+    // row. For HR-invited employees, all of these are already set (HR
+    // entered them at create-employee time) — the dialog just confirms.
+    // For self-registered employees, the values are blank and HR fills.
     setDialog({
       ...INITIAL_DIALOG,
       open: true,
       registration: reg,
+      emp_code: reg.employee_documents?.emp_code?.startsWith('PENDING-')
+        ? '' // PENDING-<timestamp> placeholder from self-registration → blank
+        : reg.employee_documents?.emp_code || '',
+      role: (reg.role as Role) || Role.Employee,
+      department: reg.department || '',
+      supervisor_id: reg.supervisor_id,
+      manager_id: reg.manager_id,
     });
+    setIdDocSignedUrl('');
+
+    // If the employee uploaded an ID document, fetch a signed URL to display it.
+    const path = reg.employee_documents?.id_document_url;
+    if (path) {
+      supabase.storage
+        .from('employee-id-documents')
+        .createSignedUrl(path, 60 * 10) // 10-minute signed URL
+        .then(({ data }) => { if (data?.signedUrl) setIdDocSignedUrl(data.signedUrl); })
+        .catch(() => { /* preview will just be a download fallback */ });
+    }
   };
 
   const handleApprove = async () => {
@@ -237,81 +320,184 @@ export default function RegistrationsScreen() {
           </div>
 
           {/* Review Dialog */}
-          <Dialog open={dialog.open} onClose={() => setDialog(INITIAL_DIALOG)} maxWidth="sm" fullWidth>
-            <DialogTitle>Review Registration</DialogTitle>
-            <DialogContent>
+          <Dialog
+            open={dialog.open}
+            onClose={() => setDialog(INITIAL_DIALOG)}
+            maxWidth="md"
+            fullWidth
+            PaperProps={{
+              sx: {
+                bgcolor: isDark ? '#0B1220' : '#FFFFFF',
+                color: isDark ? '#F1F5F9' : '#0F172A',
+                backgroundImage: 'none',
+                borderRadius: 3,
+              },
+            }}
+          >
+            <DialogTitle
+              sx={{
+                fontSize: 18,
+                fontWeight: 700,
+                borderBottom: '1px solid',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#E2E8F0',
+                pb: 2,
+              }}
+            >
+              Review Registration
+              {reg?.hr_original_values && (
+                <Box sx={{ fontSize: 12, fontWeight: 400, opacity: 0.7, mt: 0.5 }}>
+                  Yellow fields = changed by employee from what HR originally entered.
+                </Box>
+              )}
+            </DialogTitle>
+            <DialogContent sx={{ pt: '20px !important' }}>
               {reg && (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-                  {/* Submitted info */}
-                  <MuiAlert severity="info" variant="outlined">
-                    <strong>{reg.full_name || '(No name)'}</strong> — {reg.email}
-                    {reg.phone && <> — {reg.phone}</>}
-                  </MuiAlert>
-
-                  {doc && (
-                    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, fontSize: 13, p: 1.5, bgcolor: isDark ? '#1E293B' : '#F8FAFC', borderRadius: 1 }}>
-                      <div><strong>Iqama:</strong> {doc.iqama_number || '-'}</div>
-                      <div><strong>Iqama Expiry:</strong> {doc.iqama_expiry || '-'}</div>
-                      <div><strong>Passport:</strong> {doc.passport_number || '-'}</div>
-                      <div><strong>Passport Expiry:</strong> {doc.passport_expiry || '-'}</div>
-                      <div><strong>Insurance:</strong> {doc.insurance_number || '-'}</div>
-                      <div><strong>Insurance Expiry:</strong> {doc.insurance_expiry || '-'}</div>
-                      <div><strong>Occupation:</strong> {doc.occupation || '-'}</div>
-                      <div><strong>Birth Date:</strong> {doc.birth_date || '-'}</div>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+                  {/* Identity header */}
+                  <Box sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#E2E8F0' }}>
+                    <Box sx={{ fontSize: 16, fontWeight: 700, mb: 0.5 }}>
+                      {hl(reg.full_name, reg.hr_original_values?.full_name, isDark, true)}
                     </Box>
+                    <Box sx={{ fontSize: 13, opacity: 0.8 }}>
+                      {reg.email}
+                      {reg.phone && <> · {hl(reg.phone, reg.hr_original_values?.phone, isDark)}</>}
+                    </Box>
+                  </Box>
+
+                  {/* Employee-supplied personal info */}
+                  <Box>
+                    <Box sx={{ fontSize: 12, fontWeight: 700, opacity: 0.7, mb: 1, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      Personal Info (employee-supplied)
+                    </Box>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.25, fontSize: 13 }}>
+                      <Field label="Nationality" value={reg.nationality} bg={isDark} />
+                      <Field label="Date of Birth" value={doc?.birth_date} bg={isDark} />
+                      <Field label="Insurance Number" value={doc?.insurance_number} bg={isDark} />
+                      <Field label="Insurance Expiry" value={doc?.insurance_expiry} bg={isDark} />
+                    </Box>
+                  </Box>
+
+                  {/* Primary ID */}
+                  <Box>
+                    <Box sx={{ fontSize: 12, fontWeight: 700, opacity: 0.7, mb: 1, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      Primary Identification
+                    </Box>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.25, fontSize: 13 }}>
+                      <Field label="ID Type" value={prettyIdType(doc?.id_type)} bg={isDark} />
+                      <Field
+                        label={
+                          doc?.id_type === 'national_id' ? 'National ID Number'
+                            : doc?.id_type === 'passport' ? 'Passport Number'
+                              : 'Iqama Number'
+                        }
+                        value={
+                          doc?.id_type === 'national_id' ? doc?.national_id_number
+                            : doc?.id_type === 'passport' ? doc?.passport_number
+                              : doc?.iqama_number
+                        }
+                        bg={isDark}
+                      />
+                      {doc?.id_type !== 'national_id' && (
+                        <Field
+                          label={doc?.id_type === 'passport' ? 'Passport Expiry' : 'Iqama Expiry'}
+                          value={doc?.id_type === 'passport' ? doc?.passport_expiry : doc?.iqama_expiry}
+                          bg={isDark}
+                        />
+                      )}
+                    </Box>
+
+                    {/* Document preview */}
+                    <Box sx={{ mt: 1.5 }}>
+                      <Box sx={{ fontSize: 11, fontWeight: 600, opacity: 0.7, mb: 0.5 }}>UPLOADED DOCUMENT</Box>
+                      {idDocSignedUrl ? (
+                        <Box sx={{ border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#E2E8F0', borderRadius: 2, overflow: 'hidden', bgcolor: isDark ? '#0B1220' : '#F8FAFC' }}>
+                          {/\.(jpe?g|png)$/i.test(doc?.id_document_url || '') ? (
+                            <img
+                              src={idDocSignedUrl}
+                              alt="ID document"
+                              style={{ display: 'block', maxWidth: '100%', maxHeight: 320, margin: '0 auto' }}
+                            />
+                          ) : (
+                            <Box sx={{ p: 2 }}>
+                              <a href={idDocSignedUrl} target="_blank" rel="noreferrer" style={{ color: '#3B82F6', fontWeight: 600 }}>
+                                Open uploaded document (PDF) ↗
+                              </a>
+                            </Box>
+                          )}
+                        </Box>
+                      ) : (
+                        <Box sx={{ fontSize: 12, opacity: 0.6, fontStyle: 'italic' }}>
+                          {doc?.id_document_url ? 'Loading preview…' : 'No document uploaded.'}
+                        </Box>
+                      )}
+                    </Box>
+                  </Box>
+
+                  {/* Other supplementary documents (only show if non-primary entries exist) */}
+                  {doc && (doc.id_type !== 'iqama' && doc.iqama_number) && (
+                    <Field label="Iqama (supplementary)" value={`${doc.iqama_number} · expires ${doc.iqama_expiry || '—'}`} bg={isDark} />
+                  )}
+                  {doc && (doc.id_type !== 'passport' && doc.passport_number) && (
+                    <Field label="Passport (supplementary)" value={`${doc.passport_number} · expires ${doc.passport_expiry || '—'}`} bg={isDark} />
                   )}
 
+                  {/* HR-controlled fields — pre-filled, editable */}
                   {dialog.mode !== 'reject' && (
-                    <>
-                      <MuiTextField
-                        label="Employee Code"
-                        value={dialog.emp_code}
-                        onChange={(e: any) => setDialog((d) => ({ ...d, emp_code: e.target.value }))}
-                        size="small"
-                        required
-                        placeholder="e.g. 70150"
-                      />
+                    <Box>
+                      <Box sx={{ fontSize: 12, fontWeight: 700, opacity: 0.7, mb: 1, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        HR-controlled assignments {reg.hr_original_values && '(pre-filled from HR creation)'}
+                      </Box>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                        <MuiTextField
+                          label="Employee Code"
+                          value={dialog.emp_code}
+                          onChange={(e: any) => setDialog((d) => ({ ...d, emp_code: e.target.value }))}
+                          size="small"
+                          required
+                          placeholder="e.g. 70150"
+                        />
 
-                      <MuiTextField
-                        label="Role"
-                        select
-                        value={dialog.role}
-                        onChange={(e: any) => setDialog((d) => ({ ...d, role: e.target.value }))}
-                        size="small"
-                      >
-                        {ROLE_OPTIONS.map((opt) => (
-                          <MenuItem key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </MenuItem>
-                        ))}
-                      </MuiTextField>
+                        <MuiTextField
+                          label="Role"
+                          select
+                          value={dialog.role}
+                          onChange={(e: any) => setDialog((d) => ({ ...d, role: e.target.value }))}
+                          size="small"
+                        >
+                          {ROLE_OPTIONS.map((opt) => (
+                            <MenuItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </MenuItem>
+                          ))}
+                        </MuiTextField>
 
-                      <MuiTextField
-                        label="Department"
-                        value={dialog.department}
-                        onChange={(e: any) => setDialog((d) => ({ ...d, department: e.target.value }))}
-                        size="small"
-                        placeholder="e.g. Engineering"
-                      />
+                        <MuiTextField
+                          label="Department"
+                          value={dialog.department}
+                          onChange={(e: any) => setDialog((d) => ({ ...d, department: e.target.value }))}
+                          size="small"
+                          placeholder="e.g. Engineering"
+                        />
 
-                      <Autocomplete
-                        options={employees}
-                        getOptionLabel={(opt: Profile) => `${opt.full_name} (${getRoleLabel(opt.role)})`}
-                        value={employees.find((e) => e.id === dialog.supervisor_id) || null}
-                        onChange={(_: any, val: Profile | null) => setDialog((d) => ({ ...d, supervisor_id: val?.id || null }))}
-                        renderInput={(params: any) => <MuiTextField {...params} label="Supervisor" size="small" />}
-                        size="small"
-                      />
+                        <Autocomplete
+                          options={employees}
+                          getOptionLabel={(opt: Profile) => `${opt.full_name} (${getRoleLabel(opt.role)})`}
+                          value={employees.find((e) => e.id === dialog.supervisor_id) || null}
+                          onChange={(_: any, val: Profile | null) => setDialog((d) => ({ ...d, supervisor_id: val?.id || null }))}
+                          renderInput={(params: any) => <MuiTextField {...params} label="Supervisor" size="small" />}
+                          size="small"
+                        />
 
-                      <Autocomplete
-                        options={employees}
-                        getOptionLabel={(opt: Profile) => `${opt.full_name} (${getRoleLabel(opt.role)})`}
-                        value={employees.find((e) => e.id === dialog.manager_id) || null}
-                        onChange={(_: any, val: Profile | null) => setDialog((d) => ({ ...d, manager_id: val?.id || null }))}
-                        renderInput={(params: any) => <MuiTextField {...params} label="Manager" size="small" />}
-                        size="small"
-                      />
-                    </>
+                        <Autocomplete
+                          options={employees}
+                          getOptionLabel={(opt: Profile) => `${opt.full_name} (${getRoleLabel(opt.role)})`}
+                          value={employees.find((e) => e.id === dialog.manager_id) || null}
+                          onChange={(_: any, val: Profile | null) => setDialog((d) => ({ ...d, manager_id: val?.id || null }))}
+                          renderInput={(params: any) => <MuiTextField {...params} label="Manager" size="small" />}
+                          size="small"
+                        />
+                      </Box>
+                    </Box>
                   )}
 
                   {dialog.mode === 'reject' && (
@@ -329,7 +515,13 @@ export default function RegistrationsScreen() {
                 </Box>
               )}
             </DialogContent>
-            <DialogActions>
+            <DialogActions
+              sx={{
+                p: 2,
+                borderTop: '1px solid',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#E2E8F0',
+              }}
+            >
               <MuiButton onClick={() => setDialog(INITIAL_DIALOG)}>Cancel</MuiButton>
               {dialog.mode === 'reject' ? (
                 <MuiButton
