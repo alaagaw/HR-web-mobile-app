@@ -112,6 +112,7 @@ $$;
 -- Same WITH CHECK pattern as migration 014 used for profiles.
 
 DROP POLICY IF EXISTS "employee_update_own_documents" ON employee_documents;
+DROP POLICY IF EXISTS "employee_update_own_documents_safe_fields" ON employee_documents;
 
 CREATE POLICY "employee_update_own_documents_safe_fields"
   ON employee_documents
@@ -144,6 +145,12 @@ CREATE POLICY "employee_update_own_documents_safe_fields"
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('employee-id-documents', 'employee-id-documents', false)
 ON CONFLICT (id) DO NOTHING;
+
+-- Drop any prior versions so this migration is fully re-runnable.
+DROP POLICY IF EXISTS "employee_upload_own_id_doc"  ON storage.objects;
+DROP POLICY IF EXISTS "employee_read_own_id_doc"    ON storage.objects;
+DROP POLICY IF EXISTS "employee_delete_own_id_doc"  ON storage.objects;
+DROP POLICY IF EXISTS "hr_read_any_id_doc"          ON storage.objects;
 
 -- Employee can upload to their own folder.
 CREATE POLICY "employee_upload_own_id_doc"
