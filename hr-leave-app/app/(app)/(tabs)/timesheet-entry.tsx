@@ -504,11 +504,15 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
     fetchSubmissionForWeek(selectedProjectId, weekStartStr);
   }, [selectedProjectId, weekStartStr, weekEndStr]);
 
-  // Rebuild grid whenever entries change.
-  // weekDays is intentionally read via closure (not in deps): it changes on week
-  // navigation BEFORE the new entries arrive, so depending on it would briefly
-  // render zero-hour rows. Entries update after the fetch resolves, at which
-  // point this render's closure already has the matching weekDays.
+  // Rebuild grid whenever entries OR the week OR the project mode change.
+  //
+  // weekDays must be in the dep array: clicking < / > to navigate updates
+  // weekDays (and triggers a fetch for the new range), but the in-flight
+  // fetch's response races with this effect. Without weekDays in deps, the
+  // grid can stick on the previous week's data if entries' reference happens
+  // to match closely enough or if the fetch resolves before this effect
+  // re-evaluates.
+  //
   // Merge logic: preserve locally-added rows (e.g. a just-added employee with
   // 0 hours) that haven't been persisted yet — but only if their hours keys
   // belong to the CURRENT week. This prevents Save/refetch from wiping a new
@@ -527,7 +531,7 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
       );
       return [...built, ...pending];
     });
-  }, [entries]);
+  }, [entries, weekDays, selectedProject?.entry_mode]);
 
   // ── Week navigation ───────────────────────────────────────
 
