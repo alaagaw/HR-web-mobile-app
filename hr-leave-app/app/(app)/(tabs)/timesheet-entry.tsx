@@ -18,7 +18,7 @@ import {
   isDayLocked,
 } from '@/lib/timesheet-utils';
 import type { TimesheetEntry, TimesheetEntryDraft, Project, Profile, TimesheetAssignment, Supplier } from '@/types/models';
-import { TimesheetSubmissionStatus, Role } from '@/types/enums';
+import { TimesheetSubmissionStatus, Role, ProjectEntryMode } from '@/types/enums';
 
 const isWeb = Platform.OS === 'web';
 const WIDE_SCREEN_BREAKPOINT = 1280;
@@ -80,8 +80,18 @@ interface GridRow {
   supplier_id: string | null;
   supplier_name: string | null;
   shift: 'D' | 'N';
-  /** Hours keyed by dateStr (yyyy-MM-dd) */
+  /**
+   * Per-day primary hours value, keyed by yyyy-MM-dd.
+   *  - Auto mode: TOTAL hours typed by the keeper (split derived at save).
+   *  - Manual mode: REGULAR hours typed by the keeper.
+   */
   hours: Record<string, number>;
+  /**
+   * Per-day overtime hours, keyed by yyyy-MM-dd.
+   *  - Auto mode: always 0 (auto-derived at save; not a real input).
+   *  - Manual mode: OT hours typed by the keeper.
+   */
+  overtimeHours: Record<string, number>;
 }
 
 // ============================================================
@@ -149,15 +159,31 @@ function computeRowTotalFromMap(hours: Record<string, number>): number {
 // HELPER: build grid rows from entries
 // ============================================================
 
-function buildGridRows(entries: TimesheetEntry[], weekDays: { dateStr: string }[]): GridRow[] {
+function buildGridRows(
+  entries: TimesheetEntry[],
+  weekDays: { dateStr: string }[],
+  entryMode: ProjectEntryMode = ProjectEntryMode.Auto,
+): GridRow[] {
   const grouped = groupEntriesByEmployee(entries);
   const rows: GridRow[] = [];
+  const isManual = entryMode === ProjectEntryMode.ManualSplit;
 
   grouped.forEach(({ employee, entries: empEntries }) => {
     const hours: Record<string, number> = {};
+    const overtimeHours: Record<string, number> = {};
     for (const day of weekDays) {
       const entry = empEntries.find((e) => e.entry_date === day.dateStr);
-      hours[day.dateStr] = entry ? Number(entry.standard_hours) + Number(entry.overtime_hours) : 0;
+      const std = entry ? Number(entry.standard_hours) : 0;
+      const ot = entry ? Number(entry.overtime_hours) : 0;
+      if (isManual) {
+        // Surface the split as the keeper entered it.
+        hours[day.dateStr] = std;
+        overtimeHours[day.dateStr] = ot;
+      } else {
+        // Auto mode: keeper sees a single total per day.
+        hours[day.dateStr] = std + ot;
+        overtimeHours[day.dateStr] = 0;
+      }
     }
     // Use the shift + supplier from the first entry (consistent per employee per week)
     const firstEntry = empEntries[0];
@@ -171,6 +197,7 @@ function buildGridRows(entries: TimesheetEntry[], weekDays: { dateStr: string }[
       supplier_name: firstEntry?.supplier?.name ?? null,
       shift: (firstEntry?.st_shift === 'N' ? 'N' : 'D') as 'D' | 'N',
       hours,
+      overtimeHours,
     });
   });
 
@@ -184,29 +211,50 @@ function buildGridRows(entries: TimesheetEntry[], weekDays: { dateStr: string }[
 /**
  * Convert grid rows into TimesheetEntryDraft rows ready for upsert.
  *
- * The split between standard_hours and overtime_hours is decided at save time
- * using the project's regular_hours_per_day, frozen onto each draft as
- * effective_regular_hours_per_day. This snapshot makes future config changes
- * (or approved overrides taking effect) unable to retro-corrupt past payroll.
+ * Auto mode:
+ *   - row.hours[date] holds the keeper-typed total.
+ *   - Split into standard + overtime using the project's regular_hours_per_day.
+ *   - row.overtimeHours is ignored (always 0 in auto rows).
  *
- * For 'auto' projects: total hours up to the limit go to standard, the rest
- * to overtime. For 'manual_split' projects, the grid will (in a later PR)
- * surface separate R/OT inputs; until then they are treated as auto.
+ * Manual mode:
+ *   - row.hours[date] is keeper-typed REGULAR hours.
+ *   - row.overtimeHours[date] is keeper-typed OT hours.
+ *   - Both written through verbatim, no auto-derive.
+ *
+ * regular_hours_per_day is frozen onto every draft as
+ * effective_regular_hours_per_day so future config changes can't
+ * retro-corrupt past payroll.
  */
 function gridRowsToDrafts(
   rows: GridRow[],
   projectId: string,
   regularHoursPerDay: number,
+  entryMode: ProjectEntryMode = ProjectEntryMode.Auto,
 ): TimesheetEntryDraft[] {
   const drafts: TimesheetEntryDraft[] = [];
   const limit = regularHoursPerDay > 0 ? regularHoursPerDay : 8;
+  const isManual = entryMode === ProjectEntryMode.ManualSplit;
+
   for (const row of rows) {
-    for (const [dateStr, hours] of Object.entries(row.hours)) {
-      // Skip days with 0 hours or locked days
-      if (!hours || hours <= 0) continue;
+    // Union of dates across both maps so manual rows that only have OT
+    // (no regular) still produce a draft.
+    const dateStrs = new Set<string>([
+      ...Object.keys(row.hours),
+      ...Object.keys(row.overtimeHours),
+    ]);
+    for (const dateStr of dateStrs) {
       if (isDayLocked(dateStr)) continue;
-      const standard = Math.min(hours, limit);
-      const overtime = Math.max(0, hours - limit);
+      let standard: number;
+      let overtime: number;
+      if (isManual) {
+        standard = row.hours[dateStr] || 0;
+        overtime = row.overtimeHours[dateStr] || 0;
+      } else {
+        const total = row.hours[dateStr] || 0;
+        standard = Math.min(total, limit);
+        overtime = Math.max(0, total - limit);
+      }
+      if (standard <= 0 && overtime <= 0) continue;
       drafts.push({
         project_id: projectId,
         employee_id: row.employee_id,
@@ -385,18 +433,40 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
   const submissionStatus: TimesheetSubmissionStatus | null = currentSubmission?.status ?? null;
   const isEditable = submissionStatus === null || submissionStatus === TimesheetSubmissionStatus.Draft || submissionStatus === TimesheetSubmissionStatus.Rejected;
 
-  // Column totals
+  const isManualMode = selectedProject?.entry_mode === ProjectEntryMode.ManualSplit;
+
+  // Column totals: in manual mode, totals include both R and OT.
   const columnTotals = useMemo(() => {
     const totals: Record<string, number> = {};
     for (const day of weekDays) {
-      totals[day.dateStr] = gridRows.reduce((sum, r) => sum + (r.hours[day.dateStr] || 0), 0);
+      totals[day.dateStr] = gridRows.reduce(
+        (sum, r) => sum + (r.hours[day.dateStr] || 0) + (isManualMode ? (r.overtimeHours[day.dateStr] || 0) : 0),
+        0,
+      );
+    }
+    return totals;
+  }, [gridRows, weekDays, isManualMode]);
+
+  // Per-day OT totals — only meaningful in manual mode (where keepers enter OT
+  // explicitly). Auto-mode OT splits are derived at save and shown in PR #6.
+  const columnOvertimeTotals = useMemo(() => {
+    const totals: Record<string, number> = {};
+    for (const day of weekDays) {
+      totals[day.dateStr] = gridRows.reduce((sum, r) => sum + (r.overtimeHours[day.dateStr] || 0), 0);
     }
     return totals;
   }, [gridRows, weekDays]);
 
   const grandTotal = useMemo(
-    () => gridRows.reduce((sum, r) => sum + computeRowTotalFromMap(r.hours), 0),
-    [gridRows],
+    () =>
+      gridRows.reduce(
+        (sum, r) =>
+          sum +
+          computeRowTotalFromMap(r.hours) +
+          (isManualMode ? computeRowTotalFromMap(r.overtimeHours) : 0),
+        0,
+      ),
+    [gridRows, isManualMode],
   );
 
   // Supplier column auto-width
@@ -446,13 +516,14 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
   // stale rows when the user navigates to a different week.
   useEffect(() => {
     setGridRows((prev) => {
-      const built = buildGridRows(entries, weekDays);
+      const built = buildGridRows(entries, weekDays, selectedProject?.entry_mode);
       const builtKeys = new Set(built.map((r) => r.key));
       const currentDateStrs = new Set(weekDays.map((d) => d.dateStr));
       const pending = prev.filter(
         (r) =>
           !builtKeys.has(r.key) &&
-          Object.keys(r.hours).some((k) => currentDateStrs.has(k)),
+          (Object.keys(r.hours).some((k) => currentDateStrs.has(k)) ||
+            Object.keys(r.overtimeHours).some((k) => currentDateStrs.has(k))),
       );
       return [...built, ...pending];
     });
@@ -489,7 +560,7 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
       const proj = selectedProjectRef.current;
       if (!pid || !u || rows.length === 0) return;
       try {
-        const drafts = gridRowsToDrafts(rows, pid, proj?.regular_hours_per_day ?? 8);
+        const drafts = gridRowsToDrafts(rows, pid, proj?.regular_hours_per_day ?? 8, proj?.entry_mode);
         if (drafts.length === 0) return;
         await upsertEntries(drafts, u.id);
       } catch (_err) {
@@ -506,17 +577,29 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
 
   // ── Cell change handler ───────────────────────────────────
 
-  const handleCellChange = useCallback((rowKey: string, dateStr: string, value: string) => {
-    if (isDayLocked(dateStr)) return;
-    const parsed = parseFloat(value);
-    const hours = isNaN(parsed) ? 0 : Math.min(24, Math.max(0, parsed));
-    setGridRows((prev) =>
-      prev.map((r) =>
-        r.key === rowKey ? { ...r, hours: { ...r.hours, [dateStr]: hours } } : r,
-      ),
-    );
-    scheduleAutoSave();
-  }, [scheduleAutoSave]);
+  /**
+   * Update a single grid cell. `kind` selects which map to write:
+   *  - 'regular'  → row.hours (auto: total; manual: regular only)
+   *  - 'overtime' → row.overtimeHours (manual mode only)
+   */
+  const handleCellChange = useCallback(
+    (rowKey: string, dateStr: string, value: string, kind: 'regular' | 'overtime' = 'regular') => {
+      if (isDayLocked(dateStr)) return;
+      const parsed = parseFloat(value);
+      const next = isNaN(parsed) ? 0 : Math.min(24, Math.max(0, parsed));
+      setGridRows((prev) =>
+        prev.map((r) => {
+          if (r.key !== rowKey) return r;
+          if (kind === 'overtime') {
+            return { ...r, overtimeHours: { ...r.overtimeHours, [dateStr]: next } };
+          }
+          return { ...r, hours: { ...r.hours, [dateStr]: next } };
+        }),
+      );
+      scheduleAutoSave();
+    },
+    [scheduleAutoSave],
+  );
 
   const handleShiftChange = useCallback((rowKey: string) => {
     setGridRows((prev) =>
@@ -545,7 +628,7 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     setSaving(true);
     try {
-      const drafts = gridRowsToDrafts(gridRows, selectedProjectId, selectedProject?.regular_hours_per_day ?? 8);
+      const drafts = gridRowsToDrafts(gridRows, selectedProjectId, selectedProject?.regular_hours_per_day ?? 8, selectedProject?.entry_mode);
       await upsertEntries(drafts, user.id);
       await fetchEntriesForWeek(selectedProjectId, weekStartStr, weekEndStr);
       setSnackbar({ open: true, message: 'Timesheet saved successfully', severity: 'success' });
@@ -562,7 +645,7 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
     if (!selectedProjectId || !user) return;
     setSubmitting(true);
     try {
-      const drafts = gridRowsToDrafts(gridRows, selectedProjectId, selectedProject?.regular_hours_per_day ?? 8);
+      const drafts = gridRowsToDrafts(gridRows, selectedProjectId, selectedProject?.regular_hours_per_day ?? 8, selectedProject?.entry_mode);
       await upsertEntries(drafts, user.id);
       await submitForApproval(selectedProjectId, weekStartStr, weekEndStr, user.id, user.role);
       setSnackbar({ open: true, message: 'Timesheet submitted for approval', severity: 'success' });
@@ -590,16 +673,24 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
       }
 
       const prevWeekDays = getWeekDays(prevWeekStart);
-      const prevRows = buildGridRows(prevEntries, prevWeekDays);
+      const prevRows = buildGridRows(prevEntries, prevWeekDays, selectedProject?.entry_mode);
 
-      // Map previous week hours to current week days (skip locked days)
+      // Map previous week hours to current week days (skip locked days).
+      // Manual mode also copies the OT split.
       const newRows: GridRow[] = prevRows.map((prevRow) => {
         const hours: Record<string, number> = {};
+        const overtimeHours: Record<string, number> = {};
         weekDays.forEach((currentDay, idx) => {
           const prevDay = prevWeekDays[idx];
-          hours[currentDay.dateStr] = isDayLocked(currentDay.dateStr) ? 0 : (prevRow.hours[prevDay.dateStr] || 0);
+          if (isDayLocked(currentDay.dateStr)) {
+            hours[currentDay.dateStr] = 0;
+            overtimeHours[currentDay.dateStr] = 0;
+          } else {
+            hours[currentDay.dateStr] = prevRow.hours[prevDay.dateStr] || 0;
+            overtimeHours[currentDay.dateStr] = prevRow.overtimeHours[prevDay.dateStr] || 0;
+          }
         });
-        return { ...prevRow, hours };
+        return { ...prevRow, hours, overtimeHours };
       });
 
       setGridRows(newRows);
@@ -607,13 +698,16 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
     } catch (err: any) {
       setSnackbar({ open: true, message: err.message || 'Failed to copy last week', severity: 'error' });
     }
-  }, [selectedProjectId, weekStart, weekDays]);
+  }, [selectedProjectId, selectedProject, weekStart, weekDays]);
 
   // ── Auto-Fill ─────────────────────────────────────────────
 
   const handleAutoFill = useCallback(() => {
     const h = parseFloat(autoFillHours);
     if (isNaN(h) || h < 0 || h > 24) return;
+    // Auto-fill always populates the "primary" hours field. In auto mode that's
+    // total hours; in manual mode that's regular hours only (keepers in manual
+    // mode set OT explicitly per day, so we don't bulk-fill OT here).
     setGridRows((prev) =>
       prev.map((row) => {
         const hours = { ...row.hours };
@@ -647,15 +741,18 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
   const handleAddEmployee = useCallback(() => {
     let newRow: GridRow;
 
+    const hours: Record<string, number> = {};
+    const overtimeHours: Record<string, number> = {};
+    for (const day of weekDays) {
+      hours[day.dateStr] = 0;
+      overtimeHours[day.dateStr] = 0;
+    }
+
     if (selectedProfile) {
       const exists = gridRows.some((r) => r.employee_id === selectedProfile.id);
       if (exists) {
         setSnackbar({ open: true, message: 'Employee is already in the timesheet', severity: 'error' });
         return;
-      }
-      const hours: Record<string, number> = {};
-      for (const day of weekDays) {
-        hours[day.dateStr] = 0;
       }
       newRow = {
         key: selectedProfile.id,
@@ -667,6 +764,7 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
         supplier_name: selectedSupplier?.name ?? null,
         shift: 'D',
         hours,
+        overtimeHours,
       };
     } else if (manualEmployee.name.trim()) {
       const exists = gridRows.some(
@@ -675,10 +773,6 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
       if (exists) {
         setSnackbar({ open: true, message: 'Employee is already in the timesheet', severity: 'error' });
         return;
-      }
-      const hours: Record<string, number> = {};
-      for (const day of weekDays) {
-        hours[day.dateStr] = 0;
       }
       newRow = {
         key: manualEmployee.name.trim(),
@@ -690,6 +784,7 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
         supplier_name: selectedSupplier?.name ?? null,
         shift: 'D',
         hours,
+        overtimeHours,
       };
     } else {
       return;
@@ -1115,6 +1210,193 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
 
                 {/* ── RIGHT: Time Grid (scrollable) ── */}
                 <div style={{ flex: 1, overflowX: 'auto' }}>
+                  {isManualMode ? (
+                    /* MANUAL R+OT SPLIT GRID — keeper enters Regular and OT
+                       explicitly per day. Totals split into R | OT | Grand. */
+                    <table style={{ ...tableStyle, borderRadius: 0 }}>
+                      <thead>
+                        <tr>
+                          {weekDays.map((day) => {
+                            const dayLocked = isDayLocked(day.dateStr);
+                            return (
+                              <th
+                                key={day.dateStr}
+                                colSpan={2}
+                                title={dayLocked ? 'Locked — past edit window' : undefined}
+                                style={{
+                                  ...thCenterStyle,
+                                  height: 36,
+                                  verticalAlign: 'middle',
+                                  backgroundColor: isSaudiWeekend(day.dateStr) ? weekendBg : dayLocked ? '#1e293b' : '#1a2744',
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
+                                  {day.dayShort}
+                                  {dayLocked && (
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                    </svg>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: 10, fontWeight: 400, marginTop: 2, color: dayLocked ? '#64748b' : undefined }}>
+                                  {format(day.date, 'ddMMM')}
+                                </div>
+                              </th>
+                            );
+                          })}
+                          <th colSpan={3} style={{ ...thCenterStyle, height: 36, verticalAlign: 'middle', borderLeft: `2px solid ${DT.primary}40` }}>
+                            TOTAL
+                          </th>
+                        </tr>
+                        <tr>
+                          {weekDays.map((day) => {
+                            const isWeekendDay = isSaudiWeekend(day.dateStr);
+                            const dayLocked = isDayLocked(day.dateStr);
+                            const subBg = isWeekendDay ? weekendBg : dayLocked ? '#1e293b' : '#1a2744';
+                            return (
+                              <React.Fragment key={day.dateStr}>
+                                <th style={{ ...thCenterStyle, width: 56, height: 22, fontSize: 10, padding: '2px 0', backgroundColor: subBg, borderLeft: `1px solid ${DT.border}` }}>
+                                  R
+                                </th>
+                                <th style={{ ...thCenterStyle, width: 56, height: 22, fontSize: 10, padding: '2px 0', color: '#F59E0B', backgroundColor: subBg }}>
+                                  OT
+                                </th>
+                              </React.Fragment>
+                            );
+                          })}
+                          <th style={{ ...thCenterStyle, width: 50, height: 22, fontSize: 10, padding: '2px 0', borderLeft: `2px solid ${DT.primary}40` }}>
+                            R
+                          </th>
+                          <th style={{ ...thCenterStyle, width: 50, height: 22, fontSize: 10, padding: '2px 0', color: '#F59E0B' }}>
+                            OT
+                          </th>
+                          <th style={{ ...thCenterStyle, width: 56, height: 22, fontSize: 10, padding: '2px 0', color: DT.primary }}>
+                            ALL
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {gridRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={weekDays.length * 2 + 3} style={{ ...tdStyle, textAlign: 'center', padding: 32, color: DT.textMuted }}>
+                              &nbsp;
+                            </td>
+                          </tr>
+                        ) : (
+                          gridRows.map((row) => {
+                            const rowR = computeRowTotalFromMap(row.hours);
+                            const rowOT = computeRowTotalFromMap(row.overtimeHours);
+                            return (
+                              <tr key={row.key}>
+                                {weekDays.map((day) => {
+                                  const isWeekendDay = isSaudiWeekend(day.dateStr);
+                                  const dayLocked = isDayLocked(day.dateStr);
+                                  const cellEditable = isEditable && !dayLocked;
+                                  const cellBg = isWeekendDay ? weekendBg : dayLocked ? '#1e293b' : undefined;
+                                  return (
+                                    <React.Fragment key={day.dateStr}>
+                                      <td
+                                        title={dayLocked ? 'Locked — past edit window' : undefined}
+                                        style={{
+                                          ...tdStyle,
+                                          textAlign: 'center',
+                                          height: 48,
+                                          backgroundColor: cellBg,
+                                          borderLeft: `1px solid ${DT.border}`,
+                                        }}
+                                      >
+                                        {cellEditable ? (
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            max="24"
+                                            step="0.5"
+                                            value={row.hours[day.dateStr] || ''}
+                                            onChange={(e) => handleCellChange(row.key, day.dateStr, e.target.value, 'regular')}
+                                            onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = DT.primary; }}
+                                            onBlur={(e) => { (e.target as HTMLInputElement).style.borderColor = DT.border; }}
+                                            style={{ ...inputBaseStyle, width: 38 }}
+                                          />
+                                        ) : (
+                                          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 38, height: 32, fontSize: 13, color: dayLocked ? '#64748b' : '#475569' }}>
+                                            {row.hours[day.dateStr] || 0}
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td
+                                        title={dayLocked ? 'Locked — past edit window' : undefined}
+                                        style={{
+                                          ...tdStyle,
+                                          textAlign: 'center',
+                                          height: 48,
+                                          backgroundColor: cellBg,
+                                        }}
+                                      >
+                                        {cellEditable ? (
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            max="24"
+                                            step="0.5"
+                                            value={row.overtimeHours[day.dateStr] || ''}
+                                            onChange={(e) => handleCellChange(row.key, day.dateStr, e.target.value, 'overtime')}
+                                            onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = '#F59E0B'; }}
+                                            onBlur={(e) => { (e.target as HTMLInputElement).style.borderColor = DT.border; }}
+                                            style={{ ...inputBaseStyle, width: 38, color: '#F59E0B' }}
+                                          />
+                                        ) : (
+                                          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 38, height: 32, fontSize: 13, color: dayLocked ? '#64748b' : '#F59E0B' }}>
+                                            {row.overtimeHours[day.dateStr] || 0}
+                                          </span>
+                                        )}
+                                      </td>
+                                    </React.Fragment>
+                                  );
+                                })}
+                                <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 13, height: 48, borderLeft: `2px solid ${DT.primary}40` }}>
+                                  {rowR}
+                                </td>
+                                <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 13, height: 48, color: '#F59E0B' }}>
+                                  {rowOT}
+                                </td>
+                                <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 14, height: 48, color: DT.primary }}>
+                                  {rowR + rowOT}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                        {gridRows.length > 0 && (
+                          <tr style={{ backgroundColor: totalRowBg }}>
+                            {weekDays.map((day) => {
+                              const r = gridRows.reduce((s, row) => s + (row.hours[day.dateStr] || 0), 0);
+                              const ot = columnOvertimeTotals[day.dateStr] || 0;
+                              return (
+                                <React.Fragment key={day.dateStr}>
+                                  <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 13, height: 48, borderLeft: `1px solid ${DT.border}` }}>
+                                    {r}
+                                  </td>
+                                  <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 13, height: 48, color: '#F59E0B' }}>
+                                    {ot}
+                                  </td>
+                                </React.Fragment>
+                              );
+                            })}
+                            <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 13, height: 48, borderLeft: `2px solid ${DT.primary}40` }}>
+                              {gridRows.reduce((s, r) => s + computeRowTotalFromMap(r.hours), 0)}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 13, height: 48, color: '#F59E0B' }}>
+                              {gridRows.reduce((s, r) => s + computeRowTotalFromMap(r.overtimeHours), 0)}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 14, height: 48, color: DT.primary }}>
+                              {grandTotal}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  ) : (
                   <table style={{ ...tableStyle, borderRadius: 0 }}>
                     <thead>
                       <tr>
@@ -1258,6 +1540,7 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
                       )}
                     </tbody>
                   </table>
+                  )}
                 </div>
               </div>
             </div>
