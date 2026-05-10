@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
+import { useViewState } from '@/hooks/use-view-state';
 import { useAuth } from '@/hooks/use-auth';
 import { useTimeTracking } from '@/hooks/use-time-tracking';
 import { formatDuration, formatElapsed, formatDate } from '@/lib/utils';
@@ -205,7 +206,7 @@ function WebTimeClock({ isDark }: { isDark: boolean }) {
   } = useTimeTracking();
 
   const [notes, setNotes] = useState('');
-  const [tabIndex, setTabIndex] = useState(0);
+  const [tabIndex, setTabIndex] = useViewState('tabs/timeclock.tabIndex', 0);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualDate, setManualDate] = useState(getToday());
   const [manualClockIn, setManualClockIn] = useState('09:00');

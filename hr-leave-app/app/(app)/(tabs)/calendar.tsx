@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, Pressable, Platform } from 'react-native';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
+import { useViewState } from '@/hooks/use-view-state';
 import { useColorScheme } from 'nativewind';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/layout/screen-header';
@@ -969,10 +970,10 @@ export default function CalendarScreen() {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
 
-  const [viewMode, setViewMode] = useState<ViewMode>('month');
+  const [viewMode, setViewMode] = useViewState<ViewMode>('tabs/calendar.viewMode', 'month');
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [department, setDepartment] = useState('');
-  const [leaveTypeFilter, setLeaveTypeFilter] = useState('');
+  const [department, setDepartment] = useViewState('tabs/calendar.department', '');
+  const [leaveTypeFilter, setLeaveTypeFilter] = useViewState('tabs/calendar.leaveTypeFilter', '');
   const [allRequests, setAllRequests] = useState<LeaveRequest[]>([]);
   const [, setLoading] = useState(false);
   const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null);

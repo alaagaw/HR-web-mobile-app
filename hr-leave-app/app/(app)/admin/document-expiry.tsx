@@ -3,6 +3,7 @@ import { View, Text, ScrollView, Platform, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
+import { useViewState } from '@/hooks/use-view-state';
 import { useColorScheme } from 'nativewind';
 import { ScreenHeader } from '@/components/layout/screen-header';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -860,13 +861,16 @@ function WebExpiryTable({
   showAllColumns: boolean;
   onUnassign: (taskId: string) => void;
 }) {
-  const [columnVisibilityModel, setColumnVisibilityModel] = useState<Record<string, boolean>>(DEFAULT_HIDDEN_COLUMNS);
+  const [columnVisibilityModel, setColumnVisibilityModel] = useViewState<Record<string, boolean>>(
+    'admin/document-expiry.columnVisibility',
+    DEFAULT_HIDDEN_COLUMNS
+  );
   const [unassignTarget, setUnassignTarget] = useState<{ taskId: string; assigneeName: string } | null>(null);
 
   // Sync with parent's showAllColumns toggle
   const effectiveVisibility = showAllColumns ? ALL_VISIBLE_COLUMNS : columnVisibilityModel;
 
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useViewState('admin/document-expiry.columnFilters', {
     risk: '',
     empCode: '',
     name: '',
@@ -884,6 +888,15 @@ function WebExpiryTable({
     assignedBy: '',
     taskStatus: '',
   });
+
+  const [paginationModel, setPaginationModel] = useViewState(
+    'admin/document-expiry.pagination',
+    { page: 0, pageSize: 25 }
+  );
+  const [sortModel, setSortModel] = useViewState<any[]>(
+    'admin/document-expiry.sort',
+    [{ field: 'nextExpiryDays', sort: 'asc' as const }]
+  );
 
   // Pre-sort by riskRank ASC then nextExpiryDays ASC (MUI community only supports single-column sort)
   const sortedData = useMemo(
@@ -1361,12 +1374,10 @@ function WebExpiryTable({
         onColumnVisibilityModelChange={(model: any) => setColumnVisibilityModel(model)}
         rowSelectionModel={{ type: 'include' as const, ids: new Set(selectedIds) }}
         onRowSelectionModelChange={(model: any) => onSelectionChange(Array.from(model.ids ?? []) as string[])}
-        initialState={{
-          sorting: {
-            sortModel: [{ field: 'nextExpiryDays', sort: 'asc' as const }],
-          },
-          pagination: { paginationModel: { pageSize: 25 } },
-        }}
+        paginationModel={paginationModel}
+        onPaginationModelChange={setPaginationModel}
+        sortModel={sortModel}
+        onSortModelChange={setSortModel}
         pageSizeOptions={[10, 25, 50, 100]}
         rowHeight={56}
         getRowClassName={(params: any) => `risk-${params.row.risk}`}
@@ -1451,13 +1462,13 @@ export default function DocumentExpiryScreen() {
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
   const [renewalTasks, setRenewalTasks] = useState<RenewalTask[]>([]);
   const [loading, setLoading] = useState(false);
-  const [thresholdDays, setThresholdDays] = useState(30);
-  const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
+  const [thresholdDays, setThresholdDays] = useViewState('admin/document-expiry.thresholdDays', 30);
+  const [quickFilter, setQuickFilter] = useViewState<QuickFilter>('admin/document-expiry.quickFilter', 'all');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [assignOpen, setAssignOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [globalSearch, setGlobalSearch] = useState('');
-  const [showAllColumns, setShowAllColumns] = useState(false);
+  const [globalSearch, setGlobalSearch] = useViewState('admin/document-expiry.globalSearch', '');
+  const [showAllColumns, setShowAllColumns] = useViewState('admin/document-expiry.showAllColumns', false);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false,
     message: '',

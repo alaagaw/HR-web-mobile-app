@@ -3,6 +3,7 @@ import { View, Text, FlatList, Platform, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
+import { useViewState } from '@/hooks/use-view-state';
 import { useColorScheme } from 'nativewind';
 import { format, subDays, startOfMonth, startOfYear, subMonths } from 'date-fns';
 import { ScreenHeader } from '@/components/layout/screen-header';
@@ -82,7 +83,7 @@ function WebHistoryTable({
   isDark: boolean;
   onRowClick: (request: LeaveRequest) => void;
 }) {
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useViewState('admin/request-history.columnFilters', {
     caseNumber: '',
     employee: '',
     type: '',
@@ -91,6 +92,12 @@ function WebHistoryTable({
     status: '',
     resolvedOn: '',
   });
+
+  const [paginationModel, setPaginationModel] = useViewState(
+    'admin/request-history.pagination',
+    { page: 0, pageSize: 25 }
+  );
+  const [sortModel, setSortModel] = useViewState<any[]>('admin/request-history.sort', []);
 
   const filteredData = data.filter((row) => {
     const caseNum = row.case_number.toLowerCase();
@@ -260,9 +267,10 @@ function WebHistoryTable({
         disableColumnMenu
         columnHeaderHeight={70}
         onRowClick={(params: any) => onRowClick(params.row)}
-        initialState={{
-          pagination: { paginationModel: { pageSize: 25 } },
-        }}
+        paginationModel={paginationModel}
+        onPaginationModelChange={setPaginationModel}
+        sortModel={sortModel}
+        onSortModelChange={setSortModel}
         pageSizeOptions={[10, 25, 50, 100]}
         rowHeight={56}
         sx={{
@@ -381,9 +389,12 @@ export default function RequestHistoryScreen() {
   const isDark = colorScheme === 'dark';
 
   const defaultRange = getDateRange('last30');
-  const [dateFrom, setDateFrom] = useState(defaultRange.from);
-  const [dateTo, setDateTo] = useState(defaultRange.to);
-  const [activeRange, setActiveRange] = useState<QuickRange | null>('last30');
+  const [dateFrom, setDateFrom] = useViewState('admin/request-history.dateFrom', defaultRange.from);
+  const [dateTo, setDateTo] = useViewState('admin/request-history.dateTo', defaultRange.to);
+  const [activeRange, setActiveRange] = useViewState<QuickRange | null>(
+    'admin/request-history.activeRange',
+    'last30'
+  );
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -400,7 +411,7 @@ export default function RequestHistoryScreen() {
     }
   };
 
-  useAutoRefresh(() => { loadData(dateFrom, dateTo); }, []);
+  useAutoRefresh(() => { loadData(dateFrom, dateTo); }, [dateFrom, dateTo]);
 
   const handleDateFromChange = (v: string) => {
     setDateFrom(v);

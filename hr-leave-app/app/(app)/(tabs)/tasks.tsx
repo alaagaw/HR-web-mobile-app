@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { View, Text, FlatList, Pressable, Platform, Modal, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
+import { useViewState } from '@/hooks/use-view-state';
 import { useColorScheme } from 'nativewind';
 import { RequestCard } from '@/components/leave/request-card';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -78,12 +79,20 @@ function WebLeaveRequestsTable({
   isDark,
   userId,
   onRowClick,
+  stateKey,
 }: {
   data: LeaveRequest[];
   isDark: boolean;
   userId?: string;
   onRowClick: (request: LeaveRequest) => void;
+  stateKey: string;
 }) {
+  const [paginationModel, setPaginationModel] = useViewState(
+    `tabs/tasks.${stateKey}.pagination`,
+    { page: 0, pageSize: 25 }
+  );
+  const [sortModel, setSortModel] = useViewState<any[]>(`tabs/tasks.${stateKey}.sort`, []);
+
   const columns = [
     {
       field: 'case_number',
@@ -226,9 +235,10 @@ function WebLeaveRequestsTable({
               quickFilterProps: { debounceMs: 300 },
             },
           }}
-          initialState={{
-            pagination: { paginationModel: { pageSize: 25 } },
-          }}
+          paginationModel={paginationModel}
+          onPaginationModelChange={setPaginationModel}
+          sortModel={sortModel}
+          onSortModelChange={setSortModel}
           pageSizeOptions={[10, 25, 50]}
           rowHeight={56}
           getRowClassName={(params: any) =>
@@ -260,6 +270,11 @@ function WebDocumentRenewalsTable({
 }) {
   const [renewDialog, setRenewDialog] = useState<{ open: boolean; task: RenewalTask | null }>({ open: false, task: null });
   const [newExpiry, setNewExpiry] = useState('');
+  const [paginationModel, setPaginationModel] = useViewState(
+    'tabs/tasks.renewals.pagination',
+    { page: 0, pageSize: 25 }
+  );
+  const [sortModel, setSortModel] = useViewState<any[]>('tabs/tasks.renewals.sort', []);
 
   function daysRemaining(expiry?: string | null): number | null {
     if (!expiry) return null;
@@ -426,9 +441,10 @@ function WebDocumentRenewalsTable({
               quickFilterProps: { debounceMs: 300 },
             },
           }}
-          initialState={{
-            pagination: { paginationModel: { pageSize: 25 } },
-          }}
+          paginationModel={paginationModel}
+          onPaginationModelChange={setPaginationModel}
+          sortModel={sortModel}
+          onSortModelChange={setSortModel}
           pageSizeOptions={[10, 25, 50]}
           rowHeight={56}
           sx={{
@@ -607,7 +623,7 @@ export default function TasksScreen() {
   } = useRenewalTasks();
   const setPendingCount = useTaskStore((s) => s.setPendingCount);
   const setRenewalTaskCount = useTaskStore((s) => s.setRenewalTaskCount);
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useViewState('tabs/tasks.activeTab', 0);
   const [mobileRenewTask, setMobileRenewTask] = useState<RenewalTask | null>(null);
   const [mobileNewExpiry, setMobileNewExpiry] = useState('');
 
@@ -688,6 +704,7 @@ export default function TasksScreen() {
                   isDark={isDark}
                   userId={activeTab === 1 ? user?.id : undefined}
                   onRowClick={handleRowPress}
+                  stateKey={activeTab === 0 ? 'pending' : 'all'}
                 />
               </View>
             ) : (

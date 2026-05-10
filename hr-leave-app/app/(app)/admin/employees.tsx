@@ -3,6 +3,7 @@ import { View, Text, FlatList, TextInput, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
+import { useViewState } from '@/hooks/use-view-state';
 import { useColorScheme } from 'nativewind';
 import { Search } from 'lucide-react-native';
 import { ScreenHeader } from '@/components/layout/screen-header';
@@ -195,7 +196,20 @@ function WebEmployeesTable({
   onSelectionChange: (ids: string[]) => void;
   onSendInvite: (id: string) => void;
 }) {
-  const [filters, setFilters] = useState({ name: '', email: '', department: '', role: '', phone: '', status: '' });
+  const [filters, setFilters] = useViewState('admin/employees.columnFilters', {
+    name: '',
+    email: '',
+    department: '',
+    role: '',
+    phone: '',
+    status: '',
+  });
+
+  const [paginationModel, setPaginationModel] = useViewState(
+    'admin/employees.pagination',
+    { page: 0, pageSize: 25 }
+  );
+  const [sortModel, setSortModel] = useViewState<any[]>('admin/employees.sort', []);
   const [menuAnchor, setMenuAnchor] = useState<{ el: HTMLElement; row: Profile } | null>(null);
 
   const filteredData = data.filter((row) => {
@@ -370,9 +384,10 @@ function WebEmployeesTable({
         disableColumnFilter
         disableColumnMenu
         columnHeaderHeight={70}
-        initialState={{
-          pagination: { paginationModel: { pageSize: 25 } },
-        }}
+        paginationModel={paginationModel}
+        onPaginationModelChange={setPaginationModel}
+        sortModel={sortModel}
+        onSortModelChange={setSortModel}
         pageSizeOptions={[10, 25, 50]}
         rowHeight={48}
         onRowClick={(params: any) => onEdit(params.row)}
@@ -955,7 +970,7 @@ export default function EmployeesScreen() {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
   const [employees, setEmployees] = useState<Profile[]>([]);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useViewState('admin/employees.search', '');
   const [loading, setLoading] = useState(false);
   const [dialog, setDialog] = useState<EditDialogState>(INITIAL_DIALOG);
   const [successMsg, setSuccessMsg] = useState('');
@@ -971,7 +986,7 @@ export default function EmployeesScreen() {
   }, [search]);
 
   useEffect(() => { loadEmployees(); }, [loadEmployees]);
-  const { invalidate } = useAutoRefresh(() => { loadEmployees(); }, []);
+  const { invalidate } = useAutoRefresh(() => { loadEmployees(); }, [loadEmployees]);
 
   // --- Dialog handlers ---
   const handleOpenEdit = async (emp: Profile) => {

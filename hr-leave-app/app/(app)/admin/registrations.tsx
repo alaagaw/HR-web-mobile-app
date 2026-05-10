@@ -3,6 +3,7 @@ import { View, Text, FlatList, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
+import { useViewState } from '@/hooks/use-view-state';
 import { useColorScheme } from 'nativewind';
 import { ScreenHeader } from '@/components/layout/screen-header';
 import { Card } from '@/components/ui/card';
@@ -39,6 +40,11 @@ export default function RegistrationsScreen() {
   const [registrations, setRegistrations] = useState<PendingRegistration[]>([]);
   const [loading, setLoading] = useState(true);
   const [reviewing, setReviewing] = useState<PendingRegistration | null>(null);
+  const [paginationModel, setPaginationModel] = useViewState(
+    'admin/registrations.pagination',
+    { page: 0, pageSize: 25 }
+  );
+  const [sortModel, setSortModel] = useViewState<any[]>('admin/registrations.sort', []);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -106,7 +112,10 @@ export default function RegistrationsScreen() {
               columns={columns}
               loading={loading}
               pageSizeOptions={[10, 25, 50]}
-              initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
+              paginationModel={paginationModel}
+              onPaginationModelChange={setPaginationModel}
+              sortModel={sortModel}
+              onSortModelChange={setSortModel}
               disableRowSelectionOnClick
               getRowId={(row: any) => row.id}
               sx={{

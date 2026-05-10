@@ -3,6 +3,7 @@ import { View, Text, FlatList, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
+import { useViewState } from '@/hooks/use-view-state';
 import { useColorScheme } from 'nativewind';
 import { ScreenHeader } from '@/components/layout/screen-header';
 import { Card } from '@/components/ui/card';
@@ -54,7 +55,7 @@ function WebLedgerTable({
   data: LedgerEntryWithDetails[];
   isDark: boolean;
 }) {
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useViewState('admin/balance-ledger.columnFilters', {
     employee: '',
     type: '',
     change: '',
@@ -62,6 +63,12 @@ function WebLedgerTable({
     performedBy: '',
     date: '',
   });
+
+  const [paginationModel, setPaginationModel] = useViewState(
+    'admin/balance-ledger.pagination',
+    { page: 0, pageSize: 25 }
+  );
+  const [sortModel, setSortModel] = useViewState<any[]>('admin/balance-ledger.sort', []);
 
   const filteredData = data.filter((row) => {
     const emp = `${row.employee_name} ${row.employee_department || ''}`.toLowerCase();
@@ -279,9 +286,10 @@ function WebLedgerTable({
         disableColumnFilter
         disableColumnMenu
         columnHeaderHeight={70}
-        initialState={{
-          pagination: { paginationModel: { pageSize: 25 } },
-        }}
+        paginationModel={paginationModel}
+        onPaginationModelChange={setPaginationModel}
+        sortModel={sortModel}
+        onSortModelChange={setSortModel}
         pageSizeOptions={[10, 25, 50, 100]}
         rowHeight={52}
         sx={{

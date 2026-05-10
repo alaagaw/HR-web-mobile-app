@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, FlatList, Platform } from 'react-native';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
+import { useViewState } from '@/hooks/use-view-state';
 import { useColorScheme } from 'nativewind';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +28,12 @@ if (isWeb) {
 }
 
 function WebTeamTable({ data, isDark }: { data: LeaveRequest[]; isDark: boolean }) {
+  const [paginationModel, setPaginationModel] = useViewState(
+    'tabs/team.pagination',
+    { page: 0, pageSize: 25 }
+  );
+  const [sortModel, setSortModel] = useViewState<any[]>('tabs/team.sort', []);
+
   const columns = [
     {
       field: 'employee_name',
@@ -95,9 +102,10 @@ function WebTeamTable({ data, isDark }: { data: LeaveRequest[]; isDark: boolean 
               quickFilterProps: { debounceMs: 300 },
             },
           }}
-          initialState={{
-            pagination: { paginationModel: { pageSize: 25 } },
-          }}
+          paginationModel={paginationModel}
+          onPaginationModelChange={setPaginationModel}
+          sortModel={sortModel}
+          onSortModelChange={setSortModel}
           pageSizeOptions={[10, 25, 50]}
           sx={{ borderRadius: 3 }}
         />

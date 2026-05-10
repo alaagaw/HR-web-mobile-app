@@ -3,6 +3,7 @@ import { View, Text, ScrollView, Platform, Pressable, ActivityIndicator } from '
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
+import { useViewState } from '@/hooks/use-view-state';
 import { useColorScheme } from 'nativewind';
 import { ScreenHeader } from '@/components/layout/screen-header';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -352,6 +353,12 @@ function WebAssignmentsTable({
   isDark: boolean;
   onRemove: (assignment: TimesheetAssignment) => void;
 }) {
+  const [paginationModel, setPaginationModel] = useViewState(
+    'admin/timesheet-assignments.pagination',
+    { page: 0, pageSize: 25 }
+  );
+  const [sortModel, setSortModel] = useViewState<any[]>('admin/timesheet-assignments.sort', []);
+
   const columns = [
     {
       field: 'project_name',
@@ -501,9 +508,10 @@ function WebAssignmentsTable({
         disableColumnFilter
         disableColumnMenu
         columnHeaderHeight={50}
-        initialState={{
-          pagination: { paginationModel: { pageSize: 25 } },
-        }}
+        paginationModel={paginationModel}
+        onPaginationModelChange={setPaginationModel}
+        sortModel={sortModel}
+        onSortModelChange={setSortModel}
         pageSizeOptions={[10, 25, 50]}
         rowHeight={56}
         sx={{

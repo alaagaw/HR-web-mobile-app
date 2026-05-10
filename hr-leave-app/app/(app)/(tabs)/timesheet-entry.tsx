@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useTimesheets } from '@/hooks/use-timesheets';
 import { useProjects } from '@/hooks/use-projects';
 import { useSuppliers } from '@/hooks/use-suppliers';
+import { useViewState } from '@/hooks/use-view-state';
 import { userService, timesheetService } from '@/services';
 import { format, addDays, subDays } from 'date-fns';
 import {
@@ -281,7 +282,10 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
   const isHR = user?.role === Role.HR || user?.role === Role.HRDirector;
 
   // ── Local state ─────────────────────────────────────────────
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useViewState<string | null>(
+    'tabs/timesheet-entry.selectedProjectId',
+    null
+  );
   const [weekStart, setWeekStart] = useState<Date>(() => getWeekRange(new Date()).weekStart);
   const [gridRows, setGridRows] = useState<GridRow[]>([]);
   const [saving, setSaving] = useState(false);

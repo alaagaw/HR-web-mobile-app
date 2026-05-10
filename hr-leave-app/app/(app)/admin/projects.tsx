@@ -3,6 +3,7 @@ import { View, Text, ScrollView, Platform, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
+import { useViewState } from '@/hooks/use-view-state';
 import { useColorScheme } from 'nativewind';
 import { ScreenHeader } from '@/components/layout/screen-header';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -162,7 +163,7 @@ function WebProjectsTable({
   globalSearch: string;
   onEdit: (project: Project) => void;
 }) {
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useViewState('admin/projects.columnFilters', {
     project_number: '',
     name: '',
     client: '',
@@ -171,6 +172,12 @@ function WebProjectsTable({
     start_date: '',
     end_date: '',
   });
+
+  const [paginationModel, setPaginationModel] = useViewState(
+    'admin/projects.pagination',
+    { page: 0, pageSize: 25 }
+  );
+  const [sortModel, setSortModel] = useViewState<any[]>('admin/projects.sort', []);
 
   const filteredData = useMemo(() => {
     return data.filter((row) => {
@@ -368,9 +375,10 @@ function WebProjectsTable({
         disableColumnFilter
         disableColumnMenu
         columnHeaderHeight={70}
-        initialState={{
-          pagination: { paginationModel: { pageSize: 25 } },
-        }}
+        paginationModel={paginationModel}
+        onPaginationModelChange={setPaginationModel}
+        sortModel={sortModel}
+        onSortModelChange={setSortModel}
         pageSizeOptions={[10, 25, 50, 100]}
         rowHeight={48}
         sx={{
@@ -611,7 +619,7 @@ export default function ProjectsScreen() {
 
   const { projects, loading, fetchAll, create, update, remove } = useProjects();
 
-  const [globalSearch, setGlobalSearch] = useState('');
+  const [globalSearch, setGlobalSearch] = useViewState('admin/projects.globalSearch', '');
   const [dialog, setDialog] = useState<ProjectDialogState>(INITIAL_DIALOG);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState(false);

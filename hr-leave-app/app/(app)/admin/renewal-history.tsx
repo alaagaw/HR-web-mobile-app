@@ -3,6 +3,7 @@ import { View, Text, FlatList, Platform, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
+import { useViewState } from '@/hooks/use-view-state';
 import { useColorScheme } from 'nativewind';
 import { format, subDays, startOfMonth, startOfYear, subMonths } from 'date-fns';
 import { ScreenHeader } from '@/components/layout/screen-header';
@@ -210,7 +211,7 @@ function WebRenewalHistoryTable({
   data: HistoryRow[];
   isDark: boolean;
 }) {
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useViewState('admin/renewal-history.columnFilters', {
     taskNumber: '',
     employee: '',
     docType: '',
@@ -218,6 +219,12 @@ function WebRenewalHistoryTable({
     oldExpiry: '',
     newExpiry: '',
   });
+
+  const [paginationModel, setPaginationModel] = useViewState(
+    'admin/renewal-history.pagination',
+    { page: 0, pageSize: 25 }
+  );
+  const [sortModel, setSortModel] = useViewState<any[]>('admin/renewal-history.sort', []);
 
   const filteredData = data.filter((row) => {
     const taskNum = (row.task?.task_number || '').toLowerCase();
@@ -461,9 +468,10 @@ function WebRenewalHistoryTable({
         disableColumnFilter
         disableColumnMenu
         columnHeaderHeight={70}
-        initialState={{
-          pagination: { paginationModel: { pageSize: 25 } },
-        }}
+        paginationModel={paginationModel}
+        onPaginationModelChange={setPaginationModel}
+        sortModel={sortModel}
+        onSortModelChange={setSortModel}
         pageSizeOptions={[10, 25, 50, 100]}
         rowHeight={80}
         sx={{
@@ -734,9 +742,12 @@ export default function RenewalHistoryScreen() {
   const isDark = colorScheme === 'dark';
 
   const defaultRange = getDateRange('last30');
-  const [dateFrom, setDateFrom] = useState(defaultRange.from);
-  const [dateTo, setDateTo] = useState(defaultRange.to);
-  const [activeRange, setActiveRange] = useState<QuickRange | null>('last30');
+  const [dateFrom, setDateFrom] = useViewState('admin/renewal-history.dateFrom', defaultRange.from);
+  const [dateTo, setDateTo] = useViewState('admin/renewal-history.dateTo', defaultRange.to);
+  const [activeRange, setActiveRange] = useViewState<QuickRange | null>(
+    'admin/renewal-history.activeRange',
+    'last30'
+  );
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -753,7 +764,7 @@ export default function RenewalHistoryScreen() {
     }
   };
 
-  useAutoRefresh(() => { loadData(dateFrom, dateTo); }, []);
+  useAutoRefresh(() => { loadData(dateFrom, dateTo); }, [dateFrom, dateTo]);
 
   const handleDateFromChange = (v: string) => {
     setDateFrom(v);

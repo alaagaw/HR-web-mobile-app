@@ -3,6 +3,7 @@ import { View, Text, FlatList, TextInput, Platform, Pressable } from 'react-nati
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
+import { useViewState } from '@/hooks/use-view-state';
 import { useColorScheme } from 'nativewind';
 import { Search } from 'lucide-react-native';
 import { ScreenHeader } from '@/components/layout/screen-header';
@@ -116,7 +117,7 @@ function WebSuppliersTable({
   isDark: boolean;
   onEdit: (supplier: Supplier) => void;
 }) {
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useViewState('admin/suppliers.columnFilters', {
     name: '',
     code: '',
     contact_person: '',
@@ -124,6 +125,12 @@ function WebSuppliersTable({
     email: '',
     status: '',
   });
+
+  const [paginationModel, setPaginationModel] = useViewState(
+    'admin/suppliers.pagination',
+    { page: 0, pageSize: 25 }
+  );
+  const [sortModel, setSortModel] = useViewState<any[]>('admin/suppliers.sort', []);
 
   const filteredData = data.filter((row) => {
     const name = (row.name || '').toLowerCase();
@@ -290,9 +297,10 @@ function WebSuppliersTable({
         disableColumnFilter
         disableColumnMenu
         columnHeaderHeight={70}
-        initialState={{
-          pagination: { paginationModel: { pageSize: 25 } },
-        }}
+        paginationModel={paginationModel}
+        onPaginationModelChange={setPaginationModel}
+        sortModel={sortModel}
+        onSortModelChange={setSortModel}
         pageSizeOptions={[10, 25, 50]}
         rowHeight={48}
         sx={{
@@ -482,7 +490,7 @@ export default function SuppliersScreen() {
   const { user } = useAuth();
 
   const { suppliers, loading, fetchAll, create, update } = useSuppliers();
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useViewState('admin/suppliers.search', '');
   const [dialog, setDialog] = useState<SupplierDialogState>(INITIAL_DIALOG);
   const [snackbar, setSnackbar] = useState<{
     open: boolean;

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { View, FlatList, Pressable, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
+import { useViewState } from '@/hooks/use-view-state';
 import { Plus } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
 import { RequestCard } from '@/components/leave/request-card';
@@ -51,6 +52,12 @@ function WebRequestsTable({
   isDark: boolean;
   onRowClick: (request: LeaveRequest) => void;
 }) {
+  const [paginationModel, setPaginationModel] = useViewState(
+    'tabs/requests.pagination',
+    { page: 0, pageSize: 25 }
+  );
+  const [sortModel, setSortModel] = useViewState<any[]>('tabs/requests.sort', []);
+
   const columns = [
     {
       field: 'case_number',
@@ -164,9 +171,10 @@ function WebRequestsTable({
               quickFilterProps: { debounceMs: 300 },
             },
           }}
-          initialState={{
-            pagination: { paginationModel: { pageSize: 25 } },
-          }}
+          paginationModel={paginationModel}
+          onPaginationModelChange={setPaginationModel}
+          sortModel={sortModel}
+          onSortModelChange={setSortModel}
           pageSizeOptions={[10, 25, 50]}
           rowHeight={56}
           sx={{

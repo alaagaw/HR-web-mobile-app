@@ -3,6 +3,7 @@ import { View, Text, FlatList, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
+import { useViewState } from '@/hooks/use-view-state';
 import { useColorScheme } from 'nativewind';
 import { ScreenHeader } from '@/components/layout/screen-header';
 import { Card } from '@/components/ui/card';
@@ -83,7 +84,18 @@ function WebBalancesTable({
   isDark: boolean;
   onAdjust: (emp: EmployeeWithBalance) => void;
 }) {
-  const [filters, setFilters] = useState({ employee: '', role: '', balance: '', used: '' });
+  const [filters, setFilters] = useViewState('admin/balances.columnFilters', {
+    employee: '',
+    role: '',
+    balance: '',
+    used: '',
+  });
+
+  const [paginationModel, setPaginationModel] = useViewState(
+    'admin/balances.pagination',
+    { page: 0, pageSize: 25 }
+  );
+  const [sortModel, setSortModel] = useViewState<any[]>('admin/balances.sort', []);
 
   const filteredData = data.filter((row) => {
     const wd = row.workday_hours || DEFAULT_WORKDAY_HOURS;
@@ -270,9 +282,10 @@ function WebBalancesTable({
         disableColumnFilter
         disableColumnMenu
         columnHeaderHeight={70}
-        initialState={{
-          pagination: { paginationModel: { pageSize: 25 } },
-        }}
+        paginationModel={paginationModel}
+        onPaginationModelChange={setPaginationModel}
+        sortModel={sortModel}
+        onSortModelChange={setSortModel}
         pageSizeOptions={[10, 25, 50]}
         rowHeight={56}
         sx={{

@@ -7,6 +7,7 @@ import { ScreenHeader } from '@/components/layout/screen-header';
 import { useAuth } from '@/hooks/use-auth';
 import { useTimesheets } from '@/hooks/use-timesheets';
 import { useSuppliers } from '@/hooks/use-suppliers';
+import { useViewState } from '@/hooks/use-view-state';
 import { format } from 'date-fns';
 import {
   getDaysInMonth,
@@ -84,14 +85,26 @@ export default function TimesheetsScreen() {
   const { suppliers, fetchAll: fetchAllSuppliers } = useSuppliers();
 
   // ── Local state (Monthly) ────────────────────────────────
-  const [monthlyMonth, setMonthlyMonth] = useState(() => new Date().getMonth() + 1); // 1-12
-  const [monthlyYear, setMonthlyYear] = useState(() => new Date().getFullYear());
-  const [monthlySearch, setMonthlySearch] = useState('');
-  const [monthlySupplierFilter, setMonthlySupplierFilter] = useState<string>('');
+  const [monthlyMonth, setMonthlyMonth] = useViewState(
+    'admin/timesheets.monthlyMonth',
+    new Date().getMonth() + 1
+  );
+  const [monthlyYear, setMonthlyYear] = useViewState(
+    'admin/timesheets.monthlyYear',
+    new Date().getFullYear()
+  );
+  const [monthlySearch, setMonthlySearch] = useViewState('admin/timesheets.monthlySearch', '');
+  const [monthlySupplierFilter, setMonthlySupplierFilter] = useViewState<string>(
+    'admin/timesheets.monthlySupplierFilter',
+    ''
+  );
   const [regularHoursInput, setRegularHoursInput] = useState('8');
-  const [showRegular, setShowRegular] = useState(false);
-  const [showOvertime, setShowOvertime] = useState(true);
-  const [showAllMonthlyColumns, setShowAllMonthlyColumns] = useState(false);
+  const [showRegular, setShowRegular] = useViewState('admin/timesheets.showRegular', false);
+  const [showOvertime, setShowOvertime] = useViewState('admin/timesheets.showOvertime', true);
+  const [showAllMonthlyColumns, setShowAllMonthlyColumns] = useViewState(
+    'admin/timesheets.showAllMonthlyColumns',
+    false
+  );
 
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false,
