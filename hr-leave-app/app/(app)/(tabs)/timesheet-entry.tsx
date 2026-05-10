@@ -181,13 +181,32 @@ function buildGridRows(entries: TimesheetEntry[], weekDays: { dateStr: string }[
 // HELPER: convert grid rows back to entry drafts
 // ============================================================
 
-function gridRowsToDrafts(rows: GridRow[], projectId: string): TimesheetEntryDraft[] {
+/**
+ * Convert grid rows into TimesheetEntryDraft rows ready for upsert.
+ *
+ * The split between standard_hours and overtime_hours is decided at save time
+ * using the project's regular_hours_per_day, frozen onto each draft as
+ * effective_regular_hours_per_day. This snapshot makes future config changes
+ * (or approved overrides taking effect) unable to retro-corrupt past payroll.
+ *
+ * For 'auto' projects: total hours up to the limit go to standard, the rest
+ * to overtime. For 'manual_split' projects, the grid will (in a later PR)
+ * surface separate R/OT inputs; until then they are treated as auto.
+ */
+function gridRowsToDrafts(
+  rows: GridRow[],
+  projectId: string,
+  regularHoursPerDay: number,
+): TimesheetEntryDraft[] {
   const drafts: TimesheetEntryDraft[] = [];
+  const limit = regularHoursPerDay > 0 ? regularHoursPerDay : 8;
   for (const row of rows) {
     for (const [dateStr, hours] of Object.entries(row.hours)) {
       // Skip days with 0 hours or locked days
       if (!hours || hours <= 0) continue;
       if (isDayLocked(dateStr)) continue;
+      const standard = Math.min(hours, limit);
+      const overtime = Math.max(0, hours - limit);
       drafts.push({
         project_id: projectId,
         employee_id: row.employee_id,
@@ -196,8 +215,9 @@ function gridRowsToDrafts(rows: GridRow[], projectId: string): TimesheetEntryDra
         designation: row.designation,
         supplier_id: row.supplier_id,
         entry_date: dateStr,
-        standard_hours: hours,
-        overtime_hours: 0,
+        standard_hours: standard,
+        overtime_hours: overtime,
+        effective_regular_hours_per_day: limit,
         st_shift: row.shift,
         ot_shift: row.shift,
       });
@@ -457,15 +477,19 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
   const userRef = useRef(user);
   userRef.current = user;
 
+  const selectedProjectRef = useRef(selectedProject);
+  selectedProjectRef.current = selectedProject;
+
   const scheduleAutoSave = useCallback(() => {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(async () => {
       const pid = selectedProjectIdRef.current;
       const u = userRef.current;
       const rows = gridRowsRef.current;
+      const proj = selectedProjectRef.current;
       if (!pid || !u || rows.length === 0) return;
       try {
-        const drafts = gridRowsToDrafts(rows, pid);
+        const drafts = gridRowsToDrafts(rows, pid, proj?.regular_hours_per_day ?? 8);
         if (drafts.length === 0) return;
         await upsertEntries(drafts, u.id);
       } catch (_err) {
@@ -521,7 +545,7 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     setSaving(true);
     try {
-      const drafts = gridRowsToDrafts(gridRows, selectedProjectId);
+      const drafts = gridRowsToDrafts(gridRows, selectedProjectId, selectedProject?.regular_hours_per_day ?? 8);
       await upsertEntries(drafts, user.id);
       await fetchEntriesForWeek(selectedProjectId, weekStartStr, weekEndStr);
       setSnackbar({ open: true, message: 'Timesheet saved successfully', severity: 'success' });
@@ -530,7 +554,7 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
     } finally {
       setSaving(false);
     }
-  }, [selectedProjectId, user, gridRows, weekStartStr, weekEndStr]);
+  }, [selectedProjectId, selectedProject, user, gridRows, weekStartStr, weekEndStr]);
 
   // ── Submit for Approval ───────────────────────────────────
 
@@ -538,7 +562,7 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
     if (!selectedProjectId || !user) return;
     setSubmitting(true);
     try {
-      const drafts = gridRowsToDrafts(gridRows, selectedProjectId);
+      const drafts = gridRowsToDrafts(gridRows, selectedProjectId, selectedProject?.regular_hours_per_day ?? 8);
       await upsertEntries(drafts, user.id);
       await submitForApproval(selectedProjectId, weekStartStr, weekEndStr, user.id, user.role);
       setSnackbar({ open: true, message: 'Timesheet submitted for approval', severity: 'success' });
@@ -547,7 +571,7 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
     } finally {
       setSubmitting(false);
     }
-  }, [selectedProjectId, user, gridRows, weekStartStr, weekEndStr]);
+  }, [selectedProjectId, selectedProject, user, gridRows, weekStartStr, weekEndStr]);
 
   // ── Copy Last Week ────────────────────────────────────────
 
