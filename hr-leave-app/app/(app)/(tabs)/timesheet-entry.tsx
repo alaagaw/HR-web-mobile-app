@@ -414,9 +414,28 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
     fetchSubmissionForWeek(selectedProjectId, weekStartStr);
   }, [selectedProjectId, weekStartStr, weekEndStr]);
 
-  // Rebuild grid whenever entries change
+  // Rebuild grid whenever entries change.
+  // weekDays is intentionally read via closure (not in deps): it changes on week
+  // navigation BEFORE the new entries arrive, so depending on it would briefly
+  // render zero-hour rows. Entries update after the fetch resolves, at which
+  // point this render's closure already has the matching weekDays.
+  // Merge logic: preserve locally-added rows (e.g. a just-added employee with
+  // 0 hours) that haven't been persisted yet — but only if their hours keys
+  // belong to the CURRENT week. This prevents Save/refetch from wiping a new
+  // row before the user has a chance to enter hours, while still discarding
+  // stale rows when the user navigates to a different week.
   useEffect(() => {
-    setGridRows(buildGridRows(entries, weekDays));
+    setGridRows((prev) => {
+      const built = buildGridRows(entries, weekDays);
+      const builtKeys = new Set(built.map((r) => r.key));
+      const currentDateStrs = new Set(weekDays.map((d) => d.dateStr));
+      const pending = prev.filter(
+        (r) =>
+          !builtKeys.has(r.key) &&
+          Object.keys(r.hours).some((k) => currentDateStrs.has(k)),
+      );
+      return [...built, ...pending];
+    });
   }, [entries]);
 
   // ── Week navigation ───────────────────────────────────────
@@ -659,7 +678,7 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
     setManualEmployee({ name: '', number: '', designation: '' });
     setEmployeeSearchResults([]);
     setSnackbar({ open: true, message: `Added ${newRow.employee_name}`, severity: 'success' });
-  }, [selectedProfile, manualEmployee, gridRows, weekDays]);
+  }, [selectedProfile, selectedSupplier, manualEmployee, gridRows, weekDays]);
 
   // ── CSV Export ────────────────────────────────────────────
 
