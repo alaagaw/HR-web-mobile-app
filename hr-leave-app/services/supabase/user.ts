@@ -27,9 +27,13 @@ export const userService: UserService = {
   },
 
   async getEmployees(filters) {
+    // employee_documents has two FKs to profiles (employee_id and verified_by),
+    // so PostgREST can't infer the relationship from `employee_documents(...)`
+    // alone. The `!employee_id` hint disambiguates explicitly — without it,
+    // the query throws and the silent catch upstream produces "no results".
     let query = supabase
       .from('profiles')
-      .select('*, employee_documents(emp_code)')
+      .select('*, employee_documents!employee_id(emp_code)')
       .order('full_name', { ascending: true });
 
     if (filters?.role) query = query.eq('role', filters.role);
