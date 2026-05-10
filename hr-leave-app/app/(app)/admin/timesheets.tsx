@@ -879,34 +879,26 @@ export default function TimesheetsScreen() {
           ) : (
             <div style={{ borderRadius: 12, overflow: 'hidden', border: `1px solid ${DT.border}`, marginBottom: 16 }}>
               <div style={{ display: 'flex', overflow: 'hidden' }}>
-                {/* LEFT: Employee Info (frozen) */}
+                {/* LEFT: Employee Info (frozen)
+                    Right thead is 28 (day name row) + 22 (R/OT sub-row) = 50px.
+                    Same pattern as timesheet-entry: rowSpan={2} + explicit
+                    height holds against table-layout's height-as-hint
+                    behavior, with a bare follow-up tr as the rowSpan slot. */}
                 <div style={{ flexShrink: 0 }}>
                   <table style={{ ...tableStyle, borderRadius: 0 }}>
                     <thead>
-                      {/* Row 1: main headers */}
                       <tr>
-                        <th style={{ ...thCenterStyle, width: 36, height: 28, verticalAlign: 'middle' }}>#</th>
-                        <th style={{ ...thStyle, minWidth: 150, height: 28, verticalAlign: 'middle' }}>Employee</th>
-                        <th style={{ ...thStyle, minWidth: 80, height: 28, verticalAlign: 'middle' }}>Emp #</th>
+                        <th rowSpan={2} style={{ ...thCenterStyle, width: 36, height: 50, verticalAlign: 'middle' }}>#</th>
+                        <th rowSpan={2} style={{ ...thStyle, minWidth: 150, height: 50, verticalAlign: 'middle' }}>Employee</th>
+                        <th rowSpan={2} style={{ ...thStyle, minWidth: 80, height: 50, verticalAlign: 'middle' }}>Emp #</th>
                         {showAllMonthlyColumns && (
                           <>
-                            <th style={{ ...thStyle, minWidth: 120, height: 28, verticalAlign: 'middle' }}>Designation</th>
-                            <th style={{ ...thStyle, minWidth: 120, height: 28, verticalAlign: 'middle' }}>Supplier</th>
+                            <th rowSpan={2} style={{ ...thStyle, minWidth: 120, height: 50, verticalAlign: 'middle' }}>Designation</th>
+                            <th rowSpan={2} style={{ ...thStyle, minWidth: 120, height: 50, verticalAlign: 'middle' }}>Supplier</th>
                           </>
                         )}
                       </tr>
-                      {/* Row 2: sub-header spacer (aligns with R|OT row) */}
-                      <tr>
-                        <th style={{ ...thCenterStyle, height: 22 }} />
-                        <th style={{ ...thStyle, height: 22 }} />
-                        <th style={{ ...thStyle, height: 22 }} />
-                        {showAllMonthlyColumns && (
-                          <>
-                            <th style={{ ...thStyle, height: 22 }} />
-                            <th style={{ ...thStyle, height: 22 }} />
-                          </>
-                        )}
-                      </tr>
+                      <tr />
                     </thead>
                     <tbody>
                       {filteredMonthlyRows.map((row, idx) => (
