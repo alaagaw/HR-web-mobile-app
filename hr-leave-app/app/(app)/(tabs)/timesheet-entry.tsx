@@ -1105,16 +1105,19 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
               }}
             >
               <div style={{ display: 'flex', overflow: 'hidden' }}>
-                {/* ── LEFT: Employee Info ── */}
+                {/* ── LEFT: Employee Info ──
+                    In manual mode the right header is taller (day name row +
+                    R/OT sub-row = 36 + 22 = 58px). Bump the left header
+                    height to match so the two sides line up. */}
                 <div style={{ flexShrink: 0 }}>
                   <table style={{ ...tableStyle, borderRadius: 0 }}>
                     <thead>
                       <tr>
-                        <th style={{ ...thCenterStyle, width: 36, height: 52, verticalAlign: 'middle' }}>#</th>
-                        <th style={{ ...thStyle, minWidth: 150, height: 52, verticalAlign: 'middle' }}>Employee</th>
-                        <th style={{ ...thStyle, minWidth: 120, height: 52, verticalAlign: 'middle', borderRight: `2px solid ${DT.primary}40` }}>Designation</th>
-                        <th style={{ ...thStyle, minWidth: supplierColWidth, height: 52, verticalAlign: 'middle' }}>Supplier</th>
-                        <th style={{ ...thCenterStyle, width: 56, height: 52, verticalAlign: 'middle' }}>Shift</th>
+                        <th style={{ ...thCenterStyle, width: 36, height: isManualMode ? 58 : 52, verticalAlign: 'middle' }}>#</th>
+                        <th style={{ ...thStyle, minWidth: 150, height: isManualMode ? 58 : 52, verticalAlign: 'middle' }}>Employee</th>
+                        <th style={{ ...thStyle, minWidth: 120, height: isManualMode ? 58 : 52, verticalAlign: 'middle', borderRight: `2px solid ${DT.primary}40` }}>Designation</th>
+                        <th style={{ ...thStyle, minWidth: supplierColWidth, height: isManualMode ? 58 : 52, verticalAlign: 'middle' }}>Supplier</th>
+                        <th style={{ ...thCenterStyle, width: 56, height: isManualMode ? 58 : 52, verticalAlign: 'middle' }}>Shift</th>
                       </tr>
                     </thead>
                     <tbody>
