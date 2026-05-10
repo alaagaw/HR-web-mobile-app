@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { View, Text, ScrollView, Pressable, Platform } from 'react-native';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { useViewState } from '@/hooks/use-view-state';
@@ -971,7 +971,23 @@ export default function CalendarScreen() {
   const isDark = colorScheme === 'dark';
 
   const [viewMode, setViewMode] = useViewState<ViewMode>('tabs/calendar.viewMode', 'month');
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentDateIso, setCurrentDateIso] = useViewState(
+    'tabs/calendar.currentDate',
+    new Date().toISOString()
+  );
+  const currentDate = useMemo(() => new Date(currentDateIso), [currentDateIso]);
+  const setCurrentDate = useCallback(
+    (next: Date | ((prev: Date) => Date)) => {
+      if (typeof next === 'function') {
+        setCurrentDateIso((prevIso) =>
+          (next as (prev: Date) => Date)(new Date(prevIso)).toISOString()
+        );
+      } else {
+        setCurrentDateIso(next.toISOString());
+      }
+    },
+    [setCurrentDateIso]
+  );
   const [department, setDepartment] = useViewState('tabs/calendar.department', '');
   const [leaveTypeFilter, setLeaveTypeFilter] = useViewState('tabs/calendar.leaveTypeFilter', '');
   const [allRequests, setAllRequests] = useState<LeaveRequest[]>([]);
@@ -980,7 +996,18 @@ export default function CalendarScreen() {
   const [selectedDay, setSelectedDay] = useState<{ date: Date; leaves: LeaveRequest[] } | null>(null);
 
   // Mobile state
-  const [mobileSelectedDay, setMobileSelectedDay] = useState<Date>(new Date());
+  const [mobileSelectedDayIso, setMobileSelectedDayIso] = useViewState(
+    'tabs/calendar.mobileSelectedDay',
+    new Date().toISOString()
+  );
+  const mobileSelectedDay = useMemo(
+    () => new Date(mobileSelectedDayIso),
+    [mobileSelectedDayIso]
+  );
+  const setMobileSelectedDay = useCallback(
+    (next: Date) => setMobileSelectedDayIso(next.toISOString()),
+    [setMobileSelectedDayIso]
+  );
 
   useAutoRefresh(() => {
     if (!user) return;
