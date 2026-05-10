@@ -127,20 +127,18 @@ export default function NewRequestScreen() {
   }, [user?.id]);
 
   useEffect(() => {
-    if (!watchedStartDate || !watchedEndDate) {
-      setImpact(null);
-      return;
-    }
-
-    const hoursResult = computeRequestedHours({
-      start_date: watchedStartDate,
-      end_date: watchedEndDate,
-      start_time: watchedStartTime,
-      end_time: watchedEndTime,
-      include_weekends: watchedIncludeWeekends,
-      is_full_day: watchedIsFullDay,
-      workday_hours: workdayHours,
-    });
+    const hasDates = !!watchedStartDate && !!watchedEndDate;
+    const hoursResult = hasDates
+      ? computeRequestedHours({
+          start_date: watchedStartDate,
+          end_date: watchedEndDate,
+          start_time: watchedStartTime,
+          end_time: watchedEndTime,
+          include_weekends: watchedIncludeWeekends,
+          is_full_day: watchedIsFullDay,
+          workday_hours: workdayHours,
+        })
+      : { requested_hours: 0, requested_days: 0 };
 
     // Unpaid types don't use balance
     if (isUnpaid) {
