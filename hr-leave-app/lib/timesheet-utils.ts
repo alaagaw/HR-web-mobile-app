@@ -1,18 +1,50 @@
-import { format, addDays, startOfWeek, endOfWeek, getDaysInMonth as fnsGetDaysInMonth, isFriday as fnsIsFriday, isSaturday, differenceInCalendarDays } from 'date-fns';
+import { format, addDays, startOfWeek, endOfWeek, getDaysInMonth as fnsGetDaysInMonth, isFriday as fnsIsFriday, isSaturday, startOfDay } from 'date-fns';
 import type { TimesheetEntry, ConsolidatedMonthEntry } from '@/types/models';
 
 // ============================================================
-// DAY LOCKING — entries older than this many days become read-only
+// DAY LOCKING — past days lock after this many WORKING days
+// (Saudi working week: Sun–Thu; Fri/Sat are weekends and don't count)
 // ============================================================
 
-/** Number of days after which a timesheet day entry becomes locked for editing */
-export const TIMESHEET_EDIT_WINDOW_DAYS = 4;
+/**
+ * How many prior WORKING days remain editable in addition to today.
+ * 2 means: today + 2 prior working days are editable; the 3rd prior
+ * working day (and earlier) is locked.
+ */
+export const TIMESHEET_EDIT_WINDOW_WORKING_DAYS = 2;
 
-/** Check if a specific date is locked (beyond the edit window from today) */
-export function isDayLocked(dateStr: string, editWindowDays: number = TIMESHEET_EDIT_WINDOW_DAYS): boolean {
-  const today = new Date();
-  const entryDate = new Date(dateStr + 'T00:00:00');
-  return differenceInCalendarDays(today, entryDate) > editWindowDays;
+function isSaudiWeekendDate(date: Date): boolean {
+  const day = date.getDay(); // 0=Sun, 5=Fri, 6=Sat
+  return day === 5 || day === 6;
+}
+
+/**
+ * Check if a specific date is locked (beyond the working-day edit window).
+ * Today and future days are never locked regardless of whether today itself
+ * is a working day. For past days, we count working days while walking
+ * BACKWARD from today; if the entry sits on the (window+1)th working day
+ * back or earlier, it is locked.
+ *
+ * Examples (window=2):
+ *   today=Wed → editable: Wed, Tue, Mon. Sun is the 3rd working day back → locked.
+ *   today=Sun → editable: Sun, Thu, Wed (Fri/Sat skipped). Tue locked.
+ *   today=Fri → editable: Fri (today, non-working), Thu, Wed. Tue locked.
+ */
+export function isDayLocked(
+  dateStr: string,
+  editWindowWorkingDays: number = TIMESHEET_EDIT_WINDOW_WORKING_DAYS,
+): boolean {
+  const today = startOfDay(new Date());
+  const entryDate = startOfDay(new Date(dateStr + 'T00:00:00'));
+  if (entryDate.getTime() >= today.getTime()) return false;
+
+  let workingDaysBack = 0;
+  let cursor = today;
+  while (cursor.getTime() > entryDate.getTime()) {
+    cursor = addDays(cursor, -1);
+    if (!isSaudiWeekendDate(cursor)) workingDaysBack++;
+  }
+  return workingDaysBack > editWindowWorkingDays;
 }
 
 // ============================================================
