@@ -889,21 +889,33 @@ export default function TimesheetsScreen() {
                 <div style={{ flexShrink: 0 }}>
                   <table style={{ ...tableStyle, borderRadius: 0 }}>
                     <thead>
-                      {/* Same pattern as TOT REG / TOT OT / GRAND on the right:
-                          rowSpan={2} + height: 50 + verticalAlign: 'middle'.
-                          Each label spans both header rows of the thead. */}
+                      {/* GRAND on the right uses rowSpan={2} but it works there
+                          because the right thead has two real rows (day-name +
+                          R/OT) for it to span across. The left thead has no
+                          equivalent row 2 content, so rowSpan collapses. Force
+                          50px via an inner div instead — the th sizes to the
+                          div regardless of row count. */}
                       <tr>
-                        <th rowSpan={2} style={{ ...thCenterStyle, width: 36, height: 50, verticalAlign: 'middle' }}>#</th>
-                        <th rowSpan={2} style={{ ...thStyle, minWidth: 150, height: 50, verticalAlign: 'middle' }}>Employee</th>
-                        <th rowSpan={2} style={{ ...thStyle, minWidth: 80, height: 50, verticalAlign: 'middle' }}>Emp #</th>
+                        <th style={{ ...thCenterStyle, width: 36, padding: 0 }}>
+                          <div style={{ height: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>#</div>
+                        </th>
+                        <th style={{ ...thStyle, minWidth: 150, padding: 0 }}>
+                          <div style={{ height: 50, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Employee</div>
+                        </th>
+                        <th style={{ ...thStyle, minWidth: 80, padding: 0 }}>
+                          <div style={{ height: 50, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Emp #</div>
+                        </th>
                         {showAllMonthlyColumns && (
                           <>
-                            <th rowSpan={2} style={{ ...thStyle, minWidth: 120, height: 50, verticalAlign: 'middle' }}>Designation</th>
-                            <th rowSpan={2} style={{ ...thStyle, minWidth: 120, height: 50, verticalAlign: 'middle' }}>Supplier</th>
+                            <th style={{ ...thStyle, minWidth: 120, padding: 0 }}>
+                              <div style={{ height: 50, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Designation</div>
+                            </th>
+                            <th style={{ ...thStyle, minWidth: 120, padding: 0 }}>
+                              <div style={{ height: 50, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Supplier</div>
+                            </th>
                           </>
                         )}
                       </tr>
-                      <tr />
                     </thead>
                     <tbody>
                       {filteredMonthlyRows.map((row, idx) => (
