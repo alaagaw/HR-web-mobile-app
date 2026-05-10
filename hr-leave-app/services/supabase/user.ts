@@ -27,34 +27,45 @@ export const userService: UserService = {
   },
 
   async getEmployees(filters) {
-    // employee_documents has two FKs to profiles (employee_id and verified_by),
-    // so PostgREST can't infer the relationship from `employee_documents(...)`
-    // alone. The `!employee_id` hint disambiguates explicitly — without it,
-    // the query throws and the silent catch upstream produces "no results".
-    let query = supabase
+    // Two parallel queries:
+    //   1) profiles (RLS-open SELECT)
+    //   2) v_emp_codes (migration 021) — a minimal view that surfaces only
+    //      employee_id + emp_code from employee_documents, bypassing the
+    //      strict RLS on the underlying table without exposing PII fields.
+    //
+    // The emp_code is then merged onto the Profile rows client-side so
+    // callers can read profile.emp_code regardless of who is signed in —
+    // a timesheet keeper picking an existing employee from the search
+    // dropdown gets the same staff number that HR would.
+    let profilesQuery = supabase
       .from('profiles')
-      .select('*, employee_documents!employee_id(emp_code)')
+      .select('*')
       .order('full_name', { ascending: true });
 
-    if (filters?.role) query = query.eq('role', filters.role);
-    if (filters?.department) query = query.eq('department', filters.department);
-    if (filters?.is_active !== undefined) query = query.eq('is_active', filters.is_active);
+    if (filters?.role) profilesQuery = profilesQuery.eq('role', filters.role);
+    if (filters?.department) profilesQuery = profilesQuery.eq('department', filters.department);
+    if (filters?.is_active !== undefined) profilesQuery = profilesQuery.eq('is_active', filters.is_active);
     if (filters?.search) {
       const term = `%${filters.search}%`;
-      query = query.or(`full_name.ilike.${term},email.ilike.${term},department.ilike.${term},role.ilike.${term}`);
+      profilesQuery = profilesQuery.or(`full_name.ilike.${term},email.ilike.${term},department.ilike.${term},role.ilike.${term}`);
     }
 
-    const { data, error } = await query;
-    if (error) throw new Error(error.message);
+    const [profilesRes, codesRes] = await Promise.all([
+      profilesQuery,
+      supabase.from('v_emp_codes').select('employee_id, emp_code'),
+    ]);
 
-    // Flatten the joined employee_documents.emp_code onto the Profile so callers
-    // (e.g. the timesheet Add Employee dialog) can read selectedProfile.emp_code
-    // directly instead of having to fetch the employee_documents row separately.
-    return (data ?? []).map((row: any) => {
-      const docs = Array.isArray(row.employee_documents) ? row.employee_documents[0] : row.employee_documents;
-      const { employee_documents: _ed, ...rest } = row;
-      return { ...rest, emp_code: docs?.emp_code ?? null } as Profile;
-    });
+    if (profilesRes.error) throw new Error(profilesRes.error.message);
+
+    const codeByEmployeeId = new Map<string, string>();
+    for (const row of codesRes.data ?? []) {
+      codeByEmployeeId.set((row as any).employee_id, (row as any).emp_code);
+    }
+
+    return (profilesRes.data ?? []).map((p: any) => ({
+      ...p,
+      emp_code: codeByEmployeeId.get(p.id) ?? null,
+    })) as Profile[];
   },
 
   async updateEmployeeOrg(employeeId, supervisorId, managerId) {
