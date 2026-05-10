@@ -1,5 +1,6 @@
 import { useEffect, useCallback } from 'react';
 import { useAuthStore } from '@/stores/auth-store';
+import { useViewStateStore } from '@/stores/view-state-store';
 import { authService } from '@/services';
 import { RegistrationStatus } from '@/types/enums';
 
@@ -69,6 +70,7 @@ export function useAuth() {
   const signOut = useCallback(async () => {
     await authService.signOut();
     clear();
+    useViewStateStore.getState().clearAll();
   }, []);
 
   // Derived state for routing decisions

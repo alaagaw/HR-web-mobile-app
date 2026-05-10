@@ -286,7 +286,23 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
     'tabs/timesheet-entry.selectedProjectId',
     null
   );
-  const [weekStart, setWeekStart] = useState<Date>(() => getWeekRange(new Date()).weekStart);
+  const [weekStartIso, setWeekStartIso] = useViewState(
+    'tabs/timesheet-entry.weekStart',
+    getWeekRange(new Date()).weekStart.toISOString()
+  );
+  const weekStart = useMemo(() => new Date(weekStartIso), [weekStartIso]);
+  const setWeekStart = useCallback(
+    (next: Date | ((prev: Date) => Date)) => {
+      if (typeof next === 'function') {
+        setWeekStartIso((prevIso) =>
+          (next as (prev: Date) => Date)(new Date(prevIso)).toISOString()
+        );
+      } else {
+        setWeekStartIso(next.toISOString());
+      }
+    },
+    [setWeekStartIso]
+  );
   const [gridRows, setGridRows] = useState<GridRow[]>([]);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);

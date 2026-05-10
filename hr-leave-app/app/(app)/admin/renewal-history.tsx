@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, FlatList, Platform, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -750,6 +750,18 @@ export default function RenewalHistoryScreen() {
   );
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // If a quick range is persisted, recompute its dates from current "now" on mount.
+  useEffect(() => {
+    if (activeRange) {
+      const { from, to } = getDateRange(activeRange);
+      if (from !== dateFrom || to !== dateTo) {
+        setDateFrom(from);
+        setDateTo(to);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const loadData = async (from: string, to: string) => {
     setLoading(true);

@@ -212,9 +212,12 @@ function WebTimeClock({ isDark }: { isDark: boolean }) {
   const [manualClockIn, setManualClockIn] = useState('09:00');
   const [manualClockOut, setManualClockOut] = useState('17:00');
   const [manualNotes, setManualNotes] = useState('');
-  const [histDateFrom, setHistDateFrom] = useState(addDays(getToday(), -30));
-  const [histDateTo, setHistDateTo] = useState(getToday());
-  const [weekStart, setWeekStart] = useState(getWeekStart());
+  const [histDateFrom, setHistDateFrom] = useViewState(
+    'tabs/timeclock.histDateFrom',
+    addDays(getToday(), -30)
+  );
+  const [histDateTo, setHistDateTo] = useViewState('tabs/timeclock.histDateTo', getToday());
+  const [weekStart, setWeekStart] = useViewState('tabs/timeclock.weekStart', getWeekStart());
 
   const now = useLiveClock();
   const elapsed = useLiveElapsed(activeEntry?.clock_in ?? null);
