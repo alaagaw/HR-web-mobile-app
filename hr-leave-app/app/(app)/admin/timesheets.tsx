@@ -967,20 +967,22 @@ export default function TimesheetsScreen() {
                             </th>
                           );
                         })}
-                        {/* Summary headers */}
+                        {/* Summary headers — rowSpan={2} so they span the
+                            day-name row + R/OT sub-row, matching the left-side
+                            and day-column header heights. */}
                         {showRegular && (
-                          <th style={{ ...thCenterStyle, minWidth: 48, height: 28, verticalAlign: 'middle', borderLeft: `2px solid ${DT.primary}40` }}>
+                          <th rowSpan={2} style={{ ...thCenterStyle, minWidth: 48, height: 50, verticalAlign: 'middle', borderLeft: `2px solid ${DT.primary}40` }}>
                             <div style={{ fontSize: 10 }}>TOT</div>
                             <div style={{ fontSize: 9, fontWeight: 400 }}>REG</div>
                           </th>
                         )}
                         {showOvertime && (
-                          <th style={{ ...thCenterStyle, minWidth: 48, height: 28, verticalAlign: 'middle', borderLeft: showRegular ? undefined : `2px solid ${DT.primary}40` }}>
+                          <th rowSpan={2} style={{ ...thCenterStyle, minWidth: 48, height: 50, verticalAlign: 'middle', borderLeft: showRegular ? undefined : `2px solid ${DT.primary}40` }}>
                             <div style={{ fontSize: 10 }}>TOT</div>
                             <div style={{ fontSize: 9, fontWeight: 400, color: '#F59E0B' }}>OT</div>
                           </th>
                         )}
-                        <th style={{ ...thCenterStyle, minWidth: 52, height: 28, verticalAlign: 'middle', borderLeft: `2px solid ${DT.primary}40` }}>
+                        <th rowSpan={2} style={{ ...thCenterStyle, minWidth: 52, height: 50, verticalAlign: 'middle', borderLeft: `2px solid ${DT.primary}40` }}>
                           <div style={{ fontSize: 10 }}>GRAND</div>
                         </th>
                       </tr>
