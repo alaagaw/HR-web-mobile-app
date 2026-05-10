@@ -1106,22 +1106,22 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
             >
               <div style={{ display: 'flex', overflow: 'hidden' }}>
                 {/* ── LEFT: Employee Info ──
-                    Right header in manual mode = 58px (day-name row 36 +
-                    R/OT sub-row 22). Match by setting the height on the
-                    <tr> itself (browsers honor row-element height more
-                    reliably than <th> height in table layouts), and force
-                    a fixed table-layout so the height isn't overridden by
-                    content sizing. */}
+                    rowSpan={2} + explicit height (matching the rendered
+                    73.5px the table naturally produces with the existing
+                    th padding) is what actually holds — `height` on tr/th
+                    alone is ignored by table layout when content disagrees.
+                    Auto mode keeps the existing 52px single-row header. */}
                 <div style={{ flexShrink: 0 }}>
                   <table style={{ ...tableStyle, borderRadius: 0 }}>
                     <thead>
-                      <tr style={{ height: isManualMode ? 58 : 52 }}>
-                        <th style={{ ...thCenterStyle, width: 36, verticalAlign: 'middle' }}>#</th>
-                        <th style={{ ...thStyle, minWidth: 150, verticalAlign: 'middle' }}>Employee</th>
-                        <th style={{ ...thStyle, minWidth: 120, verticalAlign: 'middle', borderRight: `2px solid ${DT.primary}40` }}>Designation</th>
-                        <th style={{ ...thStyle, minWidth: supplierColWidth, verticalAlign: 'middle' }}>Supplier</th>
-                        <th style={{ ...thCenterStyle, width: 56, verticalAlign: 'middle' }}>Shift</th>
+                      <tr>
+                        <th rowSpan={isManualMode ? 2 : 1} style={{ ...thCenterStyle, width: 36, height: isManualMode ? 73.5 : 52, verticalAlign: 'middle' }}>#</th>
+                        <th rowSpan={isManualMode ? 2 : 1} style={{ ...thStyle, minWidth: 150, height: isManualMode ? 73.5 : 52, verticalAlign: 'middle' }}>Employee</th>
+                        <th rowSpan={isManualMode ? 2 : 1} style={{ ...thStyle, minWidth: 120, height: isManualMode ? 73.5 : 52, verticalAlign: 'middle', borderRight: `2px solid ${DT.primary}40` }}>Designation</th>
+                        <th rowSpan={isManualMode ? 2 : 1} style={{ ...thStyle, minWidth: supplierColWidth, height: isManualMode ? 73.5 : 52, verticalAlign: 'middle' }}>Supplier</th>
+                        <th rowSpan={isManualMode ? 2 : 1} style={{ ...thCenterStyle, width: 56, height: isManualMode ? 73.5 : 52, verticalAlign: 'middle' }}>Shift</th>
                       </tr>
+                      {isManualMode && <tr />}
                     </thead>
                     <tbody>
                       {gridRows.length === 0 ? (
