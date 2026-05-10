@@ -16,6 +16,7 @@ import {
   computeColumnTotals,
   groupEntriesByEmployee,
   isDayLocked,
+  splitRegularOvertime,
 } from '@/lib/timesheet-utils';
 import type { TimesheetEntry, TimesheetEntryDraft, Project, Profile, TimesheetAssignment, Supplier } from '@/types/models';
 import { TimesheetSubmissionStatus, Role, ProjectEntryMode } from '@/types/enums';
@@ -434,6 +435,41 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
   const isEditable = submissionStatus === null || submissionStatus === TimesheetSubmissionStatus.Draft || submissionStatus === TimesheetSubmissionStatus.Rejected;
 
   const isManualMode = selectedProject?.entry_mode === ProjectEntryMode.ManualSplit;
+  const regularHoursLimit = selectedProject?.regular_hours_per_day ?? 8;
+
+  // For the auto-mode grid: per-row derived totals (Regular | OT | Grand).
+  // Each day's typed total is split via splitRegularOvertime(total, limit);
+  // sums across the week give the row's R / OT / Grand. The display values
+  // intentionally mirror what gridRowsToDrafts writes on save, so the grid
+  // and the persisted entries are guaranteed to agree.
+  const autoRowSplits = useMemo(() => {
+    const map = new Map<string, { regular: number; overtime: number; total: number }>();
+    for (const r of gridRows) {
+      let reg = 0;
+      let ot = 0;
+      for (const d of weekDays) {
+        const total = r.hours[d.dateStr] || 0;
+        const { regular, overtime } = splitRegularOvertime(total, regularHoursLimit);
+        reg += regular;
+        ot += overtime;
+      }
+      map.set(r.key, { regular: reg, overtime: ot, total: reg + ot });
+    }
+    return map;
+  }, [gridRows, weekDays, regularHoursLimit]);
+
+  // Footer column totals split across all rows.
+  const autoGrandSplit = useMemo(() => {
+    let reg = 0;
+    let ot = 0;
+    for (const r of gridRows) {
+      const s = autoRowSplits.get(r.key);
+      if (!s) continue;
+      reg += s.regular;
+      ot += s.overtime;
+    }
+    return { regular: reg, overtime: ot, total: reg + ot };
+  }, [gridRows, autoRowSplits]);
 
   // Column totals: in manual mode, totals include both R and OT.
   const columnTotals = useMemo(() => {
@@ -1056,6 +1092,34 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
                   </span>
                 </div>
               )}
+              {/* Project payroll-mode indicator so the keeper always knows
+                  which entry model + regular-hours limit they're entering
+                  against on this project. */}
+              {selectedProject && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '4px 10px',
+                    borderRadius: 12,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    backgroundColor: isManualMode ? '#7c2d12' : '#1e3a5f',
+                    color: isManualMode ? '#F59E0B' : '#60a5fa',
+                    border: `1px solid ${isManualMode ? '#F59E0B40' : `${DT.primary}40`}`,
+                  }}
+                  title={
+                    isManualMode
+                      ? 'Keeper enters Regular and Overtime explicitly per day.'
+                      : 'Keeper enters total hours per day; overtime is auto-derived as anything above the limit.'
+                  }
+                >
+                  {isManualMode ? 'MANUAL R+OT' : 'STANDARD'}
+                  <span style={{ opacity: 0.7, fontWeight: 600 }}>·</span>
+                  <span>{selectedProject.regular_hours_per_day}h/day</span>
+                </div>
+              )}
             </div>
 
             {/* Action buttons */}
@@ -1441,8 +1505,17 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
                             </th>
                           );
                         })}
-                        <th style={{ ...thCenterStyle, width: 72, height: 52, verticalAlign: 'middle', borderLeft: `2px solid ${DT.primary}40` }}>
-                          TOTAL
+                        {/* TOTAL is split into Regular | OT | Grand sub-columns
+                            so the keeper sees the derived overtime even though
+                            they only enter total hours per day. */}
+                        <th style={{ ...thCenterStyle, width: 48, height: 52, verticalAlign: 'middle', borderLeft: `2px solid ${DT.primary}40`, fontSize: 11 }}>
+                          R
+                        </th>
+                        <th style={{ ...thCenterStyle, width: 48, height: 52, verticalAlign: 'middle', color: '#F59E0B', fontSize: 11 }}>
+                          OT
+                        </th>
+                        <th style={{ ...thCenterStyle, width: 52, height: 52, verticalAlign: 'middle', color: DT.primary, fontSize: 11 }}>
+                          ALL
                         </th>
                       </tr>
                     </thead>
@@ -1455,7 +1528,7 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
                         </tr>
                       ) : (
                         gridRows.map((row) => {
-                          const rowTotal = computeRowTotalFromMap(row.hours);
+                          const split = autoRowSplits.get(row.key) ?? { regular: 0, overtime: 0, total: 0 };
                           return (
                             <tr key={row.key}>
                               {weekDays.map((day) => {
@@ -1507,18 +1580,14 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
                                   </td>
                                 );
                               })}
-                              <td
-                                style={{
-                                  ...tdStyle,
-                                  textAlign: 'center',
-                                  fontWeight: 700,
-                                  color: DT.primary,
-                                  fontSize: 14,
-                                  height: 48,
-                                  borderLeft: `2px solid ${DT.primary}40`,
-                                }}
-                              >
-                                {rowTotal}
+                              <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 13, height: 48, borderLeft: `2px solid ${DT.primary}40` }}>
+                                {split.regular}
+                              </td>
+                              <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 13, height: 48, color: '#F59E0B' }}>
+                                {split.overtime}
+                              </td>
+                              <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 14, height: 48, color: DT.primary }}>
+                                {split.total}
                               </td>
                             </tr>
                           );
@@ -1535,18 +1604,14 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
                               {columnTotals[day.dateStr] || 0}
                             </td>
                           ))}
-                          <td
-                            style={{
-                              ...tdStyle,
-                              textAlign: 'center',
-                              fontWeight: 700,
-                              color: DT.primary,
-                              fontSize: 14,
-                              height: 48,
-                              borderLeft: `2px solid ${DT.primary}40`,
-                            }}
-                          >
-                            {grandTotal}
+                          <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 13, height: 48, borderLeft: `2px solid ${DT.primary}40` }}>
+                            {autoGrandSplit.regular}
+                          </td>
+                          <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 13, height: 48, color: '#F59E0B' }}>
+                            {autoGrandSplit.overtime}
+                          </td>
+                          <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 14, height: 48, color: DT.primary }}>
+                            {autoGrandSplit.total}
                           </td>
                         </tr>
                       )}
