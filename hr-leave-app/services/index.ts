@@ -19,3 +19,5 @@ export { timeTrackingService } from './supabase/time-tracking';
 export { projectService } from './supabase/project';
 export { supplierService } from './supabase/supplier';
 export { timesheetService } from './supabase/timesheet';
+export { profileCapabilitiesService } from './supabase/profile-capabilities';
+export { projectManagersService } from './supabase/project-managers';

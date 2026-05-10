@@ -10,7 +10,8 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { useProjects } from '@/hooks/use-projects';
 import { useAuth } from '@/hooks/use-auth';
 import { ProjectStatus, ProjectEntryMode } from '@/types/enums';
-import type { Project, ProjectDraft } from '@/types/models';
+import type { Project, ProjectDraft, Profile } from '@/types/models';
+import { userService, projectManagersService } from '@/services';
 
 const isWeb = Platform.OS === 'web';
 const WIDE_SCREEN_BREAKPOINT = 1280;
@@ -39,6 +40,7 @@ let TextField: any;
 let Snackbar: any;
 let Alert: any;
 let MenuItem: any;
+let Autocomplete: any;
 
 if (isWeb) {
   const dg = require('@mui/x-data-grid');
@@ -54,6 +56,7 @@ if (isWeb) {
   Snackbar = require('@mui/material/Snackbar').default;
   Alert = require('@mui/material/Alert').default;
   MenuItem = require('@mui/material/MenuItem').default;
+  Autocomplete = require('@mui/material/Autocomplete').default;
 }
 
 // ============================================================
@@ -132,6 +135,8 @@ interface ProjectDialogState {
   end_date: string;
   entry_mode: ProjectEntryMode;
   regular_hours_per_day: string;
+  /** Profile IDs assigned as PMs on this project. Saved via projectManagersService.setForProject. */
+  pm_ids: string[];
   submitting: boolean;
 }
 
@@ -149,6 +154,7 @@ const INITIAL_DIALOG: ProjectDialogState = {
   end_date: '',
   entry_mode: ProjectEntryMode.Auto,
   regular_hours_per_day: '8',
+  pm_ids: [],
   submitting: false,
 };
 
@@ -413,6 +419,7 @@ function WebProjectsTable({
 function ProjectDialog({
   state,
   isDark,
+  employees,
   onClose,
   onCancel,
   onChange,
@@ -420,6 +427,7 @@ function ProjectDialog({
 }: {
   state: ProjectDialogState;
   isDark: boolean;
+  employees: Profile[];
   onClose: () => void;
   onCancel: () => void;
   onChange: (field: string, value: any) => void;
@@ -429,6 +437,10 @@ function ProjectDialog({
 
   const isValid = state.project_number.trim().length > 0 && state.name.trim().length > 0;
   const isEdit = state.mode === 'edit';
+  const selectedPMs = useMemo(
+    () => employees.filter((e) => state.pm_ids.includes(e.id)),
+    [employees, state.pm_ids],
+  );
 
   return (
     <Dialog
@@ -596,6 +608,32 @@ function ProjectDialog({
                 : 'Default 8. Auto-derives overtime: anything above this limit per day becomes OT.'
             }
           />
+
+          {/* Project Managers — feeds the approval pipeline (PMs are allowed
+              to request project-hours changes on their own projects and to
+              see related notifications). Editable in both add and edit
+              modes; persisted via projectManagersService.setForProject. */}
+          {Autocomplete && (
+            <Autocomplete
+              multiple
+              options={employees}
+              value={selectedPMs}
+              getOptionLabel={(opt: Profile) => `${opt.full_name}${opt.department ? ` · ${opt.department}` : ''}`}
+              isOptionEqualToValue={(opt: Profile, val: Profile) => opt.id === val.id}
+              onChange={(_: any, vals: Profile[]) => onChange('pm_ids', vals.map((v) => v.id))}
+              renderInput={(params: any) => (
+                <TextField
+                  {...params}
+                  label="Project Managers"
+                  size="small"
+                  placeholder="Search by name or department..."
+                  helperText="PMs assigned here can request project-hours changes for this project and see related approvals."
+                />
+              )}
+              size="small"
+              fullWidth
+            />
+          )}
         </div>
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}>
@@ -682,6 +720,16 @@ export default function ProjectsScreen() {
 
   const { projects, loading, fetchAll, create, update, remove } = useProjects();
 
+  // PM picker source list — active employees only. Loaded once on mount;
+  // re-fetched whenever the dialog opens to catch newly-invited employees.
+  const [employees, setEmployees] = useState<Profile[]>([]);
+  useEffect(() => {
+    userService
+      .getEmployees({ is_active: true })
+      .then(setEmployees)
+      .catch(() => setEmployees([]));
+  }, []);
+
   const [globalSearch, setGlobalSearch] = useViewState('admin/projects.globalSearch', '');
   const [dialog, setDialog] = useState<ProjectDialogState>(INITIAL_DIALOG);
   const [addDraft, setAddDraft] = useViewState<Partial<ProjectDialogState>>(
@@ -710,7 +758,7 @@ export default function ProjectsScreen() {
     setDialog({ ...INITIAL_DIALOG, ...addDraft, open: true, mode: 'add' });
   };
 
-  const handleOpenEdit = (project: Project) => {
+  const handleOpenEdit = async (project: Project) => {
     const draftFields = editDraft?.projectId === project.id ? editDraft.fields : {};
     setDialog({
       open: true,
@@ -726,6 +774,7 @@ export default function ProjectsScreen() {
       end_date: project.end_date || '',
       entry_mode: project.entry_mode,
       regular_hours_per_day: String(project.regular_hours_per_day),
+      pm_ids: [],
       submitting: false,
       ...draftFields,
       // Payroll fields are NEVER taken from a draft in edit mode — they are
@@ -736,6 +785,20 @@ export default function ProjectsScreen() {
         regular_hours_per_day: String(project.regular_hours_per_day),
       } as Partial<ProjectDialogState>),
     });
+
+    // Load existing PM assignments asynchronously. Don't clobber unsaved
+    // draft selections if the user reopened the dialog mid-edit.
+    try {
+      const assignments = await projectManagersService.getForProject(project.id);
+      const liveIds = assignments.map((a) => a.profile_id);
+      setDialog((s) => {
+        if (s.projectId !== project.id) return s;
+        if (draftFields.pm_ids && draftFields.pm_ids.length > 0) return s;
+        return { ...s, pm_ids: liveIds };
+      });
+    } catch {
+      // Non-fatal — PM list stays empty.
+    }
   };
 
   // Backdrop / Esc / nav-away: keep draft
@@ -794,14 +857,25 @@ export default function ProjectsScreen() {
     }
 
     try {
+      let projectId = dialog.projectId;
       if (dialog.mode === 'add') {
-        await create(draft, user.id);
+        const newProject = await create(draft, user.id);
+        projectId = newProject.id;
         setAddDraft({});
         setSnackbar({ open: true, message: 'Project created successfully', severity: 'success' });
       } else if (dialog.projectId) {
         await update(dialog.projectId, draft);
         setEditDraft(null);
         setSnackbar({ open: true, message: 'Project updated successfully', severity: 'success' });
+      }
+      // Persist PM assignments either way. Replaces the full set; idempotent.
+      if (projectId) {
+        try {
+          await projectManagersService.setForProject(projectId, dialog.pm_ids, user.id);
+        } catch (pmErr: any) {
+          // Project saved fine; PM sync failed. Surface a non-blocking warning.
+          setSnackbar({ open: true, message: `Project saved, but PM assignments failed: ${pmErr.message}`, severity: 'error' });
+        }
       }
       setDialog(INITIAL_DIALOG);
       invalidate();
@@ -1009,6 +1083,7 @@ export default function ProjectsScreen() {
             <ProjectDialog
               state={dialog}
               isDark={isDark}
+              employees={employees}
               onClose={handleCloseDialog}
               onCancel={handleCancelDialog}
               onChange={handleDialogChange}

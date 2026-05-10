@@ -10,7 +10,7 @@ import { ScreenHeader } from '@/components/layout/screen-header';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
-import { userService, registrationService, documentService } from '@/services';
+import { userService, registrationService, documentService, profileCapabilitiesService } from '@/services';
 import { supabase } from '@/services/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { getRoleLabel, getInitials } from '@/lib/utils';
@@ -81,6 +81,13 @@ interface EditDialogState {
   show_all_supervisors: boolean;
   show_all_managers: boolean;
   send_invite_now: boolean;
+  // Capability flags layered on top of Role (profile_capabilities table).
+  // Stored separately so HR can grant approval / decision rights without
+  // changing role assignments. Loaded on edit-open, persisted on submit.
+  is_general_manager: boolean;
+  is_operations_manager: boolean;
+  can_approve_project_hours_changes: boolean;
+  can_close_month: boolean;
   submitting: boolean;
   error: string;
 }
@@ -103,6 +110,10 @@ const INITIAL_DIALOG: EditDialogState = {
   show_all_supervisors: false,
   show_all_managers: false,
   send_invite_now: false,
+  is_general_manager: false,
+  is_operations_manager: false,
+  can_approve_project_hours_changes: false,
+  can_close_month: false,
   submitting: false,
   error: '',
 };
@@ -168,6 +179,8 @@ const EDIT_DRAFT_KEYS: (keyof EditDialogState)[] = [
   'full_name', 'email', 'emp_code', 'phone', 'job_title', 'start_date',
   'role', 'department', 'supervisor_id', 'manager_id', 'workday_hours',
   'is_active', 'show_all_supervisors', 'show_all_managers', 'send_invite_now',
+  'is_general_manager', 'is_operations_manager',
+  'can_approve_project_hours_changes', 'can_close_month',
 ];
 
 // --------------- Web Components ---------------
@@ -701,6 +714,54 @@ function EditEmployeeDialog({
             />
           </div>
         )}
+
+        {/* Capability flags — layered on top of Role for specific approval
+            and decision rights without growing the Role enum. */}
+        <div style={{ marginTop: 8, padding: 12, borderRadius: 8, border: '1px solid rgba(148,163,184,0.3)' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.5, opacity: 0.75, marginBottom: 6, textTransform: 'uppercase' }}>
+            Capabilities
+          </div>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={state.is_general_manager}
+                onChange={(e: any) => onChange('is_general_manager', e.target.checked)}
+              />
+            }
+            label={<span style={{ fontSize: 13 }}><strong>General Manager.</strong> <span style={{ opacity: 0.7 }}>Can approve project-hours change requests.</span></span>}
+            sx={{ ml: 0, display: 'flex' }}
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={state.is_operations_manager}
+                onChange={(e: any) => onChange('is_operations_manager', e.target.checked)}
+              />
+            }
+            label={<span style={{ fontSize: 13 }}><strong>Operations Manager.</strong> <span style={{ opacity: 0.7 }}>Visible separately from Role for reporting.</span></span>}
+            sx={{ ml: 0, display: 'flex' }}
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={state.can_approve_project_hours_changes}
+                onChange={(e: any) => onChange('can_approve_project_hours_changes', e.target.checked)}
+              />
+            }
+            label={<span style={{ fontSize: 13 }}><strong>Can approve project-hours changes.</strong> <span style={{ opacity: 0.7 }}>Explicit grant; HR Director and GM also get this implicitly.</span></span>}
+            sx={{ ml: 0, display: 'flex' }}
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={state.can_close_month}
+                onChange={(e: any) => onChange('can_close_month', e.target.checked)}
+              />
+            }
+            label={<span style={{ fontSize: 13 }}><strong>Can close month.</strong> <span style={{ opacity: 0.7 }}>Locks payroll-relevant changes for the month.</span></span>}
+            sx={{ ml: 0, display: 'flex' }}
+          />
+        </div>
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}>
         <MuiButton
@@ -1050,6 +1111,28 @@ export default function EmployeesScreen() {
     } catch {
       // Non-fatal — emp_code stays empty and HR will see the required-field warning.
     }
+
+    // Load capability flags asynchronously. If the row doesn't exist yet,
+    // every flag stays false (the INITIAL_DIALOG default).
+    try {
+      const caps = await profileCapabilitiesService.getForProfile(emp.id);
+      if (caps) {
+        setDialog((s) => {
+          if (s.employee?.id !== emp.id) return s;
+          // Don't clobber unsaved draft toggles.
+          return {
+            ...s,
+            is_general_manager: draftFields.is_general_manager ?? caps.is_general_manager,
+            is_operations_manager: draftFields.is_operations_manager ?? caps.is_operations_manager,
+            can_approve_project_hours_changes:
+              draftFields.can_approve_project_hours_changes ?? caps.can_approve_project_hours_changes,
+            can_close_month: draftFields.can_close_month ?? caps.can_close_month,
+          };
+        });
+      }
+    } catch {
+      // Non-fatal — flags stay at their INITIAL_DIALOG defaults (all false).
+    }
   };
 
   // Backdrop / Esc / nav-away: close but keep draft so the user can come back
@@ -1134,6 +1217,14 @@ export default function EmployeesScreen() {
             { onConflict: 'employee_id' }
           );
       }
+
+      // 3b. Capability flags live in profile_capabilities — upsert.
+      await profileCapabilitiesService.setForProfile(employeeId, {
+        is_general_manager: dialog.is_general_manager,
+        is_operations_manager: dialog.is_operations_manager,
+        can_approve_project_hours_changes: dialog.can_approve_project_hours_changes,
+        can_close_month: dialog.can_close_month,
+      });
 
       // 4. Optional: HR ticked "Send invite now". Works for any active
       //    employee — first invite for not_invited, resend (regenerates
