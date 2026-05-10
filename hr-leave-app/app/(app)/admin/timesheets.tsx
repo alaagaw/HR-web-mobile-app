@@ -889,30 +889,21 @@ export default function TimesheetsScreen() {
                 <div style={{ flexShrink: 0 }}>
                   <table style={{ ...tableStyle, borderRadius: 0 }}>
                     <thead>
-                      {/* Row 1: main headers */}
+                      {/* Same pattern as TOT REG / TOT OT / GRAND on the right:
+                          rowSpan={2} + height: 50 + verticalAlign: 'middle'.
+                          Each label spans both header rows of the thead. */}
                       <tr>
-                        <th style={{ ...thCenterStyle, width: 36, height: 28, verticalAlign: 'middle' }}>#</th>
-                        <th style={{ ...thStyle, minWidth: 150, height: 28, verticalAlign: 'middle' }}>Employee</th>
-                        <th style={{ ...thStyle, minWidth: 80, height: 28, verticalAlign: 'middle' }}>Emp #</th>
+                        <th rowSpan={2} style={{ ...thCenterStyle, width: 36, height: 50, verticalAlign: 'middle' }}>#</th>
+                        <th rowSpan={2} style={{ ...thStyle, minWidth: 150, height: 50, verticalAlign: 'middle' }}>Employee</th>
+                        <th rowSpan={2} style={{ ...thStyle, minWidth: 80, height: 50, verticalAlign: 'middle' }}>Emp #</th>
                         {showAllMonthlyColumns && (
                           <>
-                            <th style={{ ...thStyle, minWidth: 120, height: 28, verticalAlign: 'middle' }}>Designation</th>
-                            <th style={{ ...thStyle, minWidth: 120, height: 28, verticalAlign: 'middle' }}>Supplier</th>
+                            <th rowSpan={2} style={{ ...thStyle, minWidth: 120, height: 50, verticalAlign: 'middle' }}>Designation</th>
+                            <th rowSpan={2} style={{ ...thStyle, minWidth: 120, height: 50, verticalAlign: 'middle' }}>Supplier</th>
                           </>
                         )}
                       </tr>
-                      {/* Row 2: spacer that aligns with the right side's R/OT row */}
-                      <tr>
-                        <th style={{ ...thCenterStyle, height: 22, padding: '2px 0' }}>{' '}</th>
-                        <th style={{ ...thStyle, height: 22, padding: '2px 0' }}>{' '}</th>
-                        <th style={{ ...thStyle, height: 22, padding: '2px 0' }}>{' '}</th>
-                        {showAllMonthlyColumns && (
-                          <>
-                            <th style={{ ...thStyle, height: 22, padding: '2px 0' }}>{' '}</th>
-                            <th style={{ ...thStyle, height: 22, padding: '2px 0' }}>{' '}</th>
-                          </>
-                        )}
-                      </tr>
+                      <tr />
                     </thead>
                     <tbody>
                       {filteredMonthlyRows.map((row, idx) => (
