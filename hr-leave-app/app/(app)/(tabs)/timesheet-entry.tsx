@@ -37,6 +37,7 @@ let Autocomplete: any;
 let Snackbar: any;
 let Alert: any;
 let Chip: any;
+let MenuItem: any;
 
 if (isWeb) {
   MuiThemeProvider = require('@/components/web/mui-theme-provider').MuiThemeProvider;
@@ -50,6 +51,7 @@ if (isWeb) {
   Snackbar = require('@mui/material/Snackbar').default;
   Alert = require('@mui/material/Alert').default;
   Chip = require('@mui/material/Chip').default;
+  MenuItem = require('@mui/material/MenuItem').default;
 }
 
 // ============================================================
