@@ -159,3 +159,34 @@ export enum TimesheetAction {
   Updated = 'updated',
   Imported = 'imported',
 }
+
+export enum ProjectEntryMode {
+  /** Keeper enters total hours; OT auto-derived as max(0, total - regular_hours_per_day). */
+  Auto = 'auto',
+  /** Keeper enters Regular and Overtime explicitly per day. No auto-derive. */
+  ManualSplit = 'manual_split',
+}
+
+export enum ProjectHoursChangeScope {
+  /** Override applies only to the specified week_start. */
+  ThisWeek = 'this_week',
+  /** Permanent baseline change starting at week_start (project default updated on approval). */
+  FromWeekForward = 'from_week_forward',
+  /** Correction to a prior week (only allowed if the target month is still open). */
+  RetroactiveWeek = 'retroactive_week',
+}
+
+export enum ProjectHoursChangeStatus {
+  Pending = 'pending',
+  Approved = 'approved',
+  Rejected = 'rejected',
+  Cancelled = 'cancelled',
+}
+
+export enum ProjectHoursChangeAction {
+  Created = 'created',
+  Approved = 'approved',
+  Rejected = 'rejected',
+  Cancelled = 'cancelled',
+  Commented = 'commented',
+}

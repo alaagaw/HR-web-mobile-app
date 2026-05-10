@@ -15,6 +15,10 @@ import {
   TimesheetSubmissionStatus,
   ComplianceFlagType,
   TimesheetAction,
+  ProjectEntryMode,
+  ProjectHoursChangeScope,
+  ProjectHoursChangeStatus,
+  ProjectHoursChangeAction,
 } from './enums';
 
 // ============================================================
@@ -476,6 +480,10 @@ export interface Project {
   status: ProjectStatus;
   start_date: string | null;
   end_date: string | null;
+  /** Locked at creation; never editable after the project exists. */
+  entry_mode: ProjectEntryMode;
+  /** Editable only via the project-hours change-request approval pipeline. */
+  regular_hours_per_day: number;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -490,6 +498,9 @@ export interface ProjectDraft {
   status?: ProjectStatus;
   start_date?: string | null;
   end_date?: string | null;
+  /** Set at creation only; cannot be changed afterwards. */
+  entry_mode?: ProjectEntryMode;
+  regular_hours_per_day?: number;
 }
 
 export interface Supplier {
@@ -523,6 +534,8 @@ export interface TimesheetEntry {
   entry_date: string;
   standard_hours: number;
   overtime_hours: number;
+  /** Frozen snapshot taken at save time; immune to later config changes. */
+  effective_regular_hours_per_day: number;
   st_shift: string;
   ot_shift: string;
   notes: string | null;
@@ -545,6 +558,7 @@ export interface TimesheetEntryDraft {
   entry_date: string;
   standard_hours?: number;
   overtime_hours?: number;
+  effective_regular_hours_per_day?: number;
   st_shift?: string;
   ot_shift?: string;
   notes?: string | null;
@@ -652,4 +666,94 @@ export interface ConsolidatedMonthEntry {
   supplier_name: string | null;
   entry_date: string;
   total_hours: number;
+}
+
+// ============================================================
+// OVERTIME V2 — capabilities, PMs, change requests, closures
+// ============================================================
+
+export interface ProfileCapabilities {
+  profile_id: string;
+  is_general_manager: boolean;
+  is_operations_manager: boolean;
+  can_approve_project_hours_changes: boolean;
+  can_close_month: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectManagerAssignment {
+  id: string;
+  project_id: string;
+  profile_id: string;
+  assigned_by: string | null;
+  created_at: string;
+  // Joined relations
+  project?: Project;
+  profile?: ProfileSummary;
+}
+
+export interface ProjectHoursChangeRequest {
+  id: string;
+  project_id: string;
+  scope: ProjectHoursChangeScope;
+  week_start: string;
+  current_value: number;
+  requested_value: number;
+  status: ProjectHoursChangeStatus;
+  reason: string | null;
+  requested_by: string;
+  requested_at: string;
+  decided_by: string | null;
+  decided_at: string | null;
+  decision_comment: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined relations
+  project?: Project;
+  requester?: ProfileSummary;
+  decider?: ProfileSummary;
+}
+
+export interface ProjectHoursChangeRequestDraft {
+  project_id: string;
+  scope: ProjectHoursChangeScope;
+  week_start: string;
+  current_value: number;
+  requested_value: number;
+  reason?: string | null;
+}
+
+export interface ProjectHoursChangeHistory {
+  id: number;
+  request_id: string;
+  action: ProjectHoursChangeAction;
+  performed_by: string;
+  performer_role: string;
+  comment: string | null;
+  from_status: ProjectHoursChangeStatus | null;
+  to_status: ProjectHoursChangeStatus | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  // Joined relations
+  performer?: ProfileSummary;
+}
+
+export interface MonthClosure {
+  id: string;
+  year: number;
+  month: number;
+  closed_by: string;
+  closed_at: string;
+  reopened_by: string | null;
+  reopened_at: string | null;
+  notes: string | null;
+}
+
+/** Per-employee row from v_employee_overtime_current_month. */
+export interface EmployeeOvertimeCurrentMonth {
+  employee_id: string;
+  overtime_hours_total: number;
+  month_start: string;
+  month_end: string;
 }
