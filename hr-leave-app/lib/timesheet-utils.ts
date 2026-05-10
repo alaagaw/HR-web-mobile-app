@@ -19,14 +19,14 @@ export function isDayLocked(dateStr: string, editWindowDays: number = TIMESHEET_
 // WEEK HELPERS
 // ============================================================
 
-/** Get Monday..Sunday range for a given date */
+/** Get Sunday..Saturday range for a given date */
 export function getWeekRange(date: Date): { weekStart: Date; weekEnd: Date } {
-  const weekStart = startOfWeek(date, { weekStartsOn: 1 }); // Monday
-  const weekEnd = endOfWeek(date, { weekStartsOn: 1 });     // Sunday
+  const weekStart = startOfWeek(date, { weekStartsOn: 0 }); // Sunday
+  const weekEnd = endOfWeek(date, { weekStartsOn: 0 });     // Saturday
   return { weekStart, weekEnd };
 }
 
-/** Get array of 7 day objects for a week starting on the given Monday */
+/** Get array of 7 day objects for a week starting on the given Sunday */
 export function getWeekDays(weekStart: Date): { date: Date; dateStr: string; dayName: string; dayShort: string }[] {
   return Array.from({ length: 7 }, (_, i) => {
     const date = addDays(weekStart, i);

@@ -290,7 +290,12 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
     'tabs/timesheet-entry.weekStart',
     getWeekRange(new Date()).weekStart.toISOString()
   );
-  const weekStart = useMemo(() => new Date(weekStartIso), [weekStartIso]);
+  // Re-align to current week-start convention (Sunday). Snaps any value persisted
+  // under a previous convention (e.g., Monday) back to the start of its week.
+  const weekStart = useMemo(
+    () => getWeekRange(new Date(weekStartIso)).weekStart,
+    [weekStartIso]
+  );
   const setWeekStart = useCallback(
     (next: Date | ((prev: Date) => Date)) => {
       if (typeof next === 'function') {
