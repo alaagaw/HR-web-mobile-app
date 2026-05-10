@@ -7,7 +7,8 @@ import { useTimesheets } from '@/hooks/use-timesheets';
 import { useProjects } from '@/hooks/use-projects';
 import { useSuppliers } from '@/hooks/use-suppliers';
 import { useViewState } from '@/hooks/use-view-state';
-import { userService, timesheetService } from '@/services';
+import { userService, timesheetService, projectHoursChangeService } from '@/services';
+import { ProjectHoursChangeScope } from '@/types/enums';
 import { format, addDays, subDays } from 'date-fns';
 import {
   getWeekRange,
@@ -397,6 +398,17 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
   // Auto-fill dialog
   const [autoFillOpen, setAutoFillOpen] = useState(false);
   const [autoFillHours, setAutoFillHours] = useState('11');
+
+  // Request a project-hours change. Visible only to HR/HRD/Manager for now
+  // (server-side RLS does the final gate; PMs and GMs route through the same
+  // dialog once capability checks land).
+  const [hoursChangeOpen, setHoursChangeOpen] = useState(false);
+  const [hoursChangeScope, setHoursChangeScope] = useState<ProjectHoursChangeScope>(
+    ProjectHoursChangeScope.ThisWeek,
+  );
+  const [hoursChangeValue, setHoursChangeValue] = useState('');
+  const [hoursChangeReason, setHoursChangeReason] = useState('');
+  const [hoursChangeSubmitting, setHoursChangeSubmitting] = useState(false);
 
   // ── Computed values ───────────────────────────────────────
   const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
@@ -842,6 +854,48 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
     setSnackbar({ open: true, message: `Added ${newRow.employee_name}`, severity: 'success' });
   }, [selectedProfile, selectedSupplier, manualEmployee, gridRows, weekDays]);
 
+  // ── Request a project-hours change ────────────────────────
+
+  const canRequestHoursChange = !!user && (user.role === Role.HR || user.role === Role.HRDirector || user.role === Role.Manager);
+
+  const handleOpenHoursChange = useCallback(() => {
+    if (!selectedProject) return;
+    setHoursChangeScope(ProjectHoursChangeScope.ThisWeek);
+    setHoursChangeValue(String(selectedProject.regular_hours_per_day));
+    setHoursChangeReason('');
+    setHoursChangeOpen(true);
+  }, [selectedProject]);
+
+  const handleSubmitHoursChange = useCallback(async () => {
+    if (!selectedProject || !user) return;
+    const requested = parseFloat(hoursChangeValue);
+    if (Number.isNaN(requested) || requested <= 0 || requested > 24) {
+      setSnackbar({ open: true, message: 'Requested hours must be between 0.5 and 24', severity: 'error' });
+      return;
+    }
+    setHoursChangeSubmitting(true);
+    try {
+      await projectHoursChangeService.create(
+        {
+          project_id: selectedProject.id,
+          scope: hoursChangeScope,
+          week_start: weekStartStr,
+          current_value: selectedProject.regular_hours_per_day,
+          requested_value: requested,
+          reason: hoursChangeReason.trim() || null,
+        },
+        user.id,
+        user.role,
+      );
+      setHoursChangeOpen(false);
+      setSnackbar({ open: true, message: 'Change request submitted', severity: 'success' });
+    } catch (err: any) {
+      setSnackbar({ open: true, message: err.message || 'Failed to submit request', severity: 'error' });
+    } finally {
+      setHoursChangeSubmitting(false);
+    }
+  }, [selectedProject, user, hoursChangeScope, hoursChangeValue, hoursChangeReason, weekStartStr]);
+
   // ── CSV Export ────────────────────────────────────────────
 
   const handleExportCSV = useCallback(() => {
@@ -1119,6 +1173,24 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
                   <span style={{ opacity: 0.7, fontWeight: 600 }}>·</span>
                   <span>{selectedProject.regular_hours_per_day}h/day</span>
                 </div>
+              )}
+              {selectedProject && canRequestHoursChange && (
+                <button
+                  onClick={handleOpenHoursChange}
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    padding: '4px 10px',
+                    borderRadius: 12,
+                    border: `1px solid ${DT.primary}80`,
+                    backgroundColor: 'transparent',
+                    color: DT.primary,
+                    cursor: 'pointer',
+                  }}
+                  title="Submit a request to change the regular hours/day for this project. Approved by GM or HR Director."
+                >
+                  Request change
+                </button>
               )}
             </div>
 
@@ -1926,6 +1998,90 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
                   }}
                 >
                   Fill Hours
+                </MuiButton>
+              </DialogActions>
+            </Dialog>
+          )}
+
+          {/* Project-hours change request dialog */}
+          {Dialog && selectedProject && (
+            <Dialog
+              open={hoursChangeOpen}
+              onClose={() => !hoursChangeSubmitting && setHoursChangeOpen(false)}
+              maxWidth="sm"
+              fullWidth
+              PaperProps={{ sx: { borderRadius: 3, backgroundImage: 'none' } }}
+            >
+              <DialogTitle sx={{ pb: 1, pt: 3, px: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>Request Hours Change</div>
+                <div style={{ fontSize: 13, fontWeight: 400, opacity: 0.6, marginTop: 2 }}>
+                  {selectedProject.project_number} · {selectedProject.name}
+                </div>
+              </DialogTitle>
+              <DialogContent sx={{ pt: '24px !important', pb: 1, px: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <TextField
+                  label="Scope"
+                  value={hoursChangeScope}
+                  onChange={(e: any) => setHoursChangeScope(e.target.value)}
+                  fullWidth
+                  size="small"
+                  select
+                  helperText={
+                    hoursChangeScope === ProjectHoursChangeScope.ThisWeek
+                      ? `Override applies to the week starting ${weekStartStr} only.`
+                      : hoursChangeScope === ProjectHoursChangeScope.FromWeekForward
+                      ? `Permanent change to the project baseline, starting ${weekStartStr}.`
+                      : `Correction to a prior week (${weekStartStr}). Allowed only if that month is still open.`
+                  }
+                >
+                  <MenuItem value={ProjectHoursChangeScope.ThisWeek}>This week only</MenuItem>
+                  <MenuItem value={ProjectHoursChangeScope.FromWeekForward}>From this week forward (permanent)</MenuItem>
+                  <MenuItem value={ProjectHoursChangeScope.RetroactiveWeek}>Retroactive (correct prior week)</MenuItem>
+                </TextField>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <TextField
+                    label="Current"
+                    value={`${selectedProject.regular_hours_per_day} h/day`}
+                    fullWidth
+                    size="small"
+                    disabled
+                  />
+                  <TextField
+                    label="Requested"
+                    type="number"
+                    value={hoursChangeValue}
+                    onChange={(e: any) => setHoursChangeValue(e.target.value)}
+                    fullWidth
+                    size="small"
+                    inputProps={{ min: 0.5, max: 24, step: 0.5 }}
+                  />
+                </div>
+                <TextField
+                  label="Reason (optional but recommended)"
+                  value={hoursChangeReason}
+                  onChange={(e: any) => setHoursChangeReason(e.target.value)}
+                  fullWidth
+                  size="small"
+                  multiline
+                  rows={3}
+                  placeholder="Why is this change needed? GM/HR Director will see this when approving."
+                />
+              </DialogContent>
+              <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                <MuiButton
+                  onClick={() => setHoursChangeOpen(false)}
+                  disabled={hoursChangeSubmitting}
+                  sx={{ textTransform: 'none', fontWeight: 600 }}
+                >
+                  Cancel
+                </MuiButton>
+                <MuiButton
+                  variant="contained"
+                  onClick={handleSubmitHoursChange}
+                  disabled={hoursChangeSubmitting || !hoursChangeValue.trim()}
+                  sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, px: 3 }}
+                >
+                  {hoursChangeSubmitting ? 'Submitting…' : 'Submit Request'}
                 </MuiButton>
               </DialogActions>
             </Dialog>

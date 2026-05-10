@@ -21,3 +21,4 @@ export { supplierService } from './supabase/supplier';
 export { timesheetService } from './supabase/timesheet';
 export { profileCapabilitiesService } from './supabase/profile-capabilities';
 export { projectManagersService } from './supabase/project-managers';
+export { projectHoursChangeService } from './supabase/project-hours-change';

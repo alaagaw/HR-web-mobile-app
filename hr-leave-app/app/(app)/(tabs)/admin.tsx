@@ -132,6 +132,13 @@ const ADMIN_GROUPS: AdminGroup[] = [
         iconColor: '#D97706',
         path: '/(app)/admin/timesheet-assignments',
       },
+      {
+        title: 'Hours Change Requests',
+        description: 'Review and approve project regular-hours change requests.',
+        icon: ClipboardList,
+        iconColor: '#F59E0B',
+        path: '/(app)/admin/project-hours-requests',
+      },
     ],
   },
 ];
