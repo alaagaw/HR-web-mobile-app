@@ -1106,18 +1106,21 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
             >
               <div style={{ display: 'flex', overflow: 'hidden' }}>
                 {/* ── LEFT: Employee Info ──
-                    Right header in manual mode = 58px (day name 36 + R/OT
-                    sub-row 22). Match it with a single 58px row on the
-                    left. Auto mode keeps the existing 52px. */}
+                    Right header in manual mode = 58px (day-name row 36 +
+                    R/OT sub-row 22). Match by setting the height on the
+                    <tr> itself (browsers honor row-element height more
+                    reliably than <th> height in table layouts), and force
+                    a fixed table-layout so the height isn't overridden by
+                    content sizing. */}
                 <div style={{ flexShrink: 0 }}>
                   <table style={{ ...tableStyle, borderRadius: 0 }}>
                     <thead>
-                      <tr>
-                        <th style={{ ...thCenterStyle, width: 36, height: isManualMode ? 58 : 52, verticalAlign: 'middle' }}>#</th>
-                        <th style={{ ...thStyle, minWidth: 150, height: isManualMode ? 58 : 52, verticalAlign: 'middle' }}>Employee</th>
-                        <th style={{ ...thStyle, minWidth: 120, height: isManualMode ? 58 : 52, verticalAlign: 'middle', borderRight: `2px solid ${DT.primary}40` }}>Designation</th>
-                        <th style={{ ...thStyle, minWidth: supplierColWidth, height: isManualMode ? 58 : 52, verticalAlign: 'middle' }}>Supplier</th>
-                        <th style={{ ...thCenterStyle, width: 56, height: isManualMode ? 58 : 52, verticalAlign: 'middle' }}>Shift</th>
+                      <tr style={{ height: isManualMode ? 58 : 52 }}>
+                        <th style={{ ...thCenterStyle, width: 36, verticalAlign: 'middle' }}>#</th>
+                        <th style={{ ...thStyle, minWidth: 150, verticalAlign: 'middle' }}>Employee</th>
+                        <th style={{ ...thStyle, minWidth: 120, verticalAlign: 'middle', borderRight: `2px solid ${DT.primary}40` }}>Designation</th>
+                        <th style={{ ...thStyle, minWidth: supplierColWidth, verticalAlign: 'middle' }}>Supplier</th>
+                        <th style={{ ...thCenterStyle, width: 56, verticalAlign: 'middle' }}>Shift</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1222,7 +1225,7 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
                        explicitly per day. Totals split into R | OT | Grand. */
                     <table style={{ ...tableStyle, borderRadius: 0 }}>
                       <thead>
-                        <tr>
+                        <tr style={{ height: 36 }}>
                           {weekDays.map((day) => {
                             const dayLocked = isDayLocked(day.dateStr);
                             return (
@@ -1232,7 +1235,6 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
                                 title={dayLocked ? 'Locked — past edit window' : undefined}
                                 style={{
                                   ...thCenterStyle,
-                                  height: 36,
                                   verticalAlign: 'middle',
                                   backgroundColor: isSaudiWeekend(day.dateStr) ? weekendBg : dayLocked ? '#1e293b' : '#1a2744',
                                 }}
@@ -1252,11 +1254,11 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
                               </th>
                             );
                           })}
-                          <th colSpan={3} style={{ ...thCenterStyle, height: 36, verticalAlign: 'middle', borderLeft: `2px solid ${DT.primary}40` }}>
+                          <th colSpan={3} style={{ ...thCenterStyle, verticalAlign: 'middle', borderLeft: `2px solid ${DT.primary}40` }}>
                             TOTAL
                           </th>
                         </tr>
-                        <tr>
+                        <tr style={{ height: 22 }}>
                           {weekDays.map((day) => {
                             const isWeekendDay = isSaudiWeekend(day.dateStr);
                             const dayLocked = isDayLocked(day.dateStr);
