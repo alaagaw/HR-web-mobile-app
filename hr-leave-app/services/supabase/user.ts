@@ -29,7 +29,7 @@ export const userService: UserService = {
   async getEmployees(filters) {
     let query = supabase
       .from('profiles')
-      .select('*')
+      .select('*, employee_documents(emp_code)')
       .order('full_name', { ascending: true });
 
     if (filters?.role) query = query.eq('role', filters.role);
@@ -42,7 +42,15 @@ export const userService: UserService = {
 
     const { data, error } = await query;
     if (error) throw new Error(error.message);
-    return (data ?? []) as Profile[];
+
+    // Flatten the joined employee_documents.emp_code onto the Profile so callers
+    // (e.g. the timesheet Add Employee dialog) can read selectedProfile.emp_code
+    // directly instead of having to fetch the employee_documents row separately.
+    return (data ?? []).map((row: any) => {
+      const docs = Array.isArray(row.employee_documents) ? row.employee_documents[0] : row.employee_documents;
+      const { employee_documents: _ed, ...rest } = row;
+      return { ...rest, emp_code: docs?.emp_code ?? null } as Profile;
+    });
   },
 
   async updateEmployeeOrg(employeeId, supervisorId, managerId) {

@@ -762,7 +762,10 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
         key: selectedProfile.id,
         employee_id: selectedProfile.id,
         employee_name: selectedProfile.full_name,
-        employee_number: null,
+        // Pull the employee number from the profile's joined emp_code so the
+        // EMP # column in the consolidated view stays consistent across all
+        // entries for this employee, no matter who adds them or when.
+        employee_number: selectedProfile.emp_code ?? null,
         designation: selectedProfile.department,
         supplier_id: selectedSupplier?.id ?? null,
         supplier_name: selectedSupplier?.name ?? null,

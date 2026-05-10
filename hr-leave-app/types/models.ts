@@ -53,6 +53,13 @@ export interface Profile {
   hr_original_values: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
+  /**
+   * Convenience field surfaced from employee_documents.emp_code via a join in
+   * userService.getEmployees. Not stored on profiles directly. Lets callers
+   * read profile.emp_code without a second round-trip, e.g. when copying the
+   * employee number into a fresh timesheet entry row.
+   */
+  emp_code?: string | null;
 }
 
 export interface ProfileSummary {
