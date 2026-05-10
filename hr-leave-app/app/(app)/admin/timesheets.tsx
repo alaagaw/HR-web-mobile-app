@@ -1021,9 +1021,8 @@ export default function TimesheetsScreen() {
                             </th>
                           );
                         })}
-                        {showRegular && <th style={{ height: 22, borderLeft: `2px solid ${DT.primary}40` }} />}
-                        {showOvertime && <th style={{ height: 22, borderLeft: showRegular ? undefined : `2px solid ${DT.primary}40` }} />}
-                        <th style={{ height: 22, borderLeft: `2px solid ${DT.primary}40` }} />
+                        {/* TOT REG / TOT OT / GRAND use rowSpan={2} on row 1, so
+                            no row-2 cells are needed for those columns. */}
                       </tr>
                     </thead>
                     <tbody>
