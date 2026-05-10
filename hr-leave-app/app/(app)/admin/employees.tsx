@@ -157,6 +157,19 @@ const INITIAL_INVITE: InviteDialogState = {
   error: '',
 };
 
+// Form fields that survive close-without-cancel; re-applied on next open.
+const INVITE_DRAFT_KEYS: (keyof InviteDialogState)[] = [
+  'email', 'full_name', 'emp_code', 'phone', 'role', 'department',
+  'supervisor_id', 'manager_id', 'job_title', 'start_date',
+  'workday_hours', 'send_invite_now', 'show_all_supervisors', 'show_all_managers',
+];
+
+const EDIT_DRAFT_KEYS: (keyof EditDialogState)[] = [
+  'full_name', 'email', 'emp_code', 'phone', 'job_title', 'start_date',
+  'role', 'department', 'supervisor_id', 'manager_id', 'workday_hours',
+  'is_active', 'show_all_supervisors', 'show_all_managers', 'send_invite_now',
+];
+
 // --------------- Web Components ---------------
 
 const STATUS_LABEL: Record<string, string> = {
@@ -439,6 +452,7 @@ function WebEmployeesTable({
 function EditEmployeeDialog({
   state,
   onClose,
+  onCancel,
   onChange,
   onSubmit,
   employees,
@@ -446,6 +460,7 @@ function EditEmployeeDialog({
 }: {
   state: EditDialogState;
   onClose: () => void;
+  onCancel: () => void;
   onChange: (field: string, value: any) => void;
   onSubmit: () => void;
   employees: Profile[];
@@ -689,7 +704,7 @@ function EditEmployeeDialog({
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}>
         <MuiButton
-          onClick={onClose}
+          onClick={onCancel}
           disabled={state.submitting}
           sx={{ textTransform: 'none', fontWeight: 600 }}
         >
@@ -718,6 +733,7 @@ const MANAGER_DEFAULT_ROLES = [Role.Manager, Role.HRDirector];
 function InviteEmployeeDialog({
   state,
   onClose,
+  onCancel,
   onChange,
   onSubmit,
   employees,
@@ -725,6 +741,7 @@ function InviteEmployeeDialog({
 }: {
   state: InviteDialogState;
   onClose: () => void;
+  onCancel: () => void;
   onChange: (field: string, value: any) => void;
   onSubmit: () => void;
   employees: Profile[];
@@ -942,7 +959,7 @@ function InviteEmployeeDialog({
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}>
         <MuiButton
-          onClick={onClose}
+          onClick={onCancel}
           disabled={state.submitting}
           sx={{ textTransform: 'none', fontWeight: 600 }}
         >
@@ -975,6 +992,16 @@ export default function EmployeesScreen() {
   const [dialog, setDialog] = useState<EditDialogState>(INITIAL_DIALOG);
   const [successMsg, setSuccessMsg] = useState('');
   const [invite, setInvite] = useState<InviteDialogState>(INITIAL_INVITE);
+
+  // Drafts: form fields persist across navigation but clear on Cancel/Submit
+  const [inviteDraft, setInviteDraft] = useViewState<Partial<InviteDialogState>>(
+    'admin/employees.inviteDraft',
+    {}
+  );
+  const [editDraft, setEditDraft] = useViewState<{ employeeId: string; fields: Partial<EditDialogState> } | null>(
+    'admin/employees.editDraft',
+    null
+  );
   const { user } = useAuth();
 
   const loadEmployees = useCallback(() => {
@@ -993,6 +1020,7 @@ export default function EmployeesScreen() {
     // Open immediately with the profile fields we already have, then fetch
     // emp_code from employee_documents and merge it in. UX: user sees the
     // dialog instantly; the employee_code field populates within ~100ms.
+    const draftFields = editDraft?.employeeId === emp.id ? editDraft.fields : {};
     setDialog({
       ...INITIAL_DIALOG,
       open: true,
@@ -1009,25 +1037,47 @@ export default function EmployeesScreen() {
       manager_id: emp.manager_id,
       workday_hours: String(emp.workday_hours),
       is_active: emp.is_active,
+      ...draftFields,
     });
 
     try {
       const doc = await documentService.getDocumentByEmployee(emp.id);
       if (doc?.emp_code) {
-        setDialog((s) => (s.employee?.id === emp.id ? { ...s, emp_code: doc.emp_code } : s));
+        setDialog((s) =>
+          s.employee?.id === emp.id && !draftFields.emp_code ? { ...s, emp_code: doc.emp_code } : s,
+        );
       }
     } catch {
       // Non-fatal — emp_code stays empty and HR will see the required-field warning.
     }
   };
 
+  // Backdrop / Esc / nav-away: close but keep draft so the user can come back
   const handleCloseDialog = () => {
     if (!dialog.submitting) setDialog(INITIAL_DIALOG);
+  };
+
+  // Cancel button: explicit discard
+  const handleCancelDialog = () => {
+    if (!dialog.submitting) {
+      setEditDraft(null);
+      setDialog(INITIAL_DIALOG);
+    }
   };
 
   const handleChange = (field: string, value: any) => {
     setDialog((s) => ({ ...s, [field]: value, error: '' }));
   };
+
+  // Persist edit-form fields to draft on every change, keyed by employee id
+  useEffect(() => {
+    if (!dialog.open || !dialog.employee || dialog.submitting) return;
+    const fields: Partial<EditDialogState> = {};
+    EDIT_DRAFT_KEYS.forEach((k) => {
+      (fields as any)[k] = dialog[k];
+    });
+    setEditDraft({ employeeId: dialog.employee.id, fields });
+  }, [dialog]);
 
   const handleSubmitEdit = async () => {
     if (!dialog.employee) return;
@@ -1098,6 +1148,7 @@ export default function EmployeesScreen() {
           : ` but invite email failed: ${result?.error || 'unknown error'}`;
       }
 
+      setEditDraft(null);
       setDialog(INITIAL_DIALOG);
       setSuccessMsg(`${dialog.full_name} updated successfully${inviteSummary}`);
       invalidate();
@@ -1111,11 +1162,30 @@ export default function EmployeesScreen() {
   };
 
   // --- Invite handlers ---
-  const handleOpenInvite = () => setInvite({ ...INITIAL_INVITE, open: true });
+  const handleOpenInvite = () =>
+    setInvite({ ...INITIAL_INVITE, ...inviteDraft, open: true });
+  // Backdrop / Esc / nav-away: close but keep draft
   const handleCloseInvite = () => { if (!invite.submitting) setInvite(INITIAL_INVITE); };
+  // Cancel button: explicit discard
+  const handleCancelInvite = () => {
+    if (!invite.submitting) {
+      setInviteDraft({});
+      setInvite(INITIAL_INVITE);
+    }
+  };
   const handleInviteChange = (field: string, value: any) => {
     setInvite((s) => ({ ...s, [field]: value, error: '' }));
   };
+
+  // Persist invite-form fields to draft on every change
+  useEffect(() => {
+    if (!invite.open || invite.submitting) return;
+    const fields: Partial<InviteDialogState> = {};
+    INVITE_DRAFT_KEYS.forEach((k) => {
+      (fields as any)[k] = invite[k];
+    });
+    setInviteDraft(fields);
+  }, [invite]);
   const handleSubmitInvite = async () => {
     setInvite((s) => ({ ...s, submitting: true, error: '' }));
     try {
@@ -1150,6 +1220,7 @@ export default function EmployeesScreen() {
         }
       }
 
+      setInviteDraft({});
       setInvite(INITIAL_INVITE);
       setSuccessMsg(message);
       invalidate();
@@ -1381,6 +1452,7 @@ export default function EmployeesScreen() {
                 <EditEmployeeDialog
                   state={dialog}
                   onClose={handleCloseDialog}
+                  onCancel={handleCancelDialog}
                   onChange={handleChange}
                   onSubmit={handleSubmitEdit}
                   employees={employees}
@@ -1389,6 +1461,7 @@ export default function EmployeesScreen() {
                 <InviteEmployeeDialog
                   state={invite}
                   onClose={handleCloseInvite}
+                  onCancel={handleCancelInvite}
                   onChange={handleInviteChange}
                   onSubmit={handleSubmitInvite}
                   employees={employees}

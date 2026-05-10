@@ -148,6 +148,11 @@ const INITIAL_DIALOG: ProjectDialogState = {
   submitting: false,
 };
 
+const PROJECT_DRAFT_KEYS: (keyof ProjectDialogState)[] = [
+  'project_number', 'name', 'client', 'location', 'scope', 'status',
+  'start_date', 'end_date',
+];
+
 // ============================================================
 // WEB: DATA GRID TABLE
 // ============================================================
@@ -403,12 +408,14 @@ function ProjectDialog({
   state,
   isDark,
   onClose,
+  onCancel,
   onChange,
   onSubmit,
 }: {
   state: ProjectDialogState;
   isDark: boolean;
   onClose: () => void;
+  onCancel: () => void;
   onChange: (field: string, value: any) => void;
   onSubmit: () => void;
 }) {
@@ -537,7 +544,7 @@ function ProjectDialog({
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}>
         <MuiButton
-          onClick={onClose}
+          onClick={onCancel}
           disabled={state.submitting}
           sx={{ textTransform: 'none', fontWeight: 600 }}
         >
@@ -621,6 +628,14 @@ export default function ProjectsScreen() {
 
   const [globalSearch, setGlobalSearch] = useViewState('admin/projects.globalSearch', '');
   const [dialog, setDialog] = useState<ProjectDialogState>(INITIAL_DIALOG);
+  const [addDraft, setAddDraft] = useViewState<Partial<ProjectDialogState>>(
+    'admin/projects.addDraft',
+    {}
+  );
+  const [editDraft, setEditDraft] = useViewState<{ projectId: string; fields: Partial<ProjectDialogState> } | null>(
+    'admin/projects.editDraft',
+    null
+  );
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
@@ -636,10 +651,11 @@ export default function ProjectsScreen() {
   // --- Dialog handlers ---
 
   const handleOpenAdd = () => {
-    setDialog({ ...INITIAL_DIALOG, open: true, mode: 'add' });
+    setDialog({ ...INITIAL_DIALOG, ...addDraft, open: true, mode: 'add' });
   };
 
   const handleOpenEdit = (project: Project) => {
+    const draftFields = editDraft?.projectId === project.id ? editDraft.fields : {};
     setDialog({
       open: true,
       mode: 'edit',
@@ -653,16 +669,38 @@ export default function ProjectsScreen() {
       start_date: project.start_date || '',
       end_date: project.end_date || '',
       submitting: false,
+      ...draftFields,
     });
   };
 
+  // Backdrop / Esc / nav-away: keep draft
   const handleCloseDialog = () => {
     if (!dialog.submitting) setDialog(INITIAL_DIALOG);
+  };
+
+  // Cancel button: discard draft for this dialog mode
+  const handleCancelDialog = () => {
+    if (dialog.submitting) return;
+    if (dialog.mode === 'add') setAddDraft({});
+    else setEditDraft(null);
+    setDialog(INITIAL_DIALOG);
   };
 
   const handleDialogChange = (field: string, value: any) => {
     setDialog((s) => ({ ...s, [field]: value }));
   };
+
+  // Save form fields to draft on every change
+  useEffect(() => {
+    if (!dialog.open || dialog.submitting) return;
+    const fields: Partial<ProjectDialogState> = {};
+    PROJECT_DRAFT_KEYS.forEach((k) => { (fields as any)[k] = dialog[k]; });
+    if (dialog.mode === 'add') {
+      setAddDraft(fields);
+    } else if (dialog.projectId) {
+      setEditDraft({ projectId: dialog.projectId, fields });
+    }
+  }, [dialog]);
 
   const handleSubmitDialog = async () => {
     if (!user) return;
@@ -682,9 +720,11 @@ export default function ProjectsScreen() {
     try {
       if (dialog.mode === 'add') {
         await create(draft, user.id);
+        setAddDraft({});
         setSnackbar({ open: true, message: 'Project created successfully', severity: 'success' });
       } else if (dialog.projectId) {
         await update(dialog.projectId, draft);
+        setEditDraft(null);
         setSnackbar({ open: true, message: 'Project updated successfully', severity: 'success' });
       }
       setDialog(INITIAL_DIALOG);
@@ -894,6 +934,7 @@ export default function ProjectsScreen() {
               state={dialog}
               isDark={isDark}
               onClose={handleCloseDialog}
+              onCancel={handleCancelDialog}
               onChange={handleDialogChange}
               onSubmit={handleSubmitDialog}
             />

@@ -104,6 +104,10 @@ const INITIAL_DIALOG: SupplierDialogState = {
   submitting: false,
 };
 
+const SUPPLIER_DRAFT_KEYS: (keyof SupplierDialogState)[] = [
+  'name', 'code', 'contact_person', 'phone', 'email', 'is_active',
+];
+
 // ============================================================
 // WEB: SUPPLIERS DATA GRID TABLE
 // ============================================================
@@ -324,12 +328,14 @@ function WebSuppliersTable({
 function SupplierDialog({
   state,
   onClose,
+  onCancel,
   onChange,
   onSubmit,
   existingSuppliers,
 }: {
   state: SupplierDialogState;
   onClose: () => void;
+  onCancel: () => void;
   onChange: (field: string, value: any) => void;
   onSubmit: () => void;
   existingSuppliers: Supplier[];
@@ -449,7 +455,7 @@ function SupplierDialog({
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}>
         <MuiButton
-          onClick={onClose}
+          onClick={onCancel}
           disabled={state.submitting}
           sx={{ textTransform: 'none', fontWeight: 600 }}
         >
@@ -492,6 +498,14 @@ export default function SuppliersScreen() {
   const { suppliers, loading, fetchAll, create, update } = useSuppliers();
   const [search, setSearch] = useViewState('admin/suppliers.search', '');
   const [dialog, setDialog] = useState<SupplierDialogState>(INITIAL_DIALOG);
+  const [addDraft, setAddDraft] = useViewState<Partial<SupplierDialogState>>(
+    'admin/suppliers.addDraft',
+    {}
+  );
+  const [editDraft, setEditDraft] = useViewState<{ supplierId: string; fields: Partial<SupplierDialogState> } | null>(
+    'admin/suppliers.editDraft',
+    null
+  );
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
@@ -518,10 +532,11 @@ export default function SuppliersScreen() {
 
   // --- Dialog handlers ---
   const handleOpenAdd = () => {
-    setDialog({ ...INITIAL_DIALOG, open: true, mode: 'add' });
+    setDialog({ ...INITIAL_DIALOG, ...addDraft, open: true, mode: 'add' });
   };
 
   const handleOpenEdit = (supplier: Supplier) => {
+    const draftFields = editDraft?.supplierId === supplier.id ? editDraft.fields : {};
     setDialog({
       open: true,
       mode: 'edit',
@@ -533,16 +548,38 @@ export default function SuppliersScreen() {
       email: supplier.email || '',
       is_active: supplier.is_active,
       submitting: false,
+      ...draftFields,
     });
   };
 
+  // Backdrop / Esc / nav-away: keep draft
   const handleCloseDialog = () => {
     if (!dialog.submitting) setDialog(INITIAL_DIALOG);
+  };
+
+  // Cancel button: discard draft for this dialog mode
+  const handleCancelDialog = () => {
+    if (dialog.submitting) return;
+    if (dialog.mode === 'add') setAddDraft({});
+    else setEditDraft(null);
+    setDialog(INITIAL_DIALOG);
   };
 
   const handleChange = (field: string, value: any) => {
     setDialog((s) => ({ ...s, [field]: value }));
   };
+
+  // Save form fields to draft on every change (excluding submitting/open)
+  useEffect(() => {
+    if (!dialog.open || dialog.submitting) return;
+    const fields: Partial<SupplierDialogState> = {};
+    SUPPLIER_DRAFT_KEYS.forEach((k) => { (fields as any)[k] = dialog[k]; });
+    if (dialog.mode === 'add') {
+      setAddDraft(fields);
+    } else if (dialog.supplier) {
+      setEditDraft({ supplierId: dialog.supplier.id, fields });
+    }
+  }, [dialog]);
 
   const handleSubmit = async () => {
     setDialog((s) => ({ ...s, submitting: true }));
@@ -557,9 +594,11 @@ export default function SuppliersScreen() {
 
       if (dialog.mode === 'edit' && dialog.supplier) {
         await update(dialog.supplier.id, { ...draft, is_active: dialog.is_active } as any);
+        setEditDraft(null);
         setSnackbar({ open: true, message: `${dialog.name} updated successfully`, severity: 'success' });
       } else {
         await create(draft);
+        setAddDraft({});
         setSnackbar({ open: true, message: `${dialog.name} added successfully`, severity: 'success' });
       }
       setDialog(INITIAL_DIALOG);
@@ -746,6 +785,7 @@ export default function SuppliersScreen() {
           <SupplierDialog
             state={dialog}
             onClose={handleCloseDialog}
+            onCancel={handleCancelDialog}
             onChange={handleChange}
             onSubmit={handleSubmit}
             existingSuppliers={suppliers}
@@ -869,6 +909,7 @@ export default function SuppliersScreen() {
           <SupplierDialog
             state={dialog}
             onClose={handleCloseDialog}
+            onCancel={handleCancelDialog}
             onChange={handleChange}
             onSubmit={handleSubmit}
             existingSuppliers={suppliers}
