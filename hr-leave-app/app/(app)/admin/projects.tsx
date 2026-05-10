@@ -9,7 +9,7 @@ import { ScreenHeader } from '@/components/layout/screen-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useProjects } from '@/hooks/use-projects';
 import { useAuth } from '@/hooks/use-auth';
-import { ProjectStatus } from '@/types/enums';
+import { ProjectStatus, ProjectEntryMode } from '@/types/enums';
 import type { Project, ProjectDraft } from '@/types/models';
 
 const isWeb = Platform.OS === 'web';
@@ -130,6 +130,8 @@ interface ProjectDialogState {
   status: ProjectStatus;
   start_date: string;
   end_date: string;
+  entry_mode: ProjectEntryMode;
+  regular_hours_per_day: string;
   submitting: boolean;
 }
 
@@ -145,12 +147,16 @@ const INITIAL_DIALOG: ProjectDialogState = {
   status: ProjectStatus.Active,
   start_date: '',
   end_date: '',
+  entry_mode: ProjectEntryMode.Auto,
+  regular_hours_per_day: '8',
   submitting: false,
 };
 
+// Keys persisted as Add-mode draft. Edit mode never persists payroll fields
+// because they aren't editable from this dialog.
 const PROJECT_DRAFT_KEYS: (keyof ProjectDialogState)[] = [
   'project_number', 'name', 'client', 'location', 'scope', 'status',
-  'start_date', 'end_date',
+  'start_date', 'end_date', 'entry_mode', 'regular_hours_per_day',
 ];
 
 // ============================================================
@@ -541,6 +547,56 @@ function ProjectDialog({
             InputLabelProps={{ shrink: true }}
           />
         </div>
+
+        {/* Payroll config — entry_mode is set once at creation and locked
+            forever; regular_hours_per_day is editable only via the project-
+            hours change-request approval pipeline (see PR #8). */}
+        <div
+          style={{
+            borderTop: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
+            paddingTop: 16,
+            marginTop: 4,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+          }}
+        >
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.5, color: isDark ? DT.textMuted : '#64748B', textTransform: 'uppercase' }}>
+            Payroll Config
+          </div>
+          <TextField
+            label="Entry Mode"
+            value={state.entry_mode}
+            onChange={(e: any) => onChange('entry_mode', e.target.value)}
+            fullWidth
+            size="small"
+            select
+            disabled={isEdit}
+            helperText={
+              isEdit
+                ? 'Entry mode cannot be changed after creation. Create a new project if it needs to be different.'
+                : 'Standard: keeper enters total hours, OT auto-derived. Manual: keeper enters Regular and OT separately.'
+            }
+          >
+            <MenuItem value={ProjectEntryMode.Auto}>Standard (auto OT)</MenuItem>
+            <MenuItem value={ProjectEntryMode.ManualSplit}>Manual R + OT split</MenuItem>
+          </TextField>
+          <TextField
+            label="Regular Hours / Day"
+            type="number"
+            value={state.regular_hours_per_day}
+            onChange={(e: any) => onChange('regular_hours_per_day', e.target.value)}
+            fullWidth
+            size="small"
+            disabled={isEdit}
+            inputProps={{ min: 0.5, max: 24, step: 0.5 }}
+            helperText={
+              isEdit
+                ? 'Editable only via the project-hours change-request approval pipeline.'
+                : 'Default 8. Auto-derives overtime: anything above this limit per day becomes OT.'
+            }
+          />
+        </div>
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}>
         <MuiButton
@@ -668,8 +724,17 @@ export default function ProjectsScreen() {
       status: project.status,
       start_date: project.start_date || '',
       end_date: project.end_date || '',
+      entry_mode: project.entry_mode,
+      regular_hours_per_day: String(project.regular_hours_per_day),
       submitting: false,
       ...draftFields,
+      // Payroll fields are NEVER taken from a draft in edit mode — they are
+      // read-only here and only changeable via the approval pipeline.
+      // Override any leftover draft values with the live project values.
+      ...({
+        entry_mode: project.entry_mode,
+        regular_hours_per_day: String(project.regular_hours_per_day),
+      } as Partial<ProjectDialogState>),
     });
   };
 
@@ -716,6 +781,17 @@ export default function ProjectsScreen() {
       start_date: dialog.start_date || null,
       end_date: dialog.end_date || null,
     };
+
+    // Payroll config is only set on create. On edit, entry_mode is
+    // permanently locked and regular_hours_per_day flows through the
+    // approval pipeline, not this form.
+    if (dialog.mode === 'add') {
+      draft.entry_mode = dialog.entry_mode;
+      const hours = parseFloat(dialog.regular_hours_per_day);
+      if (!Number.isNaN(hours) && hours > 0 && hours <= 24) {
+        draft.regular_hours_per_day = hours;
+      }
+    }
 
     try {
       if (dialog.mode === 'add') {

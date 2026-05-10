@@ -49,10 +49,15 @@ export const projectService: ProjectService = {
   },
 
   async update(id, updates) {
+    // entry_mode is locked forever after creation. regular_hours_per_day
+    // moves through the approval pipeline, not direct edits. Strip both so
+    // a stale UI or bad caller cannot bypass the rule.
+    const { entry_mode: _em, regular_hours_per_day: _rh, ...safeUpdates } = updates;
+
     const { data, error } = await supabase
       .from('projects')
       .update({
-        ...updates,
+        ...safeUpdates,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
