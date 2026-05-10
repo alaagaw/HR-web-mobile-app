@@ -880,25 +880,39 @@ export default function TimesheetsScreen() {
             <div style={{ borderRadius: 12, overflow: 'hidden', border: `1px solid ${DT.border}`, marginBottom: 16 }}>
               <div style={{ display: 'flex', overflow: 'hidden' }}>
                 {/* LEFT: Employee Info (frozen)
-                    Right thead is 28 (day name row) + 22 (R/OT sub-row) = 50px.
-                    Same pattern as timesheet-entry: rowSpan={2} + explicit
-                    height holds against table-layout's height-as-hint
-                    behavior, with a bare follow-up tr as the rowSpan slot. */}
+                    Mirror the right thead's two-row structure exactly:
+                    row 1 = labels (28px), row 2 = empty cells with a
+                    non-breaking space and height 22px. The nbsp gives
+                    each row-2 cell a baseline so the browser honors its
+                    height — empty content alone gets ignored, which is
+                    what was making the left header collapse short. */}
                 <div style={{ flexShrink: 0 }}>
                   <table style={{ ...tableStyle, borderRadius: 0 }}>
                     <thead>
+                      {/* Row 1: main headers */}
                       <tr>
-                        <th rowSpan={2} style={{ ...thCenterStyle, width: 36, height: 50, verticalAlign: 'middle' }}>#</th>
-                        <th rowSpan={2} style={{ ...thStyle, minWidth: 150, height: 50, verticalAlign: 'middle' }}>Employee</th>
-                        <th rowSpan={2} style={{ ...thStyle, minWidth: 80, height: 50, verticalAlign: 'middle' }}>Emp #</th>
+                        <th style={{ ...thCenterStyle, width: 36, height: 28, verticalAlign: 'middle' }}>#</th>
+                        <th style={{ ...thStyle, minWidth: 150, height: 28, verticalAlign: 'middle' }}>Employee</th>
+                        <th style={{ ...thStyle, minWidth: 80, height: 28, verticalAlign: 'middle' }}>Emp #</th>
                         {showAllMonthlyColumns && (
                           <>
-                            <th rowSpan={2} style={{ ...thStyle, minWidth: 120, height: 50, verticalAlign: 'middle' }}>Designation</th>
-                            <th rowSpan={2} style={{ ...thStyle, minWidth: 120, height: 50, verticalAlign: 'middle' }}>Supplier</th>
+                            <th style={{ ...thStyle, minWidth: 120, height: 28, verticalAlign: 'middle' }}>Designation</th>
+                            <th style={{ ...thStyle, minWidth: 120, height: 28, verticalAlign: 'middle' }}>Supplier</th>
                           </>
                         )}
                       </tr>
-                      <tr />
+                      {/* Row 2: spacer that aligns with the right side's R/OT row */}
+                      <tr>
+                        <th style={{ ...thCenterStyle, height: 22, padding: '2px 0' }}>{' '}</th>
+                        <th style={{ ...thStyle, height: 22, padding: '2px 0' }}>{' '}</th>
+                        <th style={{ ...thStyle, height: 22, padding: '2px 0' }}>{' '}</th>
+                        {showAllMonthlyColumns && (
+                          <>
+                            <th style={{ ...thStyle, height: 22, padding: '2px 0' }}>{' '}</th>
+                            <th style={{ ...thStyle, height: 22, padding: '2px 0' }}>{' '}</th>
+                          </>
+                        )}
+                      </tr>
                     </thead>
                     <tbody>
                       {filteredMonthlyRows.map((row, idx) => (
