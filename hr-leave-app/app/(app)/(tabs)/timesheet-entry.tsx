@@ -870,9 +870,18 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
 
   const handleSubmitHoursChange = useCallback(async () => {
     if (!selectedProject || !user) return;
+    if (!hoursChangeScope) {
+      setSnackbar({ open: true, message: 'Scope is required', severity: 'error' });
+      return;
+    }
     const requested = parseFloat(hoursChangeValue);
     if (Number.isNaN(requested) || requested <= 0 || requested > 24) {
       setSnackbar({ open: true, message: 'Requested hours must be between 0.5 and 24', severity: 'error' });
+      return;
+    }
+    const reason = hoursChangeReason.trim();
+    if (!reason) {
+      setSnackbar({ open: true, message: 'Reason is required', severity: 'error' });
       return;
     }
     setHoursChangeSubmitting(true);
@@ -884,7 +893,7 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
           week_start: weekStartStr,
           current_value: selectedProject.regular_hours_per_day,
           requested_value: requested,
-          reason: hoursChangeReason.trim() || null,
+          reason,
         },
         user.id,
         user.role,
@@ -2055,18 +2064,27 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
                     onChange={(e: any) => setHoursChangeValue(e.target.value)}
                     fullWidth
                     size="small"
+                    required
+                    error={!!hoursChangeValue && (Number.isNaN(parseFloat(hoursChangeValue)) || parseFloat(hoursChangeValue) <= 0 || parseFloat(hoursChangeValue) > 24)}
                     inputProps={{ min: 0.5, max: 24, step: 0.5 }}
+                    helperText={
+                      !!hoursChangeValue && (Number.isNaN(parseFloat(hoursChangeValue)) || parseFloat(hoursChangeValue) <= 0 || parseFloat(hoursChangeValue) > 24)
+                        ? 'Must be between 0.5 and 24'
+                        : undefined
+                    }
                   />
                 </div>
                 <TextField
-                  label="Reason (optional but recommended)"
+                  label="Reason"
                   value={hoursChangeReason}
                   onChange={(e: any) => setHoursChangeReason(e.target.value)}
                   fullWidth
                   size="small"
+                  required
                   multiline
                   rows={3}
                   placeholder="Why is this change needed? GM/HR Director will see this when approving."
+                  helperText="Required. GM/HR Director uses this to decide."
                 />
               </DialogContent>
               <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}>
@@ -2080,7 +2098,15 @@ function WebTimesheetEntry({ isDark }: { isDark: boolean }) {
                 <MuiButton
                   variant="contained"
                   onClick={handleSubmitHoursChange}
-                  disabled={hoursChangeSubmitting || !hoursChangeValue.trim()}
+                  disabled={
+                    hoursChangeSubmitting ||
+                    !hoursChangeScope ||
+                    !hoursChangeValue.trim() ||
+                    Number.isNaN(parseFloat(hoursChangeValue)) ||
+                    parseFloat(hoursChangeValue) <= 0 ||
+                    parseFloat(hoursChangeValue) > 24 ||
+                    !hoursChangeReason.trim()
+                  }
                   sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, px: 3 }}
                 >
                   {hoursChangeSubmitting ? 'Submitting…' : 'Submit Request'}
