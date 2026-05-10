@@ -897,21 +897,21 @@ export default function TimesheetsScreen() {
                           div regardless of row count. */}
                       <tr>
                         <th style={{ ...thCenterStyle, width: 36, padding: 0 }}>
-                          <div style={{ height: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>#</div>
+                          <div style={{ height: 71, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>#</div>
                         </th>
                         <th style={{ ...thStyle, minWidth: 150, padding: 0 }}>
-                          <div style={{ height: 50, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Employee</div>
+                          <div style={{ height: 71, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Employee</div>
                         </th>
                         <th style={{ ...thStyle, minWidth: 80, padding: 0 }}>
-                          <div style={{ height: 50, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Emp #</div>
+                          <div style={{ height: 71, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Emp #</div>
                         </th>
                         {showAllMonthlyColumns && (
                           <>
                             <th style={{ ...thStyle, minWidth: 120, padding: 0 }}>
-                              <div style={{ height: 50, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Designation</div>
+                              <div style={{ height: 71, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Designation</div>
                             </th>
                             <th style={{ ...thStyle, minWidth: 120, padding: 0 }}>
-                              <div style={{ height: 50, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Supplier</div>
+                              <div style={{ height: 71, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Supplier</div>
                             </th>
                           </>
                         )}
@@ -988,18 +988,18 @@ export default function TimesheetsScreen() {
                             day-name row + R/OT sub-row, matching the left-side
                             and day-column header heights. */}
                         {showRegular && (
-                          <th rowSpan={2} style={{ ...thCenterStyle, minWidth: 48, height: 50, verticalAlign: 'middle', borderLeft: `2px solid ${DT.primary}40` }}>
+                          <th rowSpan={2} style={{ ...thCenterStyle, minWidth: 48, height: 71, verticalAlign: 'middle', borderLeft: `2px solid ${DT.primary}40` }}>
                             <div style={{ fontSize: 10 }}>TOT</div>
                             <div style={{ fontSize: 9, fontWeight: 400 }}>REG</div>
                           </th>
                         )}
                         {showOvertime && (
-                          <th rowSpan={2} style={{ ...thCenterStyle, minWidth: 48, height: 50, verticalAlign: 'middle', borderLeft: showRegular ? undefined : `2px solid ${DT.primary}40` }}>
+                          <th rowSpan={2} style={{ ...thCenterStyle, minWidth: 48, height: 71, verticalAlign: 'middle', borderLeft: showRegular ? undefined : `2px solid ${DT.primary}40` }}>
                             <div style={{ fontSize: 10 }}>TOT</div>
                             <div style={{ fontSize: 9, fontWeight: 400, color: '#F59E0B' }}>OT</div>
                           </th>
                         )}
-                        <th rowSpan={2} style={{ ...thCenterStyle, minWidth: 52, height: 50, verticalAlign: 'middle', borderLeft: `2px solid ${DT.primary}40` }}>
+                        <th rowSpan={2} style={{ ...thCenterStyle, minWidth: 52, height: 71, verticalAlign: 'middle', borderLeft: `2px solid ${DT.primary}40` }}>
                           <div style={{ fontSize: 10 }}>GRAND</div>
                         </th>
                       </tr>
