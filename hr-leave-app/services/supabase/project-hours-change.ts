@@ -60,6 +60,25 @@ export const projectHoursChangeService = {
     requestedBy: string,
     requesterRole: string,
   ): Promise<ProjectHoursChangeRequest> {
+    // Guard: retroactive corrections target a prior week. If the month
+    // containing that week has been closed by HR (payroll cycle locked),
+    // reject the request here rather than letting it linger as pending
+    // until a confused approver sees it.
+    if (draft.scope === ProjectHoursChangeScope.RetroactiveWeek) {
+      const wk = new Date(draft.week_start + 'T00:00:00');
+      const { data: closure } = await supabase
+        .from('month_closures')
+        .select('reopened_at')
+        .eq('year', wk.getFullYear())
+        .eq('month', wk.getMonth() + 1)
+        .maybeSingle();
+      if (closure && closure.reopened_at == null) {
+        throw new Error(
+          `Cannot file a retroactive change against ${wk.toISOString().slice(0, 7)} — that month has been closed for payroll. Ask HR to reopen it first if a correction is required.`,
+        );
+      }
+    }
+
     const { data, error } = await supabase
       .from('project_hours_change_requests')
       .insert({

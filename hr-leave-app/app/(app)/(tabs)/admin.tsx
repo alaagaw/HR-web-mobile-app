@@ -139,6 +139,13 @@ const ADMIN_GROUPS: AdminGroup[] = [
         iconColor: '#F59E0B',
         path: '/(app)/admin/project-hours-requests',
       },
+      {
+        title: 'Month Closures',
+        description: 'Close and reopen calendar months for payroll. Blocks retroactive change requests against closed months.',
+        icon: ClipboardList,
+        iconColor: '#22C55E',
+        path: '/(app)/admin/month-closures',
+      },
     ],
   },
 ];
