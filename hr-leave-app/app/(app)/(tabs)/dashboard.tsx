@@ -13,6 +13,7 @@ import {
   XCircle,
   ArrowRight,
   ChevronRight,
+  ChevronDown,
   Bell,
 } from 'lucide-react-native';
 import { StatsCard } from '@/components/dashboard/stats-card';
@@ -190,6 +191,89 @@ function ActionRequiredCard({
     (unreadCount || 0);
   const recent = notifications.slice(0, 3);
 
+  // Each subsection inside Action Required collapses independently.
+  // Default = collapsed so the card is short on first paint; the badges
+  // on the header rows still tell the user there's work to look at.
+  const [openSections, setOpenSections] = useState<{ [key: string]: boolean }>({
+    approvals: false,
+    renewals: false,
+    registrations: false,
+    notifications: false,
+  });
+  const toggle = (key: string) =>
+    setOpenSections((s) => ({ ...s, [key]: !s[key] }));
+
+  // Header row that doubles as the click target. Carries the title +
+  // optional count badge + an optional "View All" action (only clickable
+  // when expanded, to keep the collapsed bar a clean single-click area).
+  const sectionHeader = (
+    key: string,
+    title: string,
+    count: number | null,
+    badgeColor: string,
+    viewAllAction?: { onClick: () => void; label?: string },
+  ) => {
+    const open = !!openSections[key];
+    return (
+      <div
+        onClick={() => toggle(key)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '14px 20px 10px',
+          cursor: 'pointer',
+          userSelect: 'none' as const,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {open ? (
+            <ChevronDown size={16} color={tk.textMuted} />
+          ) : (
+            <ChevronRight size={16} color={tk.textMuted} />
+          )}
+          <span style={{ fontSize: 14, fontWeight: 600, color: isDark ? '#E2E8F0' : '#334155' }}>
+            {title}
+          </span>
+          {count != null && count > 0 && (
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                backgroundColor: badgeColor,
+                color: '#FFFFFF',
+                borderRadius: 8,
+                padding: '1px 7px',
+              }}
+            >
+              {count}
+            </span>
+          )}
+        </div>
+        {open && viewAllAction && (
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              viewAllAction.onClick();
+            }}
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: tk.accent,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            {viewAllAction.label ?? 'View All'}
+            <ArrowRight size={14} color={tk.accent} />
+          </span>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div
       style={{
@@ -248,24 +332,8 @@ function ActionRequiredCard({
       {/* Pending Your Approval */}
       {isApprover && pendingApprovals.length > 0 && (
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 20px 10px' }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: isDark ? '#E2E8F0' : '#334155' }}>
-              Pending Your Approval
-            </span>
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                backgroundColor: DT.warningBorder,
-                color: '#FFFFFF',
-                borderRadius: 8,
-                padding: '1px 7px',
-              }}
-            >
-              {pendingApprovals.length}
-            </span>
-          </div>
-          {pendingApprovals.slice(0, 4).map((req) => (
+          {sectionHeader('approvals', 'Pending Your Approval', pendingApprovals.length, DT.warningBorder, { onClick: onViewAllApprovals })}
+          {openSections.approvals && pendingApprovals.slice(0, 4).map((req) => (
             <div
               key={req.id}
               style={{
@@ -340,34 +408,14 @@ function ActionRequiredCard({
       {/* Document Renewals */}
       {renewalTasks.length > 0 && (
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px 10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 14, fontWeight: 600, color: isDark ? '#E2E8F0' : '#334155' }}>
-                Document Renewals
-              </span>
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  backgroundColor: '#DC2626',
-                  color: '#FFFFFF',
-                  borderRadius: 8,
-                  padding: '1px 7px',
-                }}
-              >
-                {renewalTasks.length}
-              </span>
-            </div>
-            {renewalTasks.length > 4 && (
-              <span
-                onClick={onViewAllRenewals}
-                style={{ fontSize: 12, fontWeight: 600, color: tk.accent, cursor: 'pointer' }}
-              >
-                View All
-              </span>
-            )}
-          </div>
-          {renewalTasks.slice(0, 4).map((task) => (
+          {sectionHeader(
+            'renewals',
+            'Document Renewals',
+            renewalTasks.length,
+            '#DC2626',
+            renewalTasks.length > 4 ? { onClick: onViewAllRenewals } : undefined,
+          )}
+          {openSections.renewals && renewalTasks.slice(0, 4).map((task) => (
             <div
               key={task.id}
               style={{
@@ -419,34 +467,14 @@ function ActionRequiredCard({
       {/* Pending Profile Registrations — HR only */}
       {isHR && pendingRegistrations.length > 0 && (
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px 10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 14, fontWeight: 600, color: isDark ? '#E2E8F0' : '#334155' }}>
-                Pending Profile Registrations
-              </span>
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  backgroundColor: DT.warningBorder,
-                  color: '#FFFFFF',
-                  borderRadius: 8,
-                  padding: '1px 7px',
-                }}
-              >
-                {pendingRegistrations.length}
-              </span>
-            </div>
-            {pendingRegistrations.length > 4 && (
-              <span
-                onClick={onViewAllRegistrations}
-                style={{ fontSize: 12, fontWeight: 600, color: tk.accent, cursor: 'pointer' }}
-              >
-                View All
-              </span>
-            )}
-          </div>
-          {pendingRegistrations.slice(0, 4).map((reg) => (
+          {sectionHeader(
+            'registrations',
+            'Pending Profile Registrations',
+            pendingRegistrations.length,
+            DT.warningBorder,
+            pendingRegistrations.length > 4 ? { onClick: onViewAllRegistrations } : undefined,
+          )}
+          {openSections.registrations && pendingRegistrations.slice(0, 4).map((reg) => (
             <div
               key={reg.id}
               style={{
@@ -513,33 +541,14 @@ function ActionRequiredCard({
 
       {/* Urgent Notifications */}
       <div>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '14px 20px 10px',
-          }}
-        >
-          <span style={{ fontSize: 14, fontWeight: 600, color: isDark ? '#E2E8F0' : '#334155' }}>
-            Urgent Notifications
-          </span>
-          <span
-            onClick={onViewAllNotifications}
-            style={{
-              fontSize: 13,
-              color: tk.accent,
-              cursor: 'pointer',
-              fontWeight: 500,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-            }}
-          >
-            View All <ArrowRight size={14} color={tk.accent} />
-          </span>
-        </div>
-        {recent.length === 0 ? (
+        {sectionHeader(
+          'notifications',
+          'Urgent Notifications',
+          recent.length || null,
+          tk.accent,
+          { onClick: onViewAllNotifications },
+        )}
+        {openSections.notifications && (recent.length === 0 ? (
           <div
             style={{
               padding: '16px 20px',
@@ -615,7 +624,7 @@ function ActionRequiredCard({
               </div>
             ))}
           </div>
-        )}
+        ))}
       </div>
     </div>
   );
