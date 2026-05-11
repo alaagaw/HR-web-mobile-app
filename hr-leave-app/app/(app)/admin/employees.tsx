@@ -10,7 +10,15 @@ import { ScreenHeader } from '@/components/layout/screen-header';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
-import { userService, registrationService, documentService, profileCapabilitiesService } from '@/services';
+import {
+  userService,
+  registrationService,
+  documentService,
+  profileCapabilitiesService,
+  lookupService,
+  canonicaliseDepartment,
+  canonicaliseDesignation,
+} from '@/services';
 import { supabase } from '@/services/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { getRoleLabel, getInitials } from '@/lib/utils';
@@ -470,6 +478,7 @@ function EditEmployeeDialog({
   onSubmit,
   employees,
   departments,
+  designations,
 }: {
   state: EditDialogState;
   onClose: () => void;
@@ -478,6 +487,7 @@ function EditEmployeeDialog({
   onSubmit: () => void;
   employees: Profile[];
   departments: string[];
+  designations: string[];
 }) {
   const emp = state.employee;
   if (!emp) return null;
@@ -574,11 +584,16 @@ function EditEmployeeDialog({
 
         {/* Job title + start date */}
         <div style={{ display: 'flex', gap: 12 }}>
-          <MuiTextField
-            label="Job Title"
-            value={state.job_title}
-            onChange={(e: any) => onChange('job_title', e.target.value)}
-            fullWidth size="small" required placeholder="e.g. Site Engineer"
+          <Autocomplete
+            freeSolo forcePopupIcon
+            options={designations}
+            value={state.job_title || null}
+            onChange={(_: any, val: string | null) => onChange('job_title', val || '')}
+            onInputChange={(_: any, val: string) => onChange('job_title', val)}
+            renderInput={(params: any) => (
+              <MuiTextField {...params} label="Job Title" size="small" required placeholder="Search or type..." />
+            )}
+            fullWidth size="small"
           />
           <MuiTextField
             label="Start Date"
@@ -799,6 +814,7 @@ function InviteEmployeeDialog({
   onSubmit,
   employees,
   departments,
+  designations,
 }: {
   state: InviteDialogState;
   onClose: () => void;
@@ -807,6 +823,7 @@ function InviteEmployeeDialog({
   onSubmit: () => void;
   employees: Profile[];
   departments: string[];
+  designations: string[];
 }) {
   const activeEmployees = employees.filter((e) => e.is_active);
 
@@ -894,11 +911,16 @@ function InviteEmployeeDialog({
 
         {/* Job title + start date */}
         <div style={{ display: 'flex', gap: 12 }}>
-          <MuiTextField
-            label="Job Title"
-            value={state.job_title}
-            onChange={(e: any) => onChange('job_title', e.target.value)}
-            fullWidth size="small" required placeholder="e.g. Site Engineer"
+          <Autocomplete
+            freeSolo forcePopupIcon
+            options={designations}
+            value={state.job_title || null}
+            onChange={(_: any, val: string | null) => onChange('job_title', val || '')}
+            onInputChange={(_: any, val: string) => onChange('job_title', val)}
+            renderInput={(params: any) => (
+              <MuiTextField {...params} label="Job Title" size="small" required placeholder="Search or type..." />
+            )}
+            fullWidth size="small"
           />
           <MuiTextField
             label="Start Date"
@@ -1076,6 +1098,17 @@ export default function EmployeesScreen() {
   useEffect(() => { loadEmployees(); }, [loadEmployees]);
   const { invalidate } = useAutoRefresh(() => { loadEmployees(); }, [loadEmployees]);
 
+  // Lookup tables — canonical departments / designations seeded by
+  // migration 023. Loaded once on mount and after any successful
+  // save (handleSubmitInvite / handleSubmitEdit reload via invalidate).
+  const [lookupDepartments, setLookupDepartments] = useState<string[]>([]);
+  const [lookupDesignations, setLookupDesignations] = useState<string[]>([]);
+  const loadLookups = useCallback(() => {
+    lookupService.getDepartments().then((r) => setLookupDepartments(r.map((x) => x.name))).catch(() => {});
+    lookupService.getDesignations().then((r) => setLookupDesignations(r.map((x) => x.name))).catch(() => {});
+  }, []);
+  useEffect(() => { loadLookups(); }, [loadLookups]);
+
   // --- Dialog handlers ---
   const handleOpenEdit = async (emp: Profile) => {
     // Open immediately with the profile fields we already have, then fetch
@@ -1171,7 +1204,24 @@ export default function EmployeesScreen() {
     const newEmail = dialog.email.trim().toLowerCase();
     const emailChanged = newEmail !== oldEmail.toLowerCase();
 
+    // 0. Canonicalise department + job_title and make sure the lookup
+    //    tables contain those values. The FK constraints from migration
+    //    023 will reject the profile update otherwise.
+    const canonicalDept = dialog.department.trim()
+      ? canonicaliseDepartment(dialog.department)
+      : '';
+    const canonicalJobTitle = dialog.job_title.trim()
+      ? canonicaliseDesignation(dialog.job_title)
+      : '';
+
     try {
+      if (canonicalDept) {
+        await lookupService.addDepartment(canonicalDept, dialog.employee.id);
+      }
+      if (canonicalJobTitle) {
+        await lookupService.addDesignation(canonicalJobTitle, dialog.employee.id);
+      }
+
       // 1. If the email changed, route through the admin Edge Function so
       //    auth.users.email + profiles.email stay in sync (trigger 015 handles
       //    the profiles side after auth confirms).
@@ -1193,13 +1243,15 @@ export default function EmployeesScreen() {
         if (!response.ok) throw new Error(result.error || 'Failed to change email');
       }
 
-      // 2. Update the profile row (every other field).
+      // 2. Update the profile row (every other field). Department / job_title
+      //    are written in their canonical form; the lookup rows were just
+      //    upserted above so the FK constraints are satisfied.
       await userService.updateProfile(employeeId, {
         full_name: dialog.full_name.trim(),
         phone: dialog.phone.trim() || null,
-        job_title: dialog.job_title.trim() || null,
+        job_title: canonicalJobTitle || null,
         start_date: dialog.start_date || null,
-        department: dialog.department.trim() || null,
+        department: canonicalDept || null,
         role: dialog.role,
         supervisor_id: dialog.supervisor_id,
         manager_id: dialog.manager_id,
@@ -1243,6 +1295,7 @@ export default function EmployeesScreen() {
       setDialog(INITIAL_DIALOG);
       setSuccessMsg(`${dialog.full_name} updated successfully${inviteSummary}`);
       invalidate();
+      loadLookups();
     } catch (err: any) {
       setDialog((s) => ({
         ...s,
@@ -1279,7 +1332,22 @@ export default function EmployeesScreen() {
   }, [invite]);
   const handleSubmitInvite = async () => {
     setInvite((s) => ({ ...s, submitting: true, error: '' }));
+
+    // Canonicalise + populate lookup rows BEFORE invoking the
+    // create-employee edge function. The function inserts into profiles
+    // which has FK references to lookup_departments / lookup_designations
+    // (migration 023), so the lookup rows must exist first.
+    const canonicalDept = invite.department.trim() ? canonicaliseDepartment(invite.department) : '';
+    const canonicalJobTitle = invite.job_title.trim() ? canonicaliseDesignation(invite.job_title) : '';
+
     try {
+      if (canonicalDept) {
+        await lookupService.addDepartment(canonicalDept, user?.id ?? null);
+      }
+      if (canonicalJobTitle) {
+        await lookupService.addDesignation(canonicalJobTitle, user?.id ?? null);
+      }
+
       const newProfile = await registrationService.createEmployee(
         {
           email: invite.email.trim(),
@@ -1289,10 +1357,10 @@ export default function EmployeesScreen() {
           // Optional: phone → employee fills it in during their registration form
           phone: invite.phone.trim() || undefined,
           role: invite.role,
-          department: invite.department.trim(),
+          department: canonicalDept,
           supervisor_id: invite.supervisor_id!,
           manager_id: invite.manager_id!,
-          job_title: invite.job_title.trim(),
+          job_title: canonicalJobTitle,
           start_date: invite.start_date,
           workday_hours: parseFloat(invite.workday_hours) || 8,
         },
@@ -1315,6 +1383,7 @@ export default function EmployeesScreen() {
       setInvite(INITIAL_INVITE);
       setSuccessMsg(message);
       invalidate();
+      loadLookups();
     } catch (err: any) {
       setInvite((s) => ({ ...s, submitting: false, error: err.message || 'Failed to create employee' }));
     }
@@ -1349,6 +1418,7 @@ export default function EmployeesScreen() {
       setSuccessMsg(msg);
       setSelectedIds([]);
       invalidate();
+      loadLookups();
     } catch (err: any) {
       setSuccessMsg(`Bulk send failed: ${err.message || 'unknown error'}`);
     } finally {
@@ -1392,6 +1462,7 @@ export default function EmployeesScreen() {
       setSuccessMsg(msg);
       setSelectedIds([]);
       invalidate();
+      loadLookups();
     } catch (err: any) {
       setSuccessMsg(`Bulk verify failed: ${err.message || 'unknown error'}`);
     } finally {
@@ -1547,7 +1618,8 @@ export default function EmployeesScreen() {
                   onChange={handleChange}
                   onSubmit={handleSubmitEdit}
                   employees={employees}
-                  departments={[...new Set(employees.map((e) => e.department).filter(Boolean) as string[])]}
+                  departments={lookupDepartments}
+                  designations={lookupDesignations}
                 />
                 <InviteEmployeeDialog
                   state={invite}
@@ -1556,7 +1628,8 @@ export default function EmployeesScreen() {
                   onChange={handleInviteChange}
                   onSubmit={handleSubmitInvite}
                   employees={employees}
-                  departments={[...new Set(employees.map((e) => e.department).filter(Boolean) as string[])]}
+                  departments={lookupDepartments}
+                  designations={lookupDesignations}
                 />
                 <Snackbar
                   open={!!successMsg}
