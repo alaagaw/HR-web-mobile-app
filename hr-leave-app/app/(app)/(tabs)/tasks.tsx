@@ -11,13 +11,15 @@ import { useApprovals } from '@/hooks/use-leave-approvals';
 import { useRenewalTasks } from '@/hooks/use-renewal-tasks';
 import { useTaskStore } from '@/stores/task-store';
 import { LeaveStatus, LeaveType, RenewalTaskStatus, Role } from '@/types/enums';
+import { projectHoursChangeService, profileCapabilitiesService } from '@/services';
+import type { ProjectHoursChangeRequest } from '@/types/models';
 import { getStatusLabel } from '@/lib/state-machine';
 import { formatDateRange, formatHours, formatPendingSince } from '@/lib/utils';
 import type { LeaveRequest, RenewalTask } from '@/types/models';
 
 const isWeb = Platform.OS === 'web';
 
-const TABS = ['Leave Requests', 'All Leave Requests', 'Document Renewals'] as const;
+const TABS = ['Leave Requests', 'All Leave Requests', 'Document Renewals', 'Project Hours'] as const;
 
 // Lazy-load MUI components only on web
 let DataGrid: any;
@@ -629,6 +631,32 @@ export default function TasksScreen() {
 
   const isHR = user && (user.role === Role.HR || user.role === Role.HRDirector);
 
+  // Project-hours change requests. Approvers (HR Director by role, GM by
+  // capability) see the pending list as a 4th tab here. Anyone who can
+  // request (PMs / HR) also sees the list filtered to their own pending
+  // requests so they can cancel without leaving the page.
+  const [phcRequests, setPhcRequests] = useState<ProjectHoursChangeRequest[]>([]);
+  const [phcLoading, setPhcLoading] = useState(false);
+  const [canApprovePhc, setCanApprovePhc] = useState(false);
+  useEffect(() => {
+    if (!user) return;
+    if (user.role === Role.HRDirector) { setCanApprovePhc(true); return; }
+    profileCapabilitiesService.getForProfile(user.id)
+      .then((caps) => setCanApprovePhc(!!caps?.is_general_manager || !!caps?.can_approve_project_hours_changes))
+      .catch(() => setCanApprovePhc(false));
+  }, [user?.id]);
+  const loadPhc = () => {
+    if (!user) return;
+    setPhcLoading(true);
+    projectHoursChangeService.listPending()
+      .then((rows) => {
+        if (canApprovePhc) setPhcRequests(rows);
+        else setPhcRequests(rows.filter((r) => r.requested_by === user.id));
+      })
+      .catch(() => setPhcRequests([]))
+      .finally(() => setPhcLoading(false));
+  };
+
   // Keep sidebar badge in sync
   useEffect(() => {
     setPendingCount(pendingApprovals.length);
@@ -645,7 +673,8 @@ export default function TasksScreen() {
     if (user.role === Role.HR || user.role === Role.HRDirector) {
       fetchRenewalTasks(user.id);
     }
-  }, [user?.id]);
+    loadPhc();
+  }, [user?.id, canApprovePhc]);
 
   const handleRowPress = (request: LeaveRequest) => {
     router.push(`/(app)/requests/${request.id}` as any);
@@ -658,42 +687,63 @@ export default function TasksScreen() {
     } catch {}
   };
 
-  // Determine visible tabs — only show Document Renewals for HR roles
-  const visibleTabs = isHR ? TABS : TABS.slice(0, 2);
+  // Determine visible tabs:
+  //   indices 0/1 always visible
+  //   2 (Document Renewals) — HR roles only
+  //   3 (Project Hours) — anyone who can approve, or who has a pending request
+  const showProjectHours = canApprovePhc || phcRequests.length > 0;
+  const visibleTabs = [
+    TABS[0],
+    TABS[1],
+    ...(isHR ? [TABS[2]] : []),
+    ...(showProjectHours ? [TABS[3]] : []),
+  ];
+  // Map tab label -> the actual TABS index so existing render branches
+  // still work via numeric comparison.
+  const tabLabel = visibleTabs[activeTab] ?? TABS[0];
+  const tabIndex = TABS.indexOf(tabLabel as any);
 
-  // Get data for current tab
-  const getLeaveData = () => (activeTab === 0 ? pendingApprovals : chainRequests);
+  // Get data for current tab — based on canonical TABS index so the
+  // logic doesn't change just because Document Renewals or Project
+  // Hours got conditionally hidden.
+  const getLeaveData = () => (tabIndex === 0 ? pendingApprovals : chainRequests);
   const getIsLoading = () =>
-    activeTab === 0 ? loading : activeTab === 1 ? chainLoading : renewalLoading;
+    tabIndex === 0 ? loading : tabIndex === 1 ? chainLoading : tabIndex === 2 ? renewalLoading : phcLoading;
 
   return (
     <View className="flex-1 bg-background dark:bg-slate-900">
       {/* Tab bar */}
       <View className="flex-row border-b border-border dark:border-slate-700">
-        {visibleTabs.map((tab, i) => (
-          <Pressable
-            key={tab}
-            onPress={() => setActiveTab(i)}
-            className={`flex-1 py-3 items-center border-b-2 ${
-              activeTab === i ? 'border-primary' : 'border-transparent'
-            }`}
-          >
-            <Text
-              className={`text-sm font-semibold ${
-                activeTab === i ? 'text-primary' : 'text-text-muted dark:text-slate-400'
+        {visibleTabs.map((tab, i) => {
+          const idx = TABS.indexOf(tab as any);
+          const count =
+            idx === 0 ? pendingApprovals.length :
+            idx === 1 ? chainRequests.length :
+            idx === 2 ? renewalTasks.length :
+            idx === 3 ? phcRequests.length : 0;
+          return (
+            <Pressable
+              key={tab}
+              onPress={() => setActiveTab(i)}
+              className={`flex-1 py-3 items-center border-b-2 ${
+                activeTab === i ? 'border-primary' : 'border-transparent'
               }`}
             >
-              {tab}
-              {i === 0 && pendingApprovals.length > 0 ? ` (${pendingApprovals.length})` : ''}
-              {i === 1 && chainRequests.length > 0 ? ` (${chainRequests.length})` : ''}
-              {i === 2 && renewalTasks.length > 0 ? ` (${renewalTasks.length})` : ''}
-            </Text>
-          </Pressable>
-        ))}
+              <Text
+                className={`text-sm font-semibold ${
+                  activeTab === i ? 'text-primary' : 'text-text-muted dark:text-slate-400'
+                }`}
+              >
+                {tab}
+                {count > 0 ? ` (${count})` : ''}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
 
-      {/* Tab content */}
-      {activeTab <= 1 ? (
+      {/* Tab content — dispatch on the canonical TABS index */}
+      {tabIndex <= 1 ? (
         /* Tab 0 & 1: Leave Requests */
         isWeb ? (
           <View style={{ flex: 1, padding: 16, paddingTop: 8 }}>
@@ -702,16 +752,16 @@ export default function TasksScreen() {
                 <WebLeaveRequestsTable
                   data={getLeaveData()}
                   isDark={isDark}
-                  userId={activeTab === 1 ? user?.id : undefined}
+                  userId={tabIndex === 1 ? user?.id : undefined}
                   onRowClick={handleRowPress}
-                  stateKey={activeTab === 0 ? 'pending' : 'all'}
+                  stateKey={tabIndex === 0 ? 'pending' : 'all'}
                 />
               </View>
             ) : (
               <EmptyState
-                title={activeTab === 0 ? 'No pending leave requests' : 'No leave requests found'}
+                title={tabIndex === 0 ? 'No pending leave requests' : 'No leave requests found'}
                 description={
-                  activeTab === 0
+                  tabIndex === 0
                     ? 'All caught up! No leave requests need your attention right now.'
                     : 'No leave requests from your team yet.'
                 }
@@ -727,16 +777,16 @@ export default function TasksScreen() {
               <RequestCard
                 request={item}
                 showEmployee
-                highlightAssignee={activeTab === 1 ? user?.id : undefined}
+                highlightAssignee={tabIndex === 1 ? user?.id : undefined}
                 onPress={() => handleRowPress(item)}
               />
             )}
             ListEmptyComponent={
               !getIsLoading() ? (
                 <EmptyState
-                  title={activeTab === 0 ? 'No pending leave requests' : 'No leave requests found'}
+                  title={tabIndex === 0 ? 'No pending leave requests' : 'No leave requests found'}
                   description={
-                    activeTab === 0
+                    tabIndex === 0
                       ? 'All caught up! No leave requests need your attention right now.'
                       : 'No leave requests from your team yet.'
                   }
@@ -745,6 +795,50 @@ export default function TasksScreen() {
             }
           />
         )
+      ) : tabIndex === 3 ? (
+        /* Tab 3: Project Hours Requests — clicking a row jumps to the
+            admin detail page which already has approve/reject/cancel. */
+        <View style={{ flex: 1, padding: 16, paddingTop: 8 }}>
+          {phcRequests.length === 0 && !phcLoading ? (
+            <EmptyState
+              title="No pending project-hours requests"
+              description={
+                canApprovePhc
+                  ? 'No project-hours change requests are waiting for your decision.'
+                  : 'No active requests of your own. New ones will show up here while pending.'
+              }
+            />
+          ) : (
+            <FlatList
+              data={phcRequests}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ paddingTop: 0, flexGrow: 1 }}
+              renderItem={({ item }) => (
+                <Pressable
+                  onPress={() => router.push('/(app)/admin/project-hours-requests' as any)}
+                  className="mb-3 p-4 rounded-xl border border-border dark:border-slate-700 bg-surface dark:bg-slate-800 active:opacity-80"
+                >
+                  <View className="flex-row justify-between items-start">
+                    <View className="flex-1 mr-3">
+                      <Text className="text-sm font-bold text-text-primary dark:text-white">
+                        {item.project ? `${item.project.project_number} · ${item.project.name}` : item.project_id}
+                      </Text>
+                      <Text className="text-xs text-text-muted dark:text-slate-400 mt-1">
+                        {item.current_value} → {item.requested_value} h/day · {item.scope.replace(/_/g, ' ')} · week {item.week_start}
+                      </Text>
+                      <Text className="text-xs text-text-muted dark:text-slate-400 mt-1">
+                        Requested by {item.requester?.full_name ?? 'unknown'}
+                      </Text>
+                    </View>
+                    <View className="bg-amber-900/30 px-2 py-1 rounded-md">
+                      <Text className="text-xs font-bold text-amber-400 uppercase">{item.status}</Text>
+                    </View>
+                  </View>
+                </Pressable>
+              )}
+            />
+          )}
+        </View>
       ) : (
         /* Tab 2: Document Renewals */
         isWeb ? (

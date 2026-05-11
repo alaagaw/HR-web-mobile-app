@@ -32,6 +32,28 @@ import {
 const SELECT_FIELDS =
   '*, project:projects!project_id(id,project_number,name), requester:profiles!requested_by(id,full_name,role), decider:profiles!decided_by(id,full_name,role)';
 
+/**
+ * Look up everyone who should see a "new project-hours request" bell:
+ *   - any profile with role = 'hr_director' (implicit approver)
+ *   - any profile flagged is_general_manager = true (capability)
+ *   - any profile flagged can_approve_project_hours_changes = true (explicit grant)
+ * Deduped, with the requester themselves filtered out (no self-notify).
+ */
+async function getApproverProfileIds(excludeProfileId: string): Promise<string[]> {
+  const [{ data: hrd }, { data: caps }] = await Promise.all([
+    supabase.from('profiles').select('id').eq('role', 'hr_director'),
+    supabase
+      .from('profile_capabilities')
+      .select('profile_id')
+      .or('is_general_manager.eq.true,can_approve_project_hours_changes.eq.true'),
+  ]);
+  const ids = new Set<string>();
+  for (const p of hrd ?? []) ids.add((p as any).id);
+  for (const c of caps ?? []) ids.add((c as any).profile_id);
+  ids.delete(excludeProfileId);
+  return [...ids];
+}
+
 export const projectHoursChangeService = {
   async create(
     draft: ProjectHoursChangeRequestDraft,
@@ -69,6 +91,23 @@ export const projectHoursChangeService = {
         requested_value: draft.requested_value,
       },
     });
+
+    // Notification fan-out: every approver gets a row so the bell and
+    // the Project Hours tab in My Tasks both light up.
+    const approverIds = await getApproverProfileIds(requestedBy);
+    if (approverIds.length > 0) {
+      const projName = (data as any).project?.name ?? 'a project';
+      const requesterName = (data as any).requester?.full_name ?? 'someone';
+      await supabase.from('notifications').insert(
+        approverIds.map((uid) => ({
+          user_id: uid,
+          type: 'approval_needed',
+          title: 'Project-hours change request',
+          body: `${requesterName} requested ${draft.current_value} -> ${draft.requested_value} h/day on ${projName}`,
+          reference_id: data.id,
+        })),
+      );
+    }
 
     return data as ProjectHoursChangeRequest;
   },
@@ -160,6 +199,15 @@ export const projectHoursChangeService = {
       metadata: { requested_value: current.requested_value },
     });
 
+    // Notify the requester of the outcome.
+    await supabase.from('notifications').insert({
+      user_id: current.requested_by,
+      type: 'request_approved',
+      title: 'Project-hours change approved',
+      body: `Approved: ${current.current_value} -> ${current.requested_value} h/day on ${current.project?.name ?? 'this project'}${comment ? ` ("${comment}")` : ''}`,
+      reference_id: requestId,
+    });
+
     // Apply: from_week_forward updates the project baseline so all future
     // entries auto-derive against the new limit. Other scopes leave the
     // baseline alone — they only matter when the timesheet keeper saves
@@ -211,6 +259,15 @@ export const projectHoursChangeService = {
       comment: comment ?? null,
       from_status: ProjectHoursChangeStatus.Pending,
       to_status: ProjectHoursChangeStatus.Rejected,
+    });
+
+    // Notify the requester of the outcome.
+    await supabase.from('notifications').insert({
+      user_id: current.requested_by,
+      type: 'request_rejected',
+      title: 'Project-hours change rejected',
+      body: `Rejected: ${current.current_value} -> ${current.requested_value} h/day on ${current.project?.name ?? 'this project'}${comment ? ` ("${comment}")` : ''}`,
+      reference_id: requestId,
     });
 
     return data as ProjectHoursChangeRequest;
