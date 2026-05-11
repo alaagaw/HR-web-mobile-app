@@ -146,6 +146,13 @@ const ADMIN_GROUPS: AdminGroup[] = [
         iconColor: '#22C55E',
         path: '/(app)/admin/month-closures',
       },
+      {
+        title: 'Employee × Project Breakdown',
+        description: 'For a chosen month, see each employee\'s hours per project plus their total OT across all projects.',
+        icon: ClipboardList,
+        iconColor: '#3B82F6',
+        path: '/(app)/admin/employee-project-breakdown',
+      },
     ],
   },
 ];

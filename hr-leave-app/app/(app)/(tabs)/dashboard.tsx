@@ -20,6 +20,9 @@ import { RequestCard } from '@/components/leave/request-card';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { useBalance } from '@/hooks/use-balance';
+import { overtimeService } from '@/services';
+import type { EmployeeOvertimeCurrentMonth } from '@/types/models';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { useLeaveRequest } from '@/hooks/use-leave-request';
 import { useApprovals } from '@/hooks/use-leave-approvals';
 import { useRenewalTasks } from '@/hooks/use-renewal-tasks';
@@ -737,6 +740,21 @@ export default function DashboardScreen() {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
   const { balances, emergencyCount, fetchBalance, fetchEmergencyCount } = useBalance();
+
+  // Overtime balance for the current calendar month. Reads
+  // v_employee_overtime_current_month (migration 019) which filters by
+  // date_trunc('month', CURRENT_DATE) — so it resets automatically on
+  // the 1st of each month without any cron job.
+  const [otThisMonth, setOtThisMonth] = useState<EmployeeOvertimeCurrentMonth | null>(null);
+  useEffect(() => {
+    if (!user?.id) return;
+    overtimeService
+      .getForEmployee(user.id)
+      .then(setOtThisMonth)
+      .catch(() => setOtThisMonth(null));
+  }, [user?.id]);
+  const monthLabel = format(startOfMonth(new Date()), 'MMM yyyy');
+  const monthResetDate = format(endOfMonth(new Date()), 'MMM d');
   const { requests, fetchMyRequests } = useLeaveRequest();
   const { pendingApprovals, fetchPendingApprovals, approve } = useApprovals();
   const { myTasks: renewalTasks, fetchMyTasks: fetchRenewalTasks, completeTask } = useRenewalTasks();
@@ -1200,6 +1218,20 @@ export default function DashboardScreen() {
           value={pendingRequests.length}
           subtitle="requests"
           icon={Clock}
+          iconColor="#F59E0B"
+          iconBg="bg-warning-light"
+        />
+      </View>
+
+      {/* Overtime balance — current calendar month. Auto-resets on the
+          1st via the v_employee_overtime_current_month view, so no
+          manual reset action is needed. */}
+      <View className="mb-5">
+        <StatsCard
+          title={`Overtime — ${monthLabel}`}
+          value={otThisMonth ? formatHours(otThisMonth.overtime_hours_total) : '0h'}
+          subtitle={`resets after ${monthResetDate}`}
+          icon={TrendingUp}
           iconColor="#F59E0B"
           iconBg="bg-warning-light"
         />
