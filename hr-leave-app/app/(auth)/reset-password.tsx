@@ -1,13 +1,53 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, KeyboardAvoidingView, Platform, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { createClient } from '@supabase/supabase-js';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Banner } from '@/components/ui/banner';
 import { supabase } from '@/services/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { useAuthStore } from '@/stores/auth-store';
+
+/**
+ * Why a dedicated GoTrue client for the recovery flow:
+ *   The global `supabase` client may already hold the active session of
+ *   the same user (common when an already-signed-in user uses Forgot
+ *   Password). Calling verifyOtp({type:'recovery'}) on that client
+ *   races with autoRefreshToken and the in-flight session, and we've
+ *   observed it hanging indefinitely — the spinner spins, no error,
+ *   no network response ever resolves.
+ *
+ *   This isolated client has no storage, no token refresh, and no auth
+ *   listeners attached, so verifyOtp + updateUser can run cleanly
+ *   against GoTrue without touching the existing session. Once the
+ *   password is updated, we hard-reload to clear the old session.
+ */
+function buildRecoveryClient() {
+  const url = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+  const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+  return createClient(url, key, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      lock: async (_n: string, _t: number, fn: () => Promise<any>) => fn(),
+    },
+  });
+}
+
+/**
+ * Wrap a promise with a timeout so a hung GoTrue request surfaces as a
+ * visible error rather than a forever-spinner.
+ */
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s. Check your connection and try again.`)), ms);
+    p.then((v) => { clearTimeout(t); resolve(v); },
+           (e) => { clearTimeout(t); reject(e); });
+  });
+}
 
 /**
  * Reset Password — 3-field OTP form.
@@ -41,6 +81,9 @@ export default function ResetPasswordScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ email?: string }>();
   const { resetPasswordForEmail } = useAuth();
+
+  // One isolated client per mount. Memoised so re-renders don't churn it.
+  const recoveryClient = useMemo(buildRecoveryClient, []);
 
   const [email, setEmail] = useState<string>(params.email || '');
   const [code, setCode] = useState<string>('');
@@ -82,34 +125,53 @@ export default function ResetPasswordScreen() {
 
     setLoading(true);
     try {
-      // Exchange the typed OTP for a recovery session. This is the
-      // single-use step; if the user typed an old or already-used
-      // code, GoTrue rejects it here.
-      const { error: verifyErr } = await supabase.auth.verifyOtp({
-        email: email.trim(),
-        token: trimmedCode,
-        type: 'recovery',
-      });
+      // Exchange the typed OTP for a recovery session on the dedicated
+      // client. 15-second timeout so a hung GoTrue call surfaces as an
+      // error instead of an indefinite spinner.
+      const { data: verifyData, error: verifyErr } = await withTimeout(
+        recoveryClient.auth.verifyOtp({
+          email: email.trim(),
+          token: trimmedCode,
+          type: 'recovery',
+        }),
+        15000,
+        'Verifying code',
+      );
       if (verifyErr) {
         const msg = verifyErr.message?.toLowerCase() ?? '';
-        if (msg.includes('expired') || msg.includes('invalid')) {
+        if (msg.includes('expired') || msg.includes('invalid') || msg.includes('token')) {
           throw new Error('Code is invalid or has expired. Request a new code below.');
         }
         throw verifyErr;
       }
+      if (!verifyData?.session) {
+        throw new Error('Could not establish a recovery session. Request a new code and try again.');
+      }
 
-      // Now signed in via the recovery session — set the new password.
-      const { error: pwErr } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
+      // Now signed in via the recovery session ON THE ISOLATED CLIENT.
+      // updateUser uses that session to set the new password.
+      const { error: pwErr } = await withTimeout(
+        recoveryClient.auth.updateUser({ password: newPassword }),
+        15000,
+        'Updating password',
+      );
       if (pwErr) throw pwErr;
 
       setDone(true);
 
+      // Sign the recovery client out (no-op for storage, but cleans the
+      // in-memory session and prevents the in-flight auto-refresh from
+      // racing the hard-reload below).
+      try { await recoveryClient.auth.signOut(); } catch { /* non-fatal */ }
+
       // Wipe the persisted Zustand user (it may hold a stale snapshot
       // from before the password change) and hard-reload so the global
       // auth listener picks up the fresh session and the layout guard
-      // routes correctly.
+      // routes correctly. Also clear the global client's session so the
+      // user has to sign in with the new password.
+      try {
+        await supabase.auth.signOut();
+      } catch { /* non-fatal */ }
       try {
         useAuthStore.getState().clear();
       } catch { /* non-fatal */ }
@@ -118,7 +180,7 @@ export default function ResetPasswordScreen() {
         if (typeof window !== 'undefined') {
           window.location.replace('/');
         } else {
-          router.replace('/(app)/(tabs)/dashboard' as any);
+          router.replace('/(auth)/sign-in' as any);
         }
       }, 600);
     } catch (err: any) {
