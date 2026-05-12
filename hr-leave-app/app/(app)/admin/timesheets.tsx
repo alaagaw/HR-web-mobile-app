@@ -897,21 +897,21 @@ export default function TimesheetsScreen() {
                           div regardless of row count. */}
                       <tr>
                         <th style={{ ...thCenterStyle, width: 36, padding: 0 }}>
-                          <div style={{ height: 71, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>#</div>
+                          <div style={{ height: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>#</div>
                         </th>
                         <th style={{ ...thStyle, minWidth: 150, padding: 0 }}>
-                          <div style={{ height: 71, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Employee</div>
+                          <div style={{ height: 50, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Employee</div>
                         </th>
                         <th style={{ ...thStyle, minWidth: 80, padding: 0 }}>
-                          <div style={{ height: 71, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Emp #</div>
+                          <div style={{ height: 50, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Emp #</div>
                         </th>
                         {showAllMonthlyColumns && (
                           <>
                             <th style={{ ...thStyle, minWidth: 120, padding: 0 }}>
-                              <div style={{ height: 71, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Designation</div>
+                              <div style={{ height: 50, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Designation</div>
                             </th>
                             <th style={{ ...thStyle, minWidth: 120, padding: 0 }}>
-                              <div style={{ height: 71, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Supplier</div>
+                              <div style={{ height: 50, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Supplier</div>
                             </th>
                           </>
                         )}
@@ -984,26 +984,26 @@ export default function TimesheetsScreen() {
                             </th>
                           );
                         })}
-                        {/* Summary headers — rowSpan={2} so they span the
-                            day-name row + R/OT sub-row, matching the left-side
-                            and day-column header heights. */}
-                        {showRegular && (
-                          <th rowSpan={2} style={{ ...thCenterStyle, minWidth: 48, height: 71, verticalAlign: 'middle', borderLeft: `2px solid ${DT.primary}40` }}>
-                            <div style={{ fontSize: 10 }}>TOT</div>
-                            <div style={{ fontSize: 9, fontWeight: 400 }}>REG</div>
-                          </th>
-                        )}
-                        {showOvertime && (
-                          <th rowSpan={2} style={{ ...thCenterStyle, minWidth: 48, height: 71, verticalAlign: 'middle', borderLeft: showRegular ? undefined : `2px solid ${DT.primary}40` }}>
-                            <div style={{ fontSize: 10 }}>TOT</div>
-                            <div style={{ fontSize: 9, fontWeight: 400, color: '#F59E0B' }}>OT</div>
-                          </th>
-                        )}
-                        <th rowSpan={2} style={{ ...thCenterStyle, minWidth: 52, height: 71, verticalAlign: 'middle', borderLeft: `2px solid ${DT.primary}40` }}>
-                          <div style={{ fontSize: 10 }}>GRAND</div>
+                        {/* Single TOTAL header spans the three monthly summary
+                            sub-columns (R / OT / ALL), matching the look of the
+                            week-grid header on the Timesheet Entry page. The
+                            three totals are always shown regardless of the
+                            Show R / Hide OT day-column toggle — those toggles
+                            only affect what's visible per day, not whether the
+                            monthly summary exists. */}
+                        <th
+                          colSpan={3}
+                          style={{
+                            ...thCenterStyle,
+                            verticalAlign: 'middle',
+                            borderLeft: `2px solid ${DT.primary}40`,
+                          }}
+                        >
+                          TOTAL
                         </th>
                       </tr>
-                      {/* Row 2: R | OT sub-headers */}
+                      {/* Row 2: R | OT sub-headers for day columns +
+                          R | OT | ALL sub-headers for the TOTAL block. */}
                       <tr>
                         {monthDays.map((md) => {
                           if (showRegular && showOvertime) {
@@ -1033,8 +1033,15 @@ export default function TimesheetsScreen() {
                             </th>
                           );
                         })}
-                        {/* TOT REG / TOT OT / GRAND use rowSpan={2} on row 1, so
-                            no row-2 cells are needed for those columns. */}
+                        <th style={{ ...thCenterStyle, width: 50, height: 22, fontSize: 10, padding: '2px 0', borderLeft: `2px solid ${DT.primary}40` }}>
+                          R
+                        </th>
+                        <th style={{ ...thCenterStyle, width: 50, height: 22, fontSize: 10, padding: '2px 0', color: '#F59E0B' }}>
+                          OT
+                        </th>
+                        <th style={{ ...thCenterStyle, width: 56, height: 22, fontSize: 10, padding: '2px 0', color: DT.primary }}>
+                          ALL
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1076,17 +1083,15 @@ export default function TimesheetsScreen() {
                                 </td>
                               );
                             })}
-                            {showRegular && (
-                              <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 12, height: 40, borderLeft: `2px solid ${DT.primary}40`, color: DT.textPrimary }}>
-                                {rowTotalR}
-                              </td>
-                            )}
-                            {showOvertime && (
-                              <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 12, height: 40, borderLeft: showRegular ? undefined : `2px solid ${DT.primary}40`, color: DT.warning }}>
-                                {rowTotalOT}
-                              </td>
-                            )}
-                            <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 13, height: 40, borderLeft: `2px solid ${DT.primary}40`, color: DT.primary }}>
+                            {/* Three totals always rendered to match the
+                                Timesheet Entry week-grid layout. */}
+                            <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 12, height: 40, borderLeft: `2px solid ${DT.primary}40`, color: DT.textPrimary }}>
+                              {rowTotalR}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 12, height: 40, color: DT.warning }}>
+                              {rowTotalOT}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 13, height: 40, color: DT.primary }}>
                               {rowTotalR + rowTotalOT}
                             </td>
                           </tr>
@@ -1132,13 +1137,9 @@ export default function TimesheetsScreen() {
                           }
                           return (
                             <>
-                              {showRegular && (
-                                <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 12, height: 40, borderLeft: `2px solid ${DT.primary}40` }}>{grandR}</td>
-                              )}
-                              {showOvertime && (
-                                <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 12, height: 40, color: DT.warning, borderLeft: showRegular ? undefined : `2px solid ${DT.primary}40` }}>{grandOT}</td>
-                              )}
-                              <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 13, height: 40, borderLeft: `2px solid ${DT.primary}40`, color: DT.primary }}>{grandR + grandOT}</td>
+                              <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 12, height: 40, borderLeft: `2px solid ${DT.primary}40` }}>{grandR}</td>
+                              <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 12, height: 40, color: DT.warning }}>{grandOT}</td>
+                              <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: 13, height: 40, color: DT.primary }}>{grandR + grandOT}</td>
                             </>
                           );
                         })()}
