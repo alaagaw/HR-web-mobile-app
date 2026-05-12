@@ -47,6 +47,7 @@ import { registrationService, userService } from '@/services';
 import { supabase } from '@/services/supabase/client';
 import { Role } from '@/types/enums';
 import { getRoleLabel } from '@/lib/utils';
+import { rotateImageBlob } from '@/lib/image-rotation';
 import { FilePreviewModal } from '@/components/ui/file-preview-modal';
 import type {
   Attachment,
@@ -156,6 +157,8 @@ export function ReviewRegistrationDialog({
   const [employees, setEmployees] = useState<Profile[]>([]);
   const [idDocSignedUrl, setIdDocSignedUrl] = useState<string>('');
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [docRotation, setDocRotation] = useState<number>(0);
+  const [rotatingSaving, setRotatingSaving] = useState(false);
 
   const [mode, setMode] = useState<'review' | 'reject'>('review');
   const [stage, setStage] = useState<'review' | 'confirm'>('review');
@@ -215,6 +218,8 @@ export function ReviewRegistrationDialog({
 
     setIdDocSignedUrl('');
     setPreviewOpen(false);
+    setDocRotation(0);
+    setRotatingSaving(false);
     const path = reg.employee_documents?.id_document_url;
     if (path) {
       supabase.storage
@@ -266,6 +271,43 @@ export function ReviewRegistrationDialog({
     setPendingDoc(null);
     setPendingDocPreviewUrl('');
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  /**
+   * Persist the currently-displayed rotation back to Storage. Same
+   * pattern as the registration form: fetch via signed URL, rotate
+   * pixels on a canvas, upload over the same Storage path. The image
+   * tag's signed URL is refreshed so the dialog re-renders the new
+   * bytes. Only available for the existing on-file image (not the
+   * pending re-upload, which HR will replace anyway).
+   */
+  const handleSaveRotation = async () => {
+    const path = reg?.employee_documents?.id_document_url;
+    if (!path || docRotation === 0 || pendingDoc) return;
+    setRotatingSaving(true);
+    try {
+      const resp = await fetch(idDocSignedUrl);
+      if (!resp.ok) throw new Error('Could not fetch current file');
+      const blob = await resp.blob();
+      if (!blob.type.startsWith('image/')) {
+        throw new Error('Rotation is only supported for image files');
+      }
+      const rotated = await rotateImageBlob(blob, docRotation);
+      const { error: upErr } = await supabase.storage
+        .from('employee-id-documents')
+        .upload(path, rotated, { upsert: true, contentType: blob.type });
+      if (upErr) throw new Error(upErr.message);
+      const { data: signed } = await supabase.storage
+        .from('employee-id-documents')
+        .createSignedUrl(path, 60 * 10);
+      if (signed?.signedUrl) setIdDocSignedUrl(signed.signedUrl);
+      setDocRotation(0);
+      setSnack({ open: true, message: 'Rotation saved.', severity: 'success' });
+    } catch (err: any) {
+      setSnack({ open: true, message: err.message || 'Rotation save failed', severity: 'error' });
+    } finally {
+      setRotatingSaving(false);
+    }
   };
 
   const enterEditMode = () => {
@@ -727,7 +769,14 @@ export function ReviewRegistrationDialog({
                     <img
                       src={previewSrc}
                       alt="ID document"
-                      style={{ display: 'block', maxWidth: '100%', maxHeight: 320, margin: '0 auto' }}
+                      style={{
+                        display: 'block',
+                        maxWidth: '100%',
+                        maxHeight: 320,
+                        margin: '0 auto',
+                        transform: `rotate(${docRotation}deg)`,
+                        transition: 'transform 200ms',
+                      }}
                     />
                   ) : (
                     <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -777,6 +826,47 @@ export function ReviewRegistrationDialog({
                   <Box sx={{ fontSize: 11, opacity: 0.6 }}>
                     PDF / JPG / PNG, up to 5 MB.
                   </Box>
+                </Box>
+              )}
+
+              {/* Rotate controls — image-only, only when we're showing
+                  the on-file image (not the pending new upload, which
+                  HR will replace anyway). */}
+              {!pendingDoc && isImageExisting && !!idDocSignedUrl && (
+                <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <MuiButton
+                    size="small"
+                    variant="outlined"
+                    onClick={(e) => { e.stopPropagation(); setDocRotation((r) => (r + 90) % 360); }}
+                    disabled={rotatingSaving}
+                    sx={{ textTransform: 'none' }}
+                    title="Rotate 90° clockwise — click Save rotation to persist"
+                  >
+                    ⟲ Rotate 90°
+                  </MuiButton>
+                  {docRotation !== 0 && (
+                    <>
+                      <MuiButton
+                        size="small"
+                        variant="contained"
+                        color="success"
+                        onClick={(e) => { e.stopPropagation(); void handleSaveRotation(); }}
+                        disabled={rotatingSaving}
+                        sx={{ textTransform: 'none' }}
+                      >
+                        {rotatingSaving ? 'Saving…' : 'Save rotation'}
+                      </MuiButton>
+                      <MuiButton
+                        size="small"
+                        color="inherit"
+                        onClick={(e) => { e.stopPropagation(); setDocRotation(0); }}
+                        disabled={rotatingSaving}
+                        sx={{ textTransform: 'none' }}
+                      >
+                        Reset
+                      </MuiButton>
+                    </>
+                  )}
                 </Box>
               )}
             </Box>

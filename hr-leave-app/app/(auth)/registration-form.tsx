@@ -15,6 +15,7 @@ import { registrationFormSchema, type RegistrationFormSchemaData } from '@/lib/v
 import { getRoleLabel, formatHours } from '@/lib/utils';
 import type { Profile, EmployeeDocument } from '@/types/models';
 import { RegistrationStatus } from '@/types/enums';
+import { autoOrientImage, rotateImageBlob } from '@/lib/image-rotation';
 
 const isWeb = Platform.OS === 'web';
 
@@ -41,6 +42,10 @@ export default function RegistrationFormScreen() {
   // bootstrap and after every upload.
   const [docSignedUrl, setDocSignedUrl] = useState<string>('');
   const [docFileType, setDocFileType] = useState<string>('');
+  // Display rotation (0/90/180/270). Persisted to storage when the
+  // user clicks Save rotation — see handleSaveRotation.
+  const [docRotation, setDocRotation] = useState<number>(0);
+  const [rotatingSaving, setRotatingSaving] = useState(false);
 
   const {
     control,
@@ -158,12 +163,18 @@ export default function RegistrationFormScreen() {
         throw new Error('File is larger than 5 MB.');
       }
 
+      // Auto-orient: phones embed EXIF orientation rather than rotating
+      // pixels. Re-encode with the rotation baked in so the stored file
+      // looks correct in every viewer (Storage signed URL preview,
+      // browsers without EXIF auto-orient, downloaded copies).
+      const correctedBlob = await autoOrientImage(file);
+
       const ext = file.name.split('.').pop() || 'pdf';
       const path = `${user.id}/id-${Date.now()}.${ext}`;
 
       const { error: uploadErr } = await supabase.storage
         .from('employee-id-documents')
-        .upload(path, file, { upsert: true, contentType: file.type });
+        .upload(path, correctedBlob, { upsert: true, contentType: file.type });
 
       if (uploadErr) throw new Error(uploadErr.message);
 
@@ -181,6 +192,49 @@ export default function RegistrationFormScreen() {
       setError(err.message || 'Failed to upload file');
     } finally {
       setUploading(false);
+    }
+  };
+
+  /**
+   * Persist the currently-displayed rotation back to Storage. We
+   * download the existing file via the signed URL (avoids any
+   * authenticated re-download path), rotate the pixels with a
+   * canvas, and upload the result over the same Storage path so HR
+   * (and every downstream view) sees the corrected orientation
+   * without depending on the browser's EXIF auto-orient.
+   */
+  const handleSaveRotation = async () => {
+    if (!user) return;
+    const path = watch('id_document_url');
+    if (!path || docRotation === 0) return;
+    setRotatingSaving(true);
+    setError(null);
+    try {
+      const url = docSignedUrl;
+      if (!url) throw new Error('No signed URL to rotate from');
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('Could not fetch current file');
+      const blob = await resp.blob();
+      if (!blob.type.startsWith('image/')) {
+        throw new Error('Rotation is only supported for image files');
+      }
+      const rotated = await rotateImageBlob(blob, docRotation);
+      const { error: upErr } = await supabase.storage
+        .from('employee-id-documents')
+        .upload(path, rotated, { upsert: true, contentType: blob.type });
+      if (upErr) throw new Error(upErr.message);
+
+      // Refresh the signed URL with cache-buster so the preview
+      // re-loads the rotated bytes.
+      const { data: signed } = await supabase.storage
+        .from('employee-id-documents')
+        .createSignedUrl(path, 60 * 10);
+      if (signed?.signedUrl) setDocSignedUrl(signed.signedUrl);
+      setDocRotation(0);
+    } catch (err: any) {
+      setError(err.message || 'Failed to save rotation');
+    } finally {
+      setRotatingSaving(false);
     }
   };
 
@@ -634,7 +688,7 @@ export default function RegistrationFormScreen() {
                               border: '1px solid #334155',
                               borderRadius: 8,
                               overflow: 'hidden',
-                              padding: 0,
+                              padding: 16,
                               backgroundColor: 'rgba(255,255,255,0.02)',
                             }}
                             title="Click to open full size"
@@ -647,9 +701,73 @@ export default function RegistrationFormScreen() {
                                 maxWidth: '100%',
                                 maxHeight: 280,
                                 margin: '0 auto',
+                                transform: `rotate(${docRotation}deg)`,
+                                transition: 'transform 200ms',
                               }}
                             />
                           </a>
+                        )}
+                        {/* Rotate controls — only for image previews.
+                            PDFs don't get a rotation button (the
+                            canvas approach can't re-render PDF pages
+                            without a heavy dependency). */}
+                        {docFileType !== 'application/pdf' && (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                            <button
+                              type="button"
+                              onClick={() => setDocRotation((r) => (r + 90) % 360)}
+                              disabled={rotatingSaving}
+                              title="Rotate 90° clockwise (preview only — click Save rotation to persist)"
+                              style={{
+                                padding: '6px 12px',
+                                fontSize: 12,
+                                fontWeight: 600,
+                                border: '1px solid #334155',
+                                borderRadius: 6,
+                                backgroundColor: 'rgba(255,255,255,0.04)',
+                                color: '#E2E8F0',
+                                cursor: rotatingSaving ? 'wait' : 'pointer',
+                              }}
+                            >
+                              ⟲ Rotate 90°
+                            </button>
+                            {docRotation !== 0 && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={handleSaveRotation}
+                                  disabled={rotatingSaving}
+                                  style={{
+                                    padding: '6px 12px',
+                                    fontSize: 12,
+                                    fontWeight: 600,
+                                    border: 'none',
+                                    borderRadius: 6,
+                                    backgroundColor: rotatingSaving ? '#94A3B8' : '#16A34A',
+                                    color: '#FFFFFF',
+                                    cursor: rotatingSaving ? 'wait' : 'pointer',
+                                  }}
+                                >
+                                  {rotatingSaving ? 'Saving…' : 'Save rotation'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDocRotation(0)}
+                                  disabled={rotatingSaving}
+                                  style={{
+                                    padding: '6px 8px',
+                                    fontSize: 12,
+                                    border: 'none',
+                                    background: 'transparent',
+                                    color: '#94A3B8',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  Reset
+                                </button>
+                              </>
+                            )}
+                          </View>
                         )}
                         <Text style={{ fontSize: 11, color: '#94A3B8', marginTop: 4 }}>
                           This is the document HR currently has on file. Upload a new file above to replace it.
