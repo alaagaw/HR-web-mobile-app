@@ -85,6 +85,7 @@ interface EditDialogState {
   supervisor_id: string | null;
   manager_id: string | null;
   workday_hours: string;
+  annual_leave_entitlement_days: string;
   is_active: boolean;
   show_all_supervisors: boolean;
   show_all_managers: boolean;
@@ -114,6 +115,7 @@ const INITIAL_DIALOG: EditDialogState = {
   supervisor_id: null,
   manager_id: null,
   workday_hours: '8',
+  annual_leave_entitlement_days: '21',
   is_active: true,
   show_all_supervisors: false,
   show_all_managers: false,
@@ -149,6 +151,7 @@ interface InviteDialogState {
   job_title: string;
   start_date: string;
   workday_hours: string;
+  annual_leave_entitlement_days: string;
   send_invite_now: boolean;
   show_all_supervisors: boolean;
   show_all_managers: boolean;
@@ -169,6 +172,7 @@ const INITIAL_INVITE: InviteDialogState = {
   job_title: '',
   start_date: '',
   workday_hours: '8',
+  annual_leave_entitlement_days: '21',
   send_invite_now: false,
   show_all_supervisors: false,
   show_all_managers: false,
@@ -180,12 +184,14 @@ const INITIAL_INVITE: InviteDialogState = {
 const INVITE_DRAFT_KEYS: (keyof InviteDialogState)[] = [
   'email', 'full_name', 'emp_code', 'phone', 'role', 'department',
   'supervisor_id', 'manager_id', 'job_title', 'start_date',
-  'workday_hours', 'send_invite_now', 'show_all_supervisors', 'show_all_managers',
+  'workday_hours', 'annual_leave_entitlement_days',
+  'send_invite_now', 'show_all_supervisors', 'show_all_managers',
 ];
 
 const EDIT_DRAFT_KEYS: (keyof EditDialogState)[] = [
   'full_name', 'email', 'emp_code', 'phone', 'job_title', 'start_date',
   'role', 'department', 'supervisor_id', 'manager_id', 'workday_hours',
+  'annual_leave_entitlement_days',
   'is_active', 'show_all_supervisors', 'show_all_managers', 'send_invite_now',
   'is_general_manager', 'is_operations_manager',
   'can_approve_project_hours_changes', 'can_close_month',
@@ -643,6 +649,32 @@ function EditEmployeeDialog({
           />
         </div>
 
+        {/* Annual PTO entitlement — drives the monthly accrual */}
+        <div style={{ display: 'flex', gap: 12 }}>
+          <MuiTextField
+            label="Annual PTO Entitlement (days/year)"
+            value={state.annual_leave_entitlement_days}
+            onChange={(e: any) => onChange('annual_leave_entitlement_days', e.target.value)}
+            fullWidth size="small" required type="number"
+            inputProps={{ min: 0, max: 60, step: 0.5 }}
+            helperText="30 = Saudi 5+ yrs · 21 = under 5 yrs"
+          />
+          <MuiTextField
+            label="Monthly Accrual (auto)"
+            value={(() => {
+              const days = parseFloat(state.annual_leave_entitlement_days) || 0;
+              const hrs = parseFloat(state.workday_hours) || 8;
+              const monthlyDays = days / 12;
+              const monthlyHours = monthlyDays * hrs;
+              if (!days) return '—';
+              return `${monthlyDays.toFixed(2)} days/month  (${monthlyHours.toFixed(1)}h)`;
+            })()}
+            fullWidth size="small"
+            InputProps={{ readOnly: true }}
+            helperText="Auto-credited on day 1 of each month"
+          />
+        </div>
+
         {/* Department */}
         <Autocomplete
           freeSolo forcePopupIcon
@@ -967,6 +999,32 @@ function InviteEmployeeDialog({
             fullWidth size="small" required type="number"
             inputProps={{ min: 1, max: 24, step: 0.5 }}
             helperText="Standard daily hours (default 8)"
+          />
+        </div>
+
+        {/* Annual PTO entitlement — drives the monthly accrual */}
+        <div style={{ display: 'flex', gap: 12 }}>
+          <MuiTextField
+            label="Annual PTO Entitlement (days/year)"
+            value={state.annual_leave_entitlement_days}
+            onChange={(e: any) => onChange('annual_leave_entitlement_days', e.target.value)}
+            fullWidth size="small" required type="number"
+            inputProps={{ min: 0, max: 60, step: 0.5 }}
+            helperText="30 = Saudi 5+ yrs · 21 = under 5 yrs"
+          />
+          <MuiTextField
+            label="Monthly Accrual (auto)"
+            value={(() => {
+              const days = parseFloat(state.annual_leave_entitlement_days) || 0;
+              const hrs = parseFloat(state.workday_hours) || 8;
+              const monthlyDays = days / 12;
+              const monthlyHours = monthlyDays * hrs;
+              if (!days) return '—';
+              return `${monthlyDays.toFixed(2)} days/month  (${monthlyHours.toFixed(1)}h)`;
+            })()}
+            fullWidth size="small"
+            InputProps={{ readOnly: true }}
+            helperText="Auto-credited on day 1 of each month"
           />
         </div>
 
@@ -1337,6 +1395,7 @@ export default function EmployeesScreen() {
       supervisor_id: emp.supervisor_id,
       manager_id: emp.manager_id,
       workday_hours: String(emp.workday_hours),
+      annual_leave_entitlement_days: emp.annual_leave_entitlement_days != null ? String(emp.annual_leave_entitlement_days) : '21',
       is_active: emp.is_active,
       ...draftFields,
     });
@@ -1463,8 +1522,9 @@ export default function EmployeesScreen() {
         supervisor_id: dialog.supervisor_id,
         manager_id: dialog.manager_id,
         workday_hours: parseFloat(dialog.workday_hours) || 8,
+        annual_leave_entitlement_days: parseFloat(dialog.annual_leave_entitlement_days) || 21,
         is_active: dialog.is_active,
-      });
+      } as any);
 
       // 3. emp_code lives in employee_documents — upsert separately.
       const newEmpCode = dialog.emp_code.trim();
@@ -1570,9 +1630,19 @@ export default function EmployeesScreen() {
           job_title: canonicalJobTitle,
           start_date: invite.start_date,
           workday_hours: parseFloat(invite.workday_hours) || 8,
+          annual_leave_entitlement_days: parseFloat(invite.annual_leave_entitlement_days) || 21,
         },
         user!.id
       );
+
+      // create-employee edge function may not yet write the entitlement
+      // (older deployments). Mirror it locally so the field is persisted
+      // regardless. Idempotent — sets the value HR picked in the dialog.
+      try {
+        await userService.updateProfile(newProfile.id, {
+          annual_leave_entitlement_days: parseFloat(invite.annual_leave_entitlement_days) || 21,
+        } as any);
+      } catch { /* non-fatal; the edge function default still applies */ }
 
       let message = `${invite.full_name} created successfully (status: Not Invited)`;
 

@@ -39,6 +39,12 @@ export interface Profile {
   start_date: string | null;
   nationality: string | null;
   workday_hours: number;
+  /**
+   * Annual PTO entitlement in days. Drives the monthly accrual
+   * (entitlement / 12). Defaults to 21 (Saudi <5-year tenure baseline)
+   * for any active employee; HR edits in Edit Employee.
+   */
+  annual_leave_entitlement_days: number | null;
   is_active: boolean;
   registration_status: RegistrationStatus;
   must_change_password: boolean;
@@ -429,6 +435,8 @@ export interface CreateEmployeeData {
   job_title: string;
   start_date: string;
   workday_hours: number;
+  /** Annual PTO days; defaults to 21 if omitted (Saudi <5-year baseline). */
+  annual_leave_entitlement_days?: number;
 }
 
 /** Per-id result returned by the batch send-invite Edge Function. */

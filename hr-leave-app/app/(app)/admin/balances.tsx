@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { View, Text, FlatList, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,8 +11,10 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useAuth } from '@/hooks/use-auth';
 import { userService, balanceService } from '@/services';
+import { supabase } from '@/services/supabase/client';
 import { formatHours, formatHoursWithDays, formatDaysHours, getInitials, getRoleLabel } from '@/lib/utils';
 import { DEFAULT_WORKDAY_HOURS } from '@/lib/constants';
+import { exportEmployeesXlsx, importEmployeesXlsx, type BulkImportSummary } from '@/lib/employee-bulk-excel';
 import type { Profile, LeaveBalance } from '@/types/models';
 
 const isWeb = Platform.OS === 'web';
@@ -478,6 +480,9 @@ export default function BalancesScreen() {
   const [loading, setLoading] = useState(false);
   const [dialog, setDialog] = useState<AdjustDialogState>(INITIAL_DIALOG);
   const [successMsg, setSuccessMsg] = useState('');
+  const [busy, setBusy] = useState<null | 'export' | 'import' | 'accrue'>(null);
+  const [importSummary, setImportSummary] = useState<BulkImportSummary | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -528,6 +533,73 @@ export default function BalancesScreen() {
       invalidate();
     } catch {
       setDialog((s) => ({ ...s, submitting: false }));
+    }
+  };
+
+  // --- Bulk Excel + monthly accrual handlers (web only) ---
+
+  const handleExport = async () => {
+    if (busy) return;
+    setBusy('export');
+    try {
+      const r = await exportEmployeesXlsx({ is_active: true });
+      setSuccessMsg(`Exported ${r.count} employee(s) to ${r.filename}`);
+    } catch (err: any) {
+      setSuccessMsg(`Export failed: ${err.message || 'unknown error'}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleImportPick = () => {
+    if (busy || !fileInputRef.current) return;
+    fileInputRef.current.value = '';
+    fileInputRef.current.click();
+  };
+
+  const handleImportFile = async (file: File) => {
+    if (!user) return;
+    setBusy('import');
+    try {
+      const summary = await importEmployeesXlsx(file, user.id);
+      setImportSummary(summary);
+      setSuccessMsg(`Import complete: ${summary.succeeded} succeeded, ${summary.failed} failed`);
+      invalidate();
+    } catch (err: any) {
+      setSuccessMsg(`Import failed: ${err.message || 'unknown error'}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleRunAccruals = async () => {
+    if (busy) return;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const ok = window.confirm(
+      `Run PTO accruals for ${year}-${String(month).padStart(2, '0')} for all active employees?\n\n` +
+      `Already-credited employees will be skipped automatically — safe to re-run.`,
+    );
+    if (!ok) return;
+    setBusy('accrue');
+    try {
+      const { data, error } = await supabase.rpc('apply_monthly_accruals', {
+        p_year: year,
+        p_month: month,
+        p_employee_id: null,
+        p_source: 'manual',
+      });
+      if (error) throw new Error(error.message);
+      const result: any = data ?? {};
+      setSuccessMsg(
+        `Accrual ${year}-${String(month).padStart(2, '0')}: ${result.accrued ?? 0} credited, ${result.skipped ?? 0} already-credited, ${result.errors ?? 0} error(s).`,
+      );
+      invalidate();
+    } catch (err: any) {
+      setSuccessMsg(`Accrual run failed: ${err.message || 'unknown error'}`);
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -590,7 +662,7 @@ export default function BalancesScreen() {
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
           </div>
-          <div>
+          <div style={{ flex: 1 }}>
             <div style={{ fontSize: 22, fontWeight: 700, color: isDark ? '#FFFFFF' : '#0F172A' }}>
               Balance Management
             </div>
@@ -598,7 +670,113 @@ export default function BalancesScreen() {
               View and adjust PTO balances for all employees
             </div>
           </div>
+
+          {/* Bulk + accrual action buttons (HR only). The list view stays
+              read-only; these route through the bulk Excel helpers and
+              the apply_monthly_accruals RPC. */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void handleImportFile(f);
+            }}
+          />
+          <button
+            onClick={handleRunAccruals}
+            disabled={!!busy}
+            title="Manually trigger this month's PTO accrual for every active employee. Idempotent — safe to re-run; already-credited rows are skipped."
+            style={{
+              padding: '10px 16px',
+              backgroundColor: busy === 'accrue' ? '#94A3B8' : '#16A34A',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: 10,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: busy ? 'wait' : 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            {busy === 'accrue' ? 'Running…' : 'Run Monthly Accruals'}
+          </button>
+          <button
+            onClick={handleExport}
+            disabled={!!busy}
+            title="Download an Excel file of every active employee + their entitlement + current PTO balance. Edit and re-upload via Import."
+            style={{
+              padding: '10px 16px',
+              backgroundColor: busy === 'export' ? '#94A3B8' : '#2563EB',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: 10,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: busy ? 'wait' : 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            {busy === 'export' ? 'Exporting…' : 'Export Excel'}
+          </button>
+          <button
+            onClick={handleImportPick}
+            disabled={!!busy}
+            title="Upload a previously-downloaded Excel after edits. The file is matched by Emp Code; rows with unknown codes are reported as errors and skipped."
+            style={{
+              padding: '10px 16px',
+              backgroundColor: busy === 'import' ? '#94A3B8' : '#D97706',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: 10,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: busy ? 'wait' : 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            {busy === 'import' ? 'Importing…' : 'Import Excel'}
+          </button>
         </div>
+
+        {/* Import results banner — shows after a finished bulk upload. */}
+        {importSummary && (
+          <div
+            style={{
+              margin: '12px 24px 0',
+              padding: '10px 14px',
+              borderRadius: 10,
+              border: `1px solid ${importSummary.failed > 0 ? '#D97706' : '#16A34A'}`,
+              backgroundColor: importSummary.failed > 0 ? 'rgba(217,119,6,0.08)' : 'rgba(22,163,74,0.08)',
+              fontSize: 13,
+              color: isDark ? '#E2E8F0' : '#0F172A',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 12,
+            }}
+          >
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                Bulk import: {importSummary.succeeded} succeeded / {importSummary.failed} failed
+              </div>
+              {importSummary.failed > 0 && (
+                <div style={{ fontSize: 12, opacity: 0.85 }}>
+                  {importSummary.results.filter((r) => !r.success).slice(0, 5).map((r) => (
+                    <div key={r.emp_code}>{r.emp_code} — {r.error}</div>
+                  ))}
+                  {importSummary.failed > 5 && <div>…and {importSummary.failed - 5} more</div>}
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => setImportSummary(null)}
+              style={{ background: 'transparent', border: 'none', color: 'inherit', fontSize: 18, cursor: 'pointer', padding: '0 4px' }}
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {/* DataGrid */}
         <View style={{ flex: 1, padding: 16 }}>
