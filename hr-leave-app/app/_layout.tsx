@@ -67,11 +67,16 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
           return;
 
         case RegistrationStatus.InfoRejected:
-          // HR asked the employee to fix and resubmit. They land on
-          // /registration-form on sign-in (see app/index.tsx) but are
-          // free to navigate anywhere afterwards — same nav freedom as
-          // an Active user, except they CAN still sit on the form to
-          // edit it, so we don't bounce them off the auth group.
+          // HR asked the employee to fix and resubmit. Allowed places:
+          //   - /(auth)/registration-form  (the form itself)
+          //   - anywhere in /(app)/...     (their bypass — dashboard etc.)
+          // If they're on any other (auth) page (sign-in, sign-up,
+          // forgot-password, reset-password, change-password,
+          // pending-approval), bounce to the form so signed-in users
+          // don't stare at a sign-in screen.
+          if (inAuthGroup && currentPath !== '(auth)/registration-form') {
+            router.replace('/(auth)/registration-form' as any);
+          }
           return;
 
         case RegistrationStatus.Active:
