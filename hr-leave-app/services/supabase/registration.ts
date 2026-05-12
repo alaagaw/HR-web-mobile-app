@@ -82,7 +82,19 @@ export const registrationService: RegistrationService = {
       occupation: data.occupation,
       updated_at: new Date().toISOString(),
     };
-    if (!existingDoc) {
+
+    // emp_code is NOT NULL with no default. The upsert plans the INSERT
+    // branch first, so the column must be present in the payload even
+    // when we expect the ON CONFLICT DO UPDATE branch to fire — otherwise
+    // Postgres rejects with a NOT NULL violation before getting to the
+    // conflict check. (This bit hard on info_rejected resubmits, where
+    // the doc row already exists with a real emp_code.)
+    if (existingDoc?.emp_code) {
+      // Carry the existing value forward — the BEFORE UPDATE trigger in
+      // migration 022 accepts unchanged emp_code (IS DISTINCT FROM is
+      // false) so this is a no-op on the UPDATE path.
+      docPayload.emp_code = existingDoc.emp_code;
+    } else {
       // Self-registered (no HR-pre-created row) — placeholder so the NOT NULL
       // emp_code constraint is satisfied; HR replaces it on approval.
       docPayload.emp_code = `PENDING-${Date.now()}`;
