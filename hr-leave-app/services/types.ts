@@ -176,9 +176,16 @@ export interface RegistrationService {
   createEmployee(data: CreateEmployeeData, invitedBy: string): Promise<Profile>;
   sendInvites(profileIds: string[]): Promise<SendInviteResult[]>;
 
-  // Bulk demote active employees back to pending_info so they're forced
-  // through the registration form again to verify/complete their profile.
-  requestProfileVerification(profileIds: string[]): Promise<RequestProfileVerificationResult[]>;
+  // Resend the sign-in email to a batch of employees. For active
+  // employees this also demotes them to pending_info (the original
+  // "force them back through the form" semantic). For any other status
+  // it's purely a resend. Inactive rows are rejected unless
+  // `allowInactive: true` is passed — the UI sets that flag only after
+  // HR confirms in the resend dialog.
+  requestProfileVerification(
+    profileIds: string[],
+    options?: { allowInactive?: boolean },
+  ): Promise<RequestProfileVerificationResult[]>;
 }
 
 // ============================================================

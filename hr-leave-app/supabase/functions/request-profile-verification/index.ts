@@ -33,6 +33,12 @@ const corsHeaders = {
 interface Payload {
   profile_ids: string[];
   app_url?: string;
+  // When true, employees with is_active=false are processed too (still
+  // resends the email; doesn't change is_active). The UI sets this only
+  // after HR confirms in a dialog that includes inactive rows. Without
+  // this flag, inactive rows are returned as failures so a stray bulk
+  // action doesn't accidentally re-invite ex-employees.
+  allow_inactive?: boolean;
 }
 
 interface PerIdResult {
@@ -72,6 +78,7 @@ serve(async (req: Request) => {
     }
 
     const redirectBase = (payload.app_url || APP_URL).replace(/\/$/, '');
+    const allowInactive = !!payload.allow_inactive;
     const results: PerIdResult[] = [];
 
     for (const profileId of payload.profile_ids) {
@@ -83,36 +90,42 @@ serve(async (req: Request) => {
           .single();
         if (profileErr || !profile) throw new Error('Profile not found');
         if (!profile.email) throw new Error('Profile has no email address');
-        if (!profile.is_active) throw new Error('Cannot verify an inactive employee');
-        if (profile.registration_status !== 'active') {
-          throw new Error(
-            `Profile is already at status "${profile.registration_status}" — already in / past the registration flow`
-          );
+        if (!profile.is_active && !allowInactive) {
+          throw new Error('Cannot resend to an inactive employee without explicit confirmation');
         }
+        // registration_status check removed: people in any status can
+        // legitimately lose their email and ask for a fresh sign-in
+        // link. The post-sign-in routing handles status-based landing.
 
-        // Send the password-recovery email FIRST. If it fails (e.g. SMTP
-        // rate limit), we don't want to leave the profile demoted with
-        // no email out.
+        // Send the password-recovery email FIRST. If the mailer rejects
+        // (rate limit, etc.), we abort before any status change so the
+        // employee is not stranded in a halfway state.
         const { error: rpcErr } = await supabaseAnon.auth.resetPasswordForEmail(profile.email, {
           redirectTo: `${redirectBase}/reset-password`,
         });
         if (rpcErr) throw new Error(`Mailer rejected: ${rpcErr.message}`);
 
-        // Then demote.
-        await supabase
-          .from('profiles')
-          .update({
-            registration_status: 'pending_info',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', profileId);
+        // Only ACTIVE employees get demoted to pending_info — that's
+        // the original "force them through the form again" semantic of
+        // this action. Anyone already at pending_info / pending_approval /
+        // info_rejected / etc. keeps their status; for them this is
+        // purely a resend.
+        if (profile.registration_status === 'active') {
+          await supabase
+            .from('profiles')
+            .update({
+              registration_status: 'pending_info',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', profileId);
+        }
 
         // In-app notification.
         await supabase.from('notifications').insert({
           user_id: profileId,
           type: 'employee_invited',
-          title: 'Action Required: Complete your Poly-Tech HR profile',
-          body: 'HR has asked you to verify your profile information. Check your email for a sign-in link, then fill out the form.',
+          title: 'Action Required: Sign in to your Poly-Tech HR account',
+          body: 'HR has resent your sign-in email. Check your inbox for a 6-digit code; entering it will let you set a new password and access the system.',
         });
 
         results.push({ profile_id: profileId, success: true });

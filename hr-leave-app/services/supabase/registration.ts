@@ -381,13 +381,16 @@ export const registrationService: RegistrationService = {
     return (result.results ?? []) as SendInviteResult[];
   },
 
-  async requestProfileVerification(profileIds) {
-    // Bulk demote selected active employees back to `pending_info` so the
-    // AuthGuard routes them through the registration form on next sign-in.
-    // Also fires an email asking them to log in and complete their profile.
-    //
-    // Implementation lives in a dedicated Edge Function so we can do the
-    // status update + magic-link email atomically with HR auth check.
+  async requestProfileVerification(profileIds, options) {
+    // Bulk resend the sign-in email. For employees currently in `active`
+    // status this also demotes them to `pending_info` (the original
+    // "force them back through the form" semantic); for any other
+    // status it's purely a resend so people who lost their original
+    // email can ask HR for a new one regardless of where they are in
+    // the registration flow. Inactive employees are rejected by the
+    // edge function unless `options.allowInactive` is passed — the
+    // resend dialog ticks that flag only after HR sees an explicit
+    // warning about each inactive row.
     const appUrl =
       typeof window !== 'undefined' && window.location?.origin
         ? window.location.origin
@@ -396,6 +399,7 @@ export const registrationService: RegistrationService = {
     const result = await callEdgeFunction('request-profile-verification', {
       profile_ids: profileIds,
       ...(appUrl ? { app_url: appUrl } : {}),
+      ...(options?.allowInactive ? { allow_inactive: true } : {}),
     });
     return (result.results ?? []) as RequestProfileVerificationResult[];
   },

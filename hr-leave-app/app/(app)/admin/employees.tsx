@@ -202,6 +202,21 @@ const STATUS_LABEL: Record<string, string> = {
   rejected: 'Rejected',
 };
 
+/**
+ * One row in the resend-email dialog. Email starts as the current value
+ * and gets marked emailDirty when HR types into it, so we know to push
+ * the change through update-employee-email before resending.
+ */
+interface ResendRow {
+  id: string;
+  full_name: string;
+  original_email: string;
+  email: string;
+  emailDirty: boolean;
+  is_active: boolean;
+  registration_status: string;
+}
+
 function getStatusDisplay(row: Profile): { label: string; bg: string; fg: string } {
   if (!row.is_active) return { label: 'Inactive', bg: 'rgba(148,163,184,0.18)', fg: '#64748B' };
   switch (row.registration_status) {
@@ -1064,6 +1079,189 @@ function InviteEmployeeDialog({
   );
 }
 
+// --------------- Resend Sign-in Email Dialog ---------------
+
+/**
+ * Bulk resend dialog. Lists every selected employee with an editable
+ * email field, status chip, and an Inactive warning for is_active=false
+ * rows. HR can:
+ *   - Edit the destination email per-row (saves via update-employee-email
+ *     edge function on confirm).
+ *   - Remove rows they don't actually want to email (× icon).
+ *   - Click Send to fire the resend for whatever's left.
+ *
+ * Status-based behavior is enforced server-side: active employees get
+ * demoted to pending_info; other statuses just get the email.
+ */
+function ResendEmailDialog({
+  open,
+  rows,
+  submitting,
+  onChangeEmail,
+  onRemoveRow,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  rows: ResendRow[];
+  submitting: boolean;
+  onChangeEmail: (id: string, email: string) => void;
+  onRemoveRow: (id: string) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const inactiveCount = rows.filter((r) => !r.is_active).length;
+  const editedCount = rows.filter((r) => r.emailDirty).length;
+  const validEmail = (e: string) => /^\S+@\S+\.\S+$/.test(e.trim());
+  const allValid = rows.length > 0 && rows.every((r) => validEmail(r.email));
+
+  return (
+    <Dialog
+      open={open}
+      onClose={submitting ? undefined : onClose}
+      maxWidth="md"
+      fullWidth
+      PaperProps={{ sx: { borderRadius: 3, backgroundImage: 'none' } }}
+    >
+      <DialogTitle sx={{ pb: 1, pt: 3, px: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
+        <div style={{ fontSize: 18, fontWeight: 700 }}>Resend sign-in email</div>
+        <div style={{ fontSize: 13, fontWeight: 400, opacity: 0.65, marginTop: 4 }}>
+          Each recipient gets a 6-digit code by email. Active employees are demoted
+          to Pending Info so they refill the registration form on next sign-in;
+          other statuses get the email only. Edit the destination email per-row if
+          needed.
+        </div>
+      </DialogTitle>
+
+      <DialogContent
+        sx={{
+          pt: '20px !important',
+          pb: 1,
+          px: 3,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1,
+          overflow: 'visible',
+        }}
+      >
+        {inactiveCount > 0 && (
+          <MuiAlert severity="warning" sx={{ mb: 1 }}>
+            {inactiveCount} of {rows.length} selected employee(s) are <b>inactive</b>.
+            They'll still receive the email but won't be able to sign in until HR
+            reactivates them via Edit Employee → Status.
+          </MuiAlert>
+        )}
+
+        <div
+          style={{
+            border: '1px solid',
+            borderColor: 'rgba(148,163,184,0.3)',
+            borderRadius: 8,
+            maxHeight: 380,
+            overflow: 'auto',
+          }}
+        >
+          {rows.length === 0 ? (
+            <div style={{ padding: 24, textAlign: 'center', fontSize: 13, opacity: 0.6 }}>
+              No employees selected.
+            </div>
+          ) : (
+            rows.map((r, idx) => (
+              <div
+                key={r.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '10px 14px',
+                  borderBottom: idx < rows.length - 1 ? '1px solid rgba(148,163,184,0.15)' : undefined,
+                  backgroundColor: !r.is_active ? 'rgba(245,158,11,0.06)' : undefined,
+                }}
+              >
+                <div style={{ minWidth: 160, fontSize: 13, fontWeight: 600 }}>
+                  {r.full_name}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <MuiTextField
+                    value={r.email}
+                    onChange={(e: any) => onChangeEmail(r.id, e.target.value)}
+                    size="small"
+                    fullWidth
+                    error={!validEmail(r.email)}
+                    helperText={!validEmail(r.email) ? 'Invalid email format' : r.emailDirty ? 'Will be updated before sending' : undefined}
+                    InputProps={{ style: { fontSize: 13 } }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 110 }}>
+                  <Chip
+                    label={r.registration_status.replace(/_/g, ' ')}
+                    size="small"
+                    sx={{ fontSize: 11, height: 20, textTransform: 'capitalize' }}
+                  />
+                  {!r.is_active && (
+                    <Chip
+                      label="Inactive"
+                      size="small"
+                      sx={{
+                        fontSize: 11,
+                        height: 20,
+                        backgroundColor: 'rgba(245,158,11,0.18)',
+                        color: '#D97706',
+                        fontWeight: 600,
+                      }}
+                    />
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onRemoveRow(r.id)}
+                  disabled={submitting}
+                  title="Remove from this batch"
+                  style={{
+                    width: 28,
+                    height: 28,
+                    border: 'none',
+                    background: 'transparent',
+                    color: '#94A3B8',
+                    cursor: submitting ? 'not-allowed' : 'pointer',
+                    fontSize: 18,
+                    lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
+        {editedCount > 0 && (
+          <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
+            {editedCount} email{editedCount === 1 ? '' : 's'} edited &mdash; the
+            change will be saved to auth + profiles before the resend fires.
+          </div>
+        )}
+      </DialogContent>
+
+      <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider', gap: 1 }}>
+        <MuiButton onClick={onClose} disabled={submitting} sx={{ textTransform: 'none', fontWeight: 600 }}>
+          Cancel
+        </MuiButton>
+        <div style={{ flex: 1 }} />
+        <MuiButton
+          variant="contained"
+          color="success"
+          onClick={onConfirm}
+          disabled={submitting || rows.length === 0 || !allValid}
+          sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, px: 3 }}
+        >
+          {submitting ? 'Sending…' : `Send to ${rows.length}`}
+        </MuiButton>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 // --------------- Main Screen ---------------
 
 export default function EmployeesScreen() {
@@ -1435,45 +1633,76 @@ export default function EmployeesScreen() {
     }
   };
 
-  // --- Bulk re-registration: demote selected active employees back to
-  //     pending_info so they're forced through the registration form on next
-  //     sign-in. Useful for back-filling personal documents on existing
-  //     employees added before the registration flow existed.
+  // --- Bulk resend: open a dialog where HR can review the recipients,
+  //     edit the destination email per-row (covers the "their old email
+  //     is unreachable" case), and explicitly confirm inactive rows
+  //     before sending. The legacy "demote active → pending_info"
+  //     semantic still applies for rows currently at status='active';
+  //     all other statuses get a pure resend.
   const [bulkVerifying, setBulkVerifying] = useState(false);
+  const [resendDialog, setResendDialog] = useState<{
+    open: boolean;
+    rows: ResendRow[];
+  }>({ open: false, rows: [] });
 
-  const handleRequestVerification = async (ids: string[]) => {
+  const openResendDialog = (ids: string[]) => {
     if (ids.length === 0) return;
-    const eligible = ids.filter((id) => {
-      const emp = employees.find((e) => e.id === id);
-      return emp && emp.is_active && emp.registration_status === 'active';
-    });
-    if (eligible.length === 0) {
-      setSuccessMsg('No eligible rows. Only Active employees can be asked to verify their profile.');
-      return;
-    }
+    const rows: ResendRow[] = ids
+      .map((id) => employees.find((e) => e.id === id))
+      .filter((e): e is Profile => !!e)
+      .map((e) => ({
+        id: e.id,
+        full_name: e.full_name,
+        original_email: e.email || '',
+        email: e.email || '',
+        is_active: !!e.is_active,
+        registration_status: e.registration_status,
+        emailDirty: false,
+      }));
+    setResendDialog({ open: true, rows });
+  };
 
-    const ok = window.confirm(
-      `Send a profile-verification email to ${eligible.length} employee(s)?\n\n` +
-      `Their status will be changed to "Pending Info" — they won't be able ` +
-      `to use the system until they complete the registration form and HR re-approves them.`
-    );
-    if (!ok) return;
-
+  const runResend = async (rows: ResendRow[]) => {
+    if (rows.length === 0) return;
     setBulkVerifying(true);
     try {
-      const results = await registrationService.requestProfileVerification(eligible);
+      // 1. Persist any per-row email changes first. We do these in
+      //    sequence rather than parallel so a partial failure leaves a
+      //    clear trail in the audit log (and rate limits stay sane).
+      const emailFailures: string[] = [];
+      for (const r of rows) {
+        if (r.emailDirty && r.email.trim() && r.email.trim().toLowerCase() !== r.original_email.toLowerCase()) {
+          try {
+            await registrationService.updateRegistrationEmail(r.id, r.email.trim());
+          } catch (err: any) {
+            emailFailures.push(`${r.full_name}: ${err.message || 'email update failed'}`);
+          }
+        }
+      }
+
+      // 2. Bulk send. allowInactive is set unconditionally — the dialog
+      //    already showed an explicit warning for any inactive row and
+      //    HR clicked Send anyway. The edge function still enforces the
+      //    HR/HR-Director caller role.
+      const ids = rows.map((r) => r.id);
+      const results = await registrationService.requestProfileVerification(ids, { allowInactive: true });
       const okCount = results.filter((r) => r.success).length;
-      const failed = results.filter((r) => !r.success);
-      let msg = `Verification requested for ${okCount} of ${results.length} employee(s).`;
-      if (failed.length > 0) {
-        msg += ` Failures: ${failed.map((f) => f.error).slice(0, 2).join('; ')}${failed.length > 2 ? '…' : ''}`;
+      const sendFailures = results.filter((r) => !r.success);
+
+      let msg = `Sign-in email sent to ${okCount} of ${results.length} employee(s).`;
+      if (emailFailures.length > 0) {
+        msg += ` Email-update issues: ${emailFailures.slice(0, 2).join('; ')}${emailFailures.length > 2 ? '…' : ''}`;
+      }
+      if (sendFailures.length > 0) {
+        msg += ` Send failures: ${sendFailures.map((f) => f.error).slice(0, 2).join('; ')}${sendFailures.length > 2 ? '…' : ''}`;
       }
       setSuccessMsg(msg);
       setSelectedIds([]);
+      setResendDialog({ open: false, rows: [] });
       invalidate();
       loadLookups();
     } catch (err: any) {
-      setSuccessMsg(`Bulk verify failed: ${err.message || 'unknown error'}`);
+      setSuccessMsg(`Bulk resend failed: ${err.message || 'unknown error'}`);
     } finally {
       setBulkVerifying(false);
     }
@@ -1578,9 +1807,9 @@ export default function EmployeesScreen() {
               </button>
 
               <button
-                onClick={() => handleRequestVerification(selectedIds)}
+                onClick={() => openResendDialog(selectedIds)}
                 disabled={bulkSending || bulkVerifying}
-                title="Demote selected active employees to Pending Info so they're forced through the registration form again. Useful for back-filling personal documents on existing employees."
+                title="Resend the sign-in email to selected employees. Active employees are demoted to Pending Info so they refill the form; other statuses get the email only. HR can edit each employee's email in the dialog before sending."
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -1600,7 +1829,7 @@ export default function EmployeesScreen() {
                   <path d="M9 11l3 3L22 4" />
                   <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
                 </svg>
-                {bulkVerifying ? 'Sending...' : `Request Profile Verification (${selectedIds.length})`}
+                {bulkVerifying ? 'Sending...' : `Resend Sign-in Email (${selectedIds.length})`}
               </button>
             </>
           )}
@@ -1664,6 +1893,29 @@ export default function EmployeesScreen() {
                   employees={employees}
                   departments={lookupDepartments}
                   designations={lookupDesignations}
+                />
+                <ResendEmailDialog
+                  open={resendDialog.open}
+                  rows={resendDialog.rows}
+                  submitting={bulkVerifying}
+                  onChangeEmail={(id, email) =>
+                    setResendDialog((prev) => ({
+                      ...prev,
+                      rows: prev.rows.map((r) =>
+                        r.id === id
+                          ? { ...r, email, emailDirty: email !== r.original_email }
+                          : r,
+                      ),
+                    }))
+                  }
+                  onRemoveRow={(id) =>
+                    setResendDialog((prev) => ({
+                      ...prev,
+                      rows: prev.rows.filter((r) => r.id !== id),
+                    }))
+                  }
+                  onClose={() => setResendDialog({ open: false, rows: [] })}
+                  onConfirm={() => runResend(resendDialog.rows)}
                 />
                 <Snackbar
                   open={!!successMsg}
