@@ -897,21 +897,21 @@ export default function TimesheetsScreen() {
                           div regardless of row count. */}
                       <tr>
                         <th style={{ ...thCenterStyle, width: 36, padding: 0 }}>
-                          <div style={{ height: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>#</div>
+                          <div style={{ height: 71, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>#</div>
                         </th>
                         <th style={{ ...thStyle, minWidth: 150, padding: 0 }}>
-                          <div style={{ height: 50, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Employee</div>
+                          <div style={{ height: 71, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Employee</div>
                         </th>
                         <th style={{ ...thStyle, minWidth: 80, padding: 0 }}>
-                          <div style={{ height: 50, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Emp #</div>
+                          <div style={{ height: 71, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Emp #</div>
                         </th>
                         {showAllMonthlyColumns && (
                           <>
                             <th style={{ ...thStyle, minWidth: 120, padding: 0 }}>
-                              <div style={{ height: 50, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Designation</div>
+                              <div style={{ height: 71, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Designation</div>
                             </th>
                             <th style={{ ...thStyle, minWidth: 120, padding: 0 }}>
-                              <div style={{ height: 50, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Supplier</div>
+                              <div style={{ height: 71, display: 'flex', alignItems: 'center', padding: '0 12px' }}>Supplier</div>
                             </th>
                           </>
                         )}
@@ -996,6 +996,9 @@ export default function TimesheetsScreen() {
                           style={{
                             ...thCenterStyle,
                             verticalAlign: 'middle',
+                            // 49px so row 1 (day-name) + row 2 (22px sub-row)
+                            // adds up to 71 — matches the left header height.
+                            height: 49,
                             borderLeft: `2px solid ${DT.primary}40`,
                           }}
                         >
