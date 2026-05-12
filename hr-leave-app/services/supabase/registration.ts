@@ -280,24 +280,29 @@ export const registrationService: RegistrationService = {
   },
 
   async rejectRegistration(userId, reason, rejectedBy) {
+    // "Reject" here is really "send back for changes". We flip status
+    // to info_rejected so the employee is bounced back to the form (one
+    // time, on next sign-in) and shown HR's comment. We do NOT change
+    // is_active — that's only HR's call via Edit Employee.
     const { error: profileError } = await supabase
       .from('profiles')
       .update({
-        registration_status: RegistrationStatus.Rejected,
+        registration_status: RegistrationStatus.InfoRejected,
         registration_note: reason,
-        is_active: false,
         updated_at: new Date().toISOString(),
       })
       .eq('id', userId);
 
     if (profileError) throw new Error(profileError.message);
 
-    // In-app notification
+    // In-app notification — keep the `registration_rejected` type so any
+    // historical notifications still render correctly; the title/body
+    // now describe the action accurately.
     await supabase.from('notifications').insert({
       user_id: userId,
       type: 'registration_rejected',
-      title: 'Registration Not Approved',
-      body: `Your registration was not approved. Reason: ${reason}`,
+      title: 'Action needed: update your registration info',
+      body: `HR sent your registration back for changes. Comment: ${reason}`,
     });
 
     // Email notification

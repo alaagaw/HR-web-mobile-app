@@ -103,15 +103,15 @@ function buildEmail(payload: EmailPayload): { subject: string; html: string } {
 
     case 'registration_rejected':
       return {
-        subject: 'Registration Update',
+        subject: 'Action needed: update your registration info',
         html: wrap(`
-          <h2 style="color: #EF4444;">Registration Not Approved</h2>
+          <h2 style="color: #D97706;">Your registration needs a few changes</h2>
           <p>Hi ${payload.recipientName},</p>
-          <p>Unfortunately, your registration was not approved.</p>
-          ${payload.data?.reason ? `<div style="background: #FEF2F2; border-left: 4px solid #EF4444; padding: 12px 16px; margin: 16px 0; border-radius: 4px;">
-            <strong>Reason:</strong> ${payload.data.reason}
+          <p>HR reviewed your registration and asked you to update some details before it can be approved.</p>
+          ${payload.data?.reason ? `<div style="background: #FFFBEB; border-left: 4px solid #D97706; padding: 12px 16px; margin: 16px 0; border-radius: 4px;">
+            <strong>HR comment:</strong> ${payload.data.reason}
           </div>` : ''}
-          <p>If you have questions, please contact the HR department.</p>
+          <p>Please sign in, open the registration form, fix the highlighted fields, and submit again. HR will review the updated info.</p>
         `),
       };
 

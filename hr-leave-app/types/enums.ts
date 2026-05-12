@@ -74,7 +74,19 @@ export enum RegistrationStatus {
   EmailUnverified = 'email_unverified',
   PendingInfo = 'pending_info',
   PendingApproval = 'pending_approval',
+  /**
+   * HR reviewed the submission and asked for changes. The employee
+   * should fix the flagged fields and submit again — they go back to
+   * `PendingApproval` on resubmit. is_active is NOT touched by this
+   * status; activity is HR's call via Edit Employee only.
+   */
+  InfoRejected = 'info_rejected',
   Active = 'active',
+  /**
+   * @deprecated Legacy terminal-reject state; no code path writes this
+   * after migration 027. Kept in the enum so older rows can still be
+   * compared against if any historical data slipped through.
+   */
   Rejected = 'rejected',
 }
 

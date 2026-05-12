@@ -66,8 +66,15 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
           }
           return;
 
+        case RegistrationStatus.InfoRejected:
+          // HR asked the employee to fix and resubmit. They land on
+          // /registration-form on sign-in (see app/index.tsx) but are
+          // free to navigate anywhere afterwards — same nav freedom as
+          // an Active user, except they CAN still sit on the form to
+          // edit it, so we don't bounce them off the auth group.
+          return;
+
         case RegistrationStatus.Active:
-          // Fully active user on an auth page → send to dashboard
           if (inAuthGroup) {
             router.replace('/(app)/(tabs)/dashboard' as any);
           }

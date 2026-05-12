@@ -867,17 +867,18 @@ export function ReviewRegistrationDialog({
               </>
             )}
 
-            {/* Rejection reason */}
+            {/* Reason for sending back */}
             {mode === 'reject' && (
               <>
-                <SectionLabel>Rejection Reason</SectionLabel>
+                <SectionLabel>What does the employee need to change?</SectionLabel>
                 <MuiTextField
-                  label="Why is this registration being rejected?"
+                  label="Tell them what to fix"
                   value={rejectReason}
                   onChange={(e: any) => setRejectReason(e.target.value)}
                   fullWidth size="small" required
                   multiline rows={3}
-                  placeholder="The employee will see this message in their notification..."
+                  placeholder="e.g. The ID number doesn't match the document you uploaded — please re-check and resubmit."
+                  helperText="This message goes to the employee verbatim, via in-app notification and email. They can keep using the system; the registration goes back to them for a one-time fix."
                   autoFocus
                 />
               </>
@@ -913,24 +914,34 @@ export function ReviewRegistrationDialog({
               Back
             </MuiButton>
             <MuiButton
-              color="error"
               variant="contained"
               onClick={handleReject}
               disabled={submitting || !rejectReason.trim()}
-              sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, px: 3 }}
+              sx={{
+                textTransform: 'none',
+                fontWeight: 600,
+                borderRadius: 2,
+                px: 3,
+                backgroundColor: '#D97706',
+                '&:hover': { backgroundColor: '#B45309' },
+              }}
             >
-              {submitting ? 'Rejecting…' : 'Confirm Rejection'}
+              {submitting ? 'Sending…' : 'Send back to employee'}
             </MuiButton>
           </>
         ) : (
           <>
             <MuiButton
-              color="error"
               onClick={() => setMode('reject')}
               disabled={submitting}
-              sx={{ textTransform: 'none', fontWeight: 600 }}
+              sx={{
+                textTransform: 'none',
+                fontWeight: 600,
+                color: '#D97706',
+                '&:hover': { backgroundColor: 'rgba(217,119,6,0.08)' },
+              }}
             >
-              Reject
+              Send back for changes
             </MuiButton>
             <MuiButton
               color="success"

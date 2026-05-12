@@ -36,6 +36,12 @@ export default function Index() {
   switch (user.registration_status) {
     case RegistrationStatus.EmailUnverified:
     case RegistrationStatus.PendingInfo:
+    case RegistrationStatus.InfoRejected:
+      // info_rejected: HR sent the form back for changes. Default
+      // landing is the form so the employee sees HR's comment + the
+      // pre-filled values to edit. Unlike PendingInfo, the layout
+      // guard doesn't enforce this on every navigation — they can
+      // navigate to dashboard and come back later.
       return <Redirect href="/(auth)/registration-form" />;
 
     case RegistrationStatus.PendingApproval:

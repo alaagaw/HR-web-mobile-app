@@ -209,6 +209,7 @@ function getStatusDisplay(row: Profile): { label: string; bg: string; fg: string
     case 'email_unverified':  return { label: 'Unverified',       bg: 'rgba(148,163,184,0.18)', fg: '#64748B' };
     case 'pending_info':      return { label: 'Pending Info',     bg: 'rgba(59,130,246,0.18)',  fg: '#2563EB' };
     case 'pending_approval':  return { label: 'Pending Approval', bg: 'rgba(59,130,246,0.18)',  fg: '#2563EB' };
+    case 'info_rejected':     return { label: 'Info Rejected',    bg: 'rgba(217,119,6,0.18)',   fg: '#D97706' };
     case 'rejected':          return { label: 'Rejected',         bg: 'rgba(239,68,68,0.18)',   fg: '#DC2626' };
     case 'active':
     default:                  return { label: 'Active',           bg: 'rgba(34,197,94,0.18)',   fg: '#16A34A' };

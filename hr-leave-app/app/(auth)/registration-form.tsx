@@ -14,6 +14,7 @@ import { supabase } from '@/services/supabase/client';
 import { registrationFormSchema, type RegistrationFormSchemaData } from '@/lib/validators';
 import { getRoleLabel, formatHours } from '@/lib/utils';
 import type { Profile, EmployeeDocument } from '@/types/models';
+import { RegistrationStatus } from '@/types/enums';
 
 const isWeb = Platform.OS === 'web';
 
@@ -266,12 +267,24 @@ export default function RegistrationFormScreen() {
               <Text className="text-2xl font-bold text-white">HR</Text>
             </View>
             <Text className="text-2xl font-bold text-text-primary dark:text-white">
-              Complete Your Registration
+              {user.registration_status === RegistrationStatus.InfoRejected
+                ? 'Update Your Registration'
+                : 'Complete Your Registration'}
             </Text>
             <Text className="text-sm text-text-muted dark:text-slate-400 mt-1 text-center">
-              Verify the information HR added and fill in your personal details. HR will review before your account is activated.
+              {user.registration_status === RegistrationStatus.InfoRejected
+                ? 'HR asked you to update some details. Fix the items below and submit again.'
+                : 'Verify the information HR added and fill in your personal details. HR will review before your account is activated.'}
             </Text>
           </View>
+
+          {user.registration_status === RegistrationStatus.InfoRejected && (
+            <Banner variant="warning" className="mb-4">
+              {user.registration_note
+                ? `HR comment: ${user.registration_note}`
+                : 'HR sent your registration back for changes. Please review and update the fields below.'}
+            </Banner>
+          )}
 
           {error && (
             <Banner variant="error" className="mb-4">
@@ -575,6 +588,20 @@ export default function RegistrationFormScreen() {
               Submit for HR Approval
             </Button>
           </View>
+
+          {/* Bypass for info_rejected users: they can defer the rework
+              and finish later. PendingInfo employees stay locked to the
+              form (no link) because they haven't submitted anything yet. */}
+          {user.registration_status === RegistrationStatus.InfoRejected && (
+            <Pressable
+              onPress={() => router.replace('/(app)/(tabs)/dashboard' as any)}
+              className="mb-4"
+            >
+              <Text className="text-sm font-semibold text-primary text-center">
+                Continue to dashboard &mdash; I'll come back to this
+              </Text>
+            </Pressable>
+          )}
 
           <Button onPress={signOut} variant="ghost" fullWidth>
             Sign Out

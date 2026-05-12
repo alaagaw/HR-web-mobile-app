@@ -31,7 +31,7 @@ import { useNotifications } from '@/hooks/use-notifications';
 import { useNotificationStore } from '@/stores/notification-store';
 import { useTaskStore } from '@/stores/task-store';
 import { registrationService } from '@/services';
-import { Role, LeaveStatus, LeaveType, RenewalTaskStatus } from '@/types/enums';
+import { Role, LeaveStatus, LeaveType, RenewalTaskStatus, RegistrationStatus } from '@/types/enums';
 import { getStatusLabel, getLeaveTypeLabel, getLeaveTypeMuiColor } from '@/lib/state-machine';
 import { formatHours, formatDaysHours, formatDateRange, formatPendingSince, getRoleLabel } from '@/lib/utils';
 import type { LeaveRequest, AppNotification, RenewalTask, PendingRegistration } from '@/types/models';
@@ -154,6 +154,7 @@ function ActionRequiredCard({
   renewalTasks,
   notifications,
   pendingRegistrations,
+  infoRejectedNote,
   isDark,
   isApprover,
   isHR,
@@ -161,6 +162,7 @@ function ActionRequiredCard({
   onViewRequest,
   onRenew,
   onReviewRegistration,
+  onResubmitRegistration,
   onViewAllNotifications,
   onViewAllApprovals,
   onViewAllRenewals,
@@ -170,6 +172,10 @@ function ActionRequiredCard({
   renewalTasks: RenewalTask[];
   notifications: AppNotification[];
   pendingRegistrations: PendingRegistration[];
+  // Set when the signed-in user is in info_rejected status — surfaces a
+  // single high-priority row at the top of the card with HR's comment.
+  // null/undefined means there's nothing to surface.
+  infoRejectedNote: string | null | undefined;
   isDark: boolean;
   isApprover: boolean;
   isHR: boolean;
@@ -177,6 +183,7 @@ function ActionRequiredCard({
   onViewRequest: (request: LeaveRequest) => void;
   onRenew: (task: RenewalTask) => void;
   onReviewRegistration: (reg: PendingRegistration) => void;
+  onResubmitRegistration: () => void;
   onViewAllNotifications: () => void;
   onViewAllApprovals: () => void;
   onViewAllRenewals: () => void;
@@ -184,11 +191,13 @@ function ActionRequiredCard({
 }) {
   const tk = t(isDark);
   const unreadCount = useNotificationStore((s) => s.unreadCount);
+  const hasInfoRejected = infoRejectedNote !== undefined && infoRejectedNote !== null;
   const totalCount =
     (isApprover ? pendingApprovals.length : 0) +
     renewalTasks.length +
     (isHR ? pendingRegistrations.length : 0) +
-    (unreadCount || 0);
+    (unreadCount || 0) +
+    (hasInfoRejected ? 1 : 0);
   const recent = notifications.slice(0, 3);
 
   // Each subsection inside Action Required collapses independently.
@@ -328,6 +337,66 @@ function ActionRequiredCard({
           <ChevronRight size={20} color={tk.textMuted} />
         </span>
       </div>
+
+      {/* Resubmit registration — info_rejected status. Always-open
+          single row, rendered first so it can't be missed inside a
+          collapsed section. */}
+      {hasInfoRejected && (
+        <div
+          onClick={onResubmitRegistration}
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 12,
+            padding: '14px 20px',
+            borderBottom: `1px solid ${isDark ? DT.cardBorder : '#F1F5F9'}`,
+            backgroundColor: isDark ? 'rgba(217,119,6,0.10)' : '#FFFBEB',
+            cursor: 'pointer',
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: isDark ? '#FBBF24' : '#B45309' }}>
+                Update your registration info
+              </span>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  backgroundColor: '#D97706',
+                  color: '#FFFFFF',
+                  borderRadius: 8,
+                  padding: '1px 7px',
+                }}
+              >
+                Action needed
+              </span>
+            </div>
+            <div style={{ fontSize: 13, color: tk.textSecondary, lineHeight: 1.4 }}>
+              {infoRejectedNote
+                ? `HR comment: ${infoRejectedNote}`
+                : 'HR sent your registration back for changes.'}
+            </div>
+          </div>
+          <MuiButton
+            variant="contained"
+            size="small"
+            onClick={(e: any) => { e.stopPropagation(); onResubmitRegistration(); }}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: 13,
+              borderRadius: '8px',
+              backgroundColor: '#D97706',
+              '&:hover': { backgroundColor: '#B45309' },
+              flexShrink: 0,
+            }}
+          >
+            Open form
+          </MuiButton>
+        </div>
+      )}
 
       {/* Pending Your Approval */}
       {isApprover && pendingApprovals.length > 0 && (
@@ -1052,6 +1121,11 @@ export default function DashboardScreen() {
               renewalTasks={renewalTasks}
               notifications={notifications}
               pendingRegistrations={isHR ? pendingRegistrations : []}
+              infoRejectedNote={
+                user?.registration_status === RegistrationStatus.InfoRejected
+                  ? user?.registration_note ?? ''
+                  : null
+              }
               isDark={isDark}
               isApprover={!!isApprover}
               isHR={!!isHR}
@@ -1059,6 +1133,7 @@ export default function DashboardScreen() {
               onViewRequest={handleRowPress}
               onRenew={(task) => { setRenewDialog({ open: true, task }); setNewExpiry(''); }}
               onReviewRegistration={(reg: PendingRegistration) => setReviewingReg(reg)}
+              onResubmitRegistration={() => router.push('/(auth)/registration-form' as any)}
               onViewAllNotifications={() => router.push('/(app)/notifications' as any)}
               onViewAllApprovals={() => router.push('/(app)/(tabs)/tasks' as any)}
               onViewAllRenewals={() => router.push('/(app)/(tabs)/tasks' as any)}
