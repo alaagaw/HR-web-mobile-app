@@ -365,11 +365,11 @@ export interface RenewalTaskFilters {
  */
 export interface RegistrationFormData {
   // Profile-level (employee-editable, HR pre-fills some)
+  email: string;
   full_name: string;
   phone: string;
   nationality: string;
   birth_date: string;
-  email?: string;
 
   // Primary identification
   id_type: IdType;
@@ -381,10 +381,6 @@ export interface RegistrationFormData {
   iqama_expiry: string | null;
   passport_number: string | null;
   passport_expiry: string | null;
-
-  // Insurance — required for everyone
-  insurance_number: string;
-  insurance_expiry: string;
 
   // Auto-derived from job_title at create-employee time, kept editable here
   // for backward compat with the legacy submitRegistration payload.

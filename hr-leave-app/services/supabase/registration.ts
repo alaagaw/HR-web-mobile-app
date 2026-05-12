@@ -38,7 +38,7 @@ export const registrationService: RegistrationService = {
   // ── Self-registration flow ───────────────────────────────────
 
   async submitRegistration(userId, data) {
-    // 1. Profile update (full_name, phone, nationality + status flip to
+    // 1. Profile update (email, full_name, phone, nationality + status flip to
     //    pending_approval) goes through the SECURITY DEFINER RPC
     //    `submit_my_registration` because the RLS lockdown in migration
     //    014 forbids the employee from changing nationality or
@@ -46,6 +46,7 @@ export const registrationService: RegistrationService = {
     const { data: rpcData, error: rpcError } = await supabase.rpc(
       'submit_my_registration',
       {
+        p_email: data.email,
         p_full_name: data.full_name,
         p_phone: data.phone,
         p_nationality: data.nationality ?? '',
@@ -73,13 +74,11 @@ export const registrationService: RegistrationService = {
       ...(data.id_type ? { id_type: data.id_type } : {}),
       ...(data.national_id_number !== undefined ? { national_id_number: data.national_id_number } : {}),
       ...(data.id_document_url ? { id_document_url: data.id_document_url } : {}),
-      // Legacy fields — current form always sets these
+      // ID document fields — current form always sets these
       iqama_number: data.iqama_number,
       iqama_expiry: data.iqama_expiry,
       passport_number: data.passport_number,
       passport_expiry: data.passport_expiry,
-      insurance_number: data.insurance_number,
-      insurance_expiry: data.insurance_expiry,
       occupation: data.occupation,
       birth_date: data.birth_date,
       updated_at: new Date().toISOString(),

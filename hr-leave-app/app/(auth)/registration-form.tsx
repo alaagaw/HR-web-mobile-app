@@ -40,10 +40,12 @@ export default function RegistrationFormScreen() {
     reset,
     watch,
     setValue,
+    setFocus,
     formState: { errors },
   } = useForm<RegistrationFormSchemaData>({
     resolver: zodResolver(registrationFormSchema),
     defaultValues: {
+      email: '',
       full_name: '',
       phone: '',
       nationality: '',
@@ -55,13 +57,19 @@ export default function RegistrationFormScreen() {
       iqama_expiry: '',
       passport_number: '',
       passport_expiry: '',
-      insurance_number: '',
-      insurance_expiry: '',
       occupation: '',
     },
   });
 
   const idType = watch('id_type');
+  const nationality = watch('nationality');
+
+  // Auto-select national_id for Saudi nationals
+  useEffect(() => {
+    if (nationality && nationality.toLowerCase().includes('saudi')) {
+      setValue('id_type', 'national_id');
+    }
+  }, [nationality, setValue]);
 
   // Pre-fill the form from the user's profile + employee_documents row.
   // The employee may have data already if HR added them with details, OR
@@ -87,6 +95,7 @@ export default function RegistrationFormScreen() {
 
         // Reset form with the merged data so all controlled inputs reflect it.
         reset({
+          email: user.email || '',
           full_name: user.full_name || '',
           phone: user.phone || '',
           nationality: user.nationality || '',
@@ -98,8 +107,6 @@ export default function RegistrationFormScreen() {
           iqama_expiry: docRow?.iqama_expiry || '',
           passport_number: docRow?.passport_number || '',
           passport_expiry: docRow?.passport_expiry || '',
-          insurance_number: docRow?.insurance_number || '',
-          insurance_expiry: docRow?.insurance_expiry || '',
           occupation: docRow?.occupation || user.job_title || '',
         });
 
@@ -151,6 +158,32 @@ export default function RegistrationFormScreen() {
     }
   };
 
+  // Focus on the first field with an error when validation fails
+  const onError = () => {
+    const fieldOrder: (keyof RegistrationFormSchemaData)[] = [
+      'email',
+      'full_name',
+      'phone',
+      'nationality',
+      'birth_date',
+      'id_type',
+      'national_id_number',
+      'iqama_number',
+      'iqama_expiry',
+      'passport_number',
+      'passport_expiry',
+      'id_document_url',
+    ];
+
+    // Find the first field in our order that has an error
+    for (const field of fieldOrder) {
+      if (errors[field]) {
+        setFocus(field);
+        break;
+      }
+    }
+  };
+
   const onSubmit = async (data: RegistrationFormSchemaData) => {
     if (!user) return;
     setError(null);
@@ -162,6 +195,7 @@ export default function RegistrationFormScreen() {
       const blank = (s?: string | null) => (s && s.trim().length > 0 ? s.trim() : null);
 
       const updatedProfile = await registrationService.submitRegistration(user.id, {
+        email: data.email.trim(),
         full_name: data.full_name.trim(),
         phone: data.phone.trim(),
         nationality: data.nationality.trim(),
@@ -173,8 +207,6 @@ export default function RegistrationFormScreen() {
         iqama_expiry: blank(data.iqama_expiry),
         passport_number: blank(data.passport_number),
         passport_expiry: blank(data.passport_expiry),
-        insurance_number: data.insurance_number.trim(),
-        insurance_expiry: data.insurance_expiry,
         // occupation auto-derives from job_title; falls back to whatever's in doc
         occupation: data.occupation || user.job_title || '',
       });
@@ -202,7 +234,6 @@ export default function RegistrationFormScreen() {
 
   // ─── Read-only HR-controlled section ─────────────────────────────
   const hrFields: { label: string; value: string }[] = [
-    { label: 'Email',           value: user.email || '—' },
     { label: 'Employee Code',   value: doc?.emp_code || '—' },
     { label: 'Job Title',       value: user.job_title || '—' },
     { label: 'Department',      value: user.department || '—' },
@@ -277,6 +308,22 @@ export default function RegistrationFormScreen() {
 
           <Controller
             control={control}
+            name="email"
+            render={({ field: { onChange, value } }) => (
+              <Input
+                label="Email Address"
+                placeholder="your.email@example.com"
+                value={value}
+                onChangeText={onChange}
+                error={errors.email?.message}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            )}
+          />
+
+          <Controller
+            control={control}
             name="full_name"
             render={({ field: { onChange, value } }) => (
               <Input
@@ -344,41 +391,58 @@ export default function RegistrationFormScreen() {
           <Controller
             control={control}
             name="id_type"
-            render={({ field: { onChange, value } }) => (
-              <View style={{ marginBottom: 16 }}>
-                <Text style={{ fontSize: 13, fontWeight: '600', marginBottom: 6, color: isWeb ? '#E2E8F0' : '#0F172A' }}>
-                  ID Type
-                </Text>
-                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                  {ID_TYPE_OPTIONS.map((opt) => {
-                    const selected = value === opt.value;
-                    return (
-                      <Pressable
-                        key={opt.value}
-                        onPress={() => onChange(opt.value)}
-                        style={{
-                          paddingHorizontal: 14,
-                          paddingVertical: 10,
-                          borderRadius: 8,
-                          borderWidth: 1,
-                          borderColor: selected ? '#2563EB' : '#334155',
-                          backgroundColor: selected ? 'rgba(37,99,235,0.15)' : 'transparent',
-                        }}
-                      >
-                        <Text style={{ fontSize: 13, fontWeight: '600', color: selected ? '#2563EB' : '#94A3B8' }}>
-                          {opt.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-                {errors.id_type?.message && (
-                  <Text style={{ fontSize: 12, color: '#EF4444', marginTop: 4 }}>
-                    {errors.id_type.message}
+            render={({ field: { onChange, value } }) => {
+              // Filter ID options: Saudi nationals see only National ID
+              const isSaudi = nationality && nationality.toLowerCase().includes('saudi');
+              const availableIdOptions = isSaudi
+                ? ID_TYPE_OPTIONS.filter(opt => opt.value === 'national_id')
+                : ID_TYPE_OPTIONS;
+              const hasError = !!errors.id_type;
+
+              return (
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '600', marginBottom: 6, color: isWeb ? '#E2E8F0' : '#0F172A' }}>
+                    ID Type
                   </Text>
-                )}
-              </View>
-            )}
+                  <View style={{
+                    flexDirection: 'row',
+                    gap: 8,
+                    flexWrap: 'wrap',
+                    padding: 8,
+                    borderRadius: 8,
+                    borderWidth: hasError ? 1 : 0,
+                    borderColor: hasError ? '#EF4444' : 'transparent',
+                  }}>
+                    {availableIdOptions.map((opt) => {
+                      const selected = value === opt.value;
+                      return (
+                        <Pressable
+                          key={opt.value}
+                          onPress={() => onChange(opt.value)}
+                          style={{
+                            paddingHorizontal: 14,
+                            paddingVertical: 10,
+                            borderRadius: 8,
+                            borderWidth: 1,
+                            borderColor: selected ? '#2563EB' : '#334155',
+                            backgroundColor: selected ? 'rgba(37,99,235,0.15)' : 'transparent',
+                          }}
+                        >
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: selected ? '#2563EB' : '#94A3B8' }}>
+                            {opt.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  {errors.id_type?.message && (
+                    <Text style={{ fontSize: 12, color: '#EF4444', marginTop: 4 }}>
+                      {errors.id_type.message}
+                    </Text>
+                  )}
+                </View>
+              );
+            }}
           />
 
           {/* Conditional ID number + expiry based on id_type */}
@@ -484,7 +548,7 @@ export default function RegistrationFormScreen() {
                         display: 'block',
                         padding: 10,
                         borderRadius: 8,
-                        border: '1px dashed #334155',
+                        border: errors.id_document_url ? '1px dashed #EF4444' : '1px dashed #334155',
                         backgroundColor: 'transparent',
                         color: '#94A3B8',
                         fontSize: 13,
@@ -514,40 +578,8 @@ export default function RegistrationFormScreen() {
             )}
           />
 
-          {/* ─── Insurance ─── */}
-          <Text className="text-base font-semibold text-text-primary dark:text-white mb-3 mt-4">
-            Insurance
-          </Text>
-
-          <Controller
-            control={control}
-            name="insurance_number"
-            render={({ field: { onChange, value } }) => (
-              <Input
-                label="Insurance Number"
-                placeholder="Enter your insurance number"
-                value={value}
-                onChangeText={onChange}
-                error={errors.insurance_number?.message}
-              />
-            )}
-          />
-
-          <Controller
-            control={control}
-            name="insurance_expiry"
-            render={({ field: { onChange, value } }) => (
-              <NativeDateField
-                label="Insurance Expiry Date"
-                value={value}
-                onChange={onChange}
-                error={errors.insurance_expiry?.message}
-              />
-            )}
-          />
-
           <View className="mt-6 mb-4">
-            <Button onPress={handleSubmit(onSubmit)} loading={loading} fullWidth>
+            <Button onPress={handleSubmit(onSubmit, onError)} loading={loading} fullWidth>
               Submit for HR Approval
             </Button>
           </View>

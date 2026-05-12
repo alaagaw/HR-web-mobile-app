@@ -129,6 +129,7 @@ export type ChangePasswordFormData = z.infer<typeof changePasswordSchema>;
 export const registrationFormSchema = z
   .object({
     // Personal — employee owns these
+    email: z.string().email('Please enter a valid email address'),
     full_name: z.string().min(2, 'Full name is required'),
     phone: z.string().min(5, 'Phone number is required'),
     nationality: z.string().min(2, 'Nationality is required'),
@@ -146,10 +147,6 @@ export const registrationFormSchema = z
     iqama_expiry: z.string().optional().nullable(),
     passport_number: z.string().optional().nullable(),
     passport_expiry: z.string().optional().nullable(),
-
-    // Insurance — required (everyone has it)
-    insurance_number: z.string().min(1, 'Insurance number is required'),
-    insurance_expiry: z.string().min(1, 'Insurance expiry date is required'),
 
     // Legacy field — auto-set from job_title now, but keep in schema
     // so submitRegistration's existing payload keeps working.
