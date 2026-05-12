@@ -14,6 +14,23 @@ async function fetchProfile(userId: string): Promise<Profile> {
   return data as Profile;
 }
 
+const INACTIVE_MESSAGE =
+  'Your account is inactive. Please contact HR to re-activate it before signing in.';
+
+/**
+ * Sign-in side gate: registration_status doesn't matter (pending_info,
+ * info_rejected, etc. can all log in and finish their onboarding), but
+ * a HARD `is_active = false` flag blocks login until HR re-activates
+ * the account via Edit Employee. Throws to surface the message in the
+ * sign-in form.
+ */
+async function blockIfInactive(profile: Profile): Promise<void> {
+  if (profile.is_active === false) {
+    try { await supabase.auth.signOut(); } catch { /* best-effort */ }
+    throw new Error(INACTIVE_MESSAGE);
+  }
+}
+
 export const authService: AuthService = {
   async signIn(email, password) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -21,6 +38,11 @@ export const authService: AuthService = {
     if (!data.user) throw new Error('Sign in failed');
 
     const profile = await fetchProfile(data.user.id);
+
+    // Inactive accounts can't sign in. registration_status doesn't gate
+    // login — pending_info, info_rejected, etc. all proceed and finish
+    // onboarding from inside the app.
+    await blockIfInactive(profile);
 
     // Auto-transition: email verified (they signed in) but status is still email_unverified
     if (profile.registration_status === RegistrationStatus.EmailUnverified) {
@@ -133,7 +155,15 @@ export const authService: AuthService = {
     } = await supabase.auth.getSession();
     if (!session?.user) return null;
     try {
-      return await fetchProfile(session.user.id);
+      const profile = await fetchProfile(session.user.id);
+      // Same gate as signIn — a session resumed on app load with an
+      // is_active=false profile (deactivated by HR after sign-in) must
+      // be torn down silently here so the UI lands on /sign-in.
+      if (profile.is_active === false) {
+        try { await supabase.auth.signOut(); } catch { /* best-effort */ }
+        return null;
+      }
+      return profile;
     } catch {
       return null;
     }
@@ -146,6 +176,13 @@ export const authService: AuthService = {
       if (session?.user) {
         try {
           const profile = await fetchProfile(session.user.id);
+          // Mid-session deactivation: HR flips is_active off → next
+          // auth listener firing tears the session down.
+          if (profile.is_active === false) {
+            try { await supabase.auth.signOut(); } catch { /* best-effort */ }
+            callback(null);
+            return;
+          }
           callback(profile);
         } catch {
           callback(null);
