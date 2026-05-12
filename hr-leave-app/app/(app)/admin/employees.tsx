@@ -1071,6 +1071,10 @@ export default function EmployeesScreen() {
   const isDark = colorScheme === 'dark';
   const [employees, setEmployees] = useState<Profile[]>([]);
   const [search, setSearch] = useViewState('admin/employees.search', '');
+  // Default ON so HR sees the full roster (incl. former employees) without
+  // having to remember a hidden filter. Toggle off when they want to focus
+  // on the live workforce only.
+  const [includeInactive, setIncludeInactive] = useViewState('admin/employees.includeInactive', true);
   const [loading, setLoading] = useState(false);
   const [dialog, setDialog] = useState<EditDialogState>(INITIAL_DIALOG);
   const [successMsg, setSuccessMsg] = useState('');
@@ -1090,10 +1094,14 @@ export default function EmployeesScreen() {
   const loadEmployees = useCallback(() => {
     setLoading(true);
     userService
-      .getEmployees({ search: search || undefined, is_active: true })
+      .getEmployees({
+        search: search || undefined,
+        // Omit is_active when including inactive → returns the full set.
+        is_active: includeInactive ? undefined : true,
+      })
       .then(setEmployees)
       .finally(() => setLoading(false));
-  }, [search]);
+  }, [search, includeInactive]);
 
   useEffect(() => { loadEmployees(); }, [loadEmployees]);
   const { invalidate } = useAutoRefresh(() => { loadEmployees(); }, [loadEmployees]);
@@ -1513,8 +1521,33 @@ export default function EmployeesScreen() {
             </div>
             <div style={{ fontSize: 13, color: isDark ? '#94A3B8' : '#64748B', marginTop: 2 }}>
               Click a row to edit. Tick rows to send invites in bulk.
+              {(() => {
+                const inactiveCount = employees.filter((e) => !e.is_active).length;
+                if (!includeInactive) return null;
+                return inactiveCount > 0 ? (
+                  <span style={{ marginLeft: 8, opacity: 0.7 }}>
+                    {employees.length} shown · {inactiveCount} inactive
+                  </span>
+                ) : null;
+              })()}
             </div>
           </div>
+
+          <FormControlLabel
+            sx={{ flexShrink: 0, mr: 1, color: isDark ? '#E2E8F0' : '#0F172A' }}
+            control={
+              <Switch
+                checked={includeInactive}
+                onChange={(_e: any, v: boolean) => setIncludeInactive(v)}
+                size="small"
+              />
+            }
+            label={
+              <span style={{ fontSize: 13, fontWeight: 600 }}>
+                Include inactive
+              </span>
+            }
+          />
 
           {selectedIds.length > 0 && (
             <>
