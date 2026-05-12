@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { View, Text, KeyboardAvoidingView, Platform, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,6 +24,7 @@ const ID_TYPE_OPTIONS: { value: 'national_id' | 'iqama' | 'passport'; label: str
 ];
 
 export default function RegistrationFormScreen() {
+  const router = useRouter();
   const { user, signOut } = useAuth();
   const setUser = useAuthStore((s) => s.setUser);
   const [error, setError] = useState<string | null>(null);
@@ -211,7 +213,14 @@ export default function RegistrationFormScreen() {
         occupation: data.occupation || user.job_title || '',
       });
       setUser(updatedProfile);
-      // AuthGuard sees pending_approval and routes to pending screen
+      // Force the navigation explicitly. The _layout auth guard normally
+      // handles this via a useEffect that watches user.registration_status,
+      // but if the persisted store already held 'pending_approval' (e.g.
+      // a previous submit, a stale value, an extra render) the dep
+      // doesn't change and the effect never re-fires. Calling
+      // router.replace here makes the navigation deterministic on every
+      // successful submit.
+      router.replace('/(auth)/pending-approval' as any);
     } catch (err: any) {
       setError(err.message || 'Failed to submit registration');
     } finally {
