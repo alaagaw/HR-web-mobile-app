@@ -44,6 +44,13 @@ export default function ForgotPasswordScreen() {
     }
   };
 
+  const goToCodeEntry = () => {
+    router.replace({
+      pathname: '/(auth)/reset-password' as any,
+      params: { email: email.trim() },
+    });
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-background dark:bg-slate-900">
       <KeyboardAvoidingView
@@ -60,18 +67,25 @@ export default function ForgotPasswordScreen() {
               <Text className="text-2xl font-bold text-white">HR</Text>
             </View>
             <Text className="text-2xl font-bold text-text-primary dark:text-white">
-              Forgot your password?
+              {submitted ? 'Check your email' : 'Forgot your password?'}
             </Text>
             <Text className="text-sm text-text-muted dark:text-slate-400 mt-2 text-center">
-              Enter your email and we'll send you a link to reset it.
+              Enter your email and we'll send you a 6-digit code to reset it.
             </Text>
           </View>
 
           {submitted ? (
-            <Banner variant="success" className="mb-4">
-              If an account exists for that email, a reset link has been sent.
-              Check your inbox (and spam folder).
-            </Banner>
+            <>
+              <Banner variant="success" className="mb-4">
+                If an account exists for that email, a 6-digit code has been
+                sent. Check your inbox (and spam folder).
+              </Banner>
+              <View className="mt-2">
+                <Button onPress={goToCodeEntry} fullWidth>
+                  Enter the code
+                </Button>
+              </View>
+            </>
           ) : (
             <>
               {error && (
@@ -96,7 +110,7 @@ export default function ForgotPasswordScreen() {
               />
               <View className="mt-2">
                 <Button onPress={handleSubmit} loading={loading} fullWidth>
-                  Send reset link
+                  Send code
                 </Button>
               </View>
             </>

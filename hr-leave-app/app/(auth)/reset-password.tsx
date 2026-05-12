@@ -1,192 +1,119 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, KeyboardAvoidingView, Platform, ScrollView, Pressable } from 'react-native';
-import { useForm, Controller } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { createClient } from '@supabase/supabase-js';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Banner } from '@/components/ui/banner';
+import { supabase } from '@/services/supabase/client';
+import { useAuth } from '@/hooks/use-auth';
 import { useAuthStore } from '@/stores/auth-store';
-import { changePasswordSchema, type ChangePasswordFormData } from '@/lib/validators';
 
 /**
- * Landing page for Supabase's password-recovery email link.
+ * Reset Password — 3-field OTP form.
  *
- * Uses a dedicated `recoveryClient` instead of the global supabase client
- * because the global one has detectSessionInUrl: false + a no-op lock
- * (set in services/supabase/client.ts to avoid bugs elsewhere) — those
- * overrides hang setSession() forever during recovery. The dedicated
- * client uses SDK defaults; both clients share the same localStorage
- * key so the session set here is visible to the global client too.
+ * Why a form instead of a magic-link page:
+ *   Corporate email scanners (Microsoft Defender Safe Links, Mimecast,
+ *   Proofpoint, etc.) follow links in inbound mail for safety previews.
+ *   Supabase's {{ .ConfirmationURL }} consumes its single-use token on
+ *   the first GET, so by the time the user clicks the link in their
+ *   inbox the token is already burned and they see "Token has expired
+ *   or is invalid."
  *
- * Recovery tokens are SINGLE-USE. The page detects already-used / expired
- * links via the URL hash and shows a "request a new link" screen instead
- * of letting the user submit and hit a cryptic auth error.
+ *   The 6-digit code in `{{ .Token }}` cannot be consumed by a GET —
+ *   only by a typed entry in this form's onSubmit. Scanners are
+ *   harmless. This is the workaround Supabase's own troubleshooting
+ *   docs recommend.
+ *
+ * Flow:
+ *   1. User opens /forgot-password, types email, clicks Send. We call
+ *      supabase.auth.resetPasswordForEmail and navigate them here with
+ *      ?email= pre-filled.
+ *   2. They open their email, see the 6-digit code (template uses
+ *      {{ .Token }} prominently), come back here, type the code plus
+ *      a new password.
+ *   3. We call verifyOtp({ email, token, type: 'recovery' }) to
+ *      exchange the code for a recovery session, then updateUser
+ *      ({ password }) to set the new password, then hard-reload to
+ *      pick up the new session.
  */
-type LinkState = 'checking' | 'valid' | 'invalid';
-
 export default function ResetPasswordScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ email?: string }>();
+  const { resetPasswordForEmail } = useAuth();
+
+  const [email, setEmail] = useState<string>(params.email || '');
+  const [code, setCode] = useState<string>('');
+  const [newPassword, setNewPassword] = useState<string>('');
+  const [confirmPassword, setConfirmPassword] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   const [done, setDone] = useState(false);
-  const [linkState, setLinkState] = useState<LinkState>('checking');
-  const [linkErrorReason, setLinkErrorReason] = useState<string>('');
 
-  // Dedicated Supabase client for the recovery flow.
-  //
-  // Why a separate client? The global one (in services/supabase/client.ts)
-  // is configured with detectSessionInUrl: false AND a no-op lock — both
-  // chosen to avoid bugs during normal app navigation. Those overrides
-  // break setSession() during recovery (it hangs forever; verified with
-  // diagnostic logs on commit 6fe8c05).
-  //
-  // This client uses the SDK defaults (Web Lock + URL hash detection)
-  // ONLY for this page. The two clients share the same localStorage key
-  // (sb-<ref>-auth-token), so once recovery sets a session here, the
-  // global client picks it up too.
-  const recoveryClient = useMemo(
-    () =>
-      createClient(
-        process.env.EXPO_PUBLIC_SUPABASE_URL || '',
-        process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
-        {
-          auth: {
-            persistSession: true,
-            autoRefreshToken: true,
-            detectSessionInUrl: true,
-          },
-        }
-      ),
-    []
-  );
-
-  const {
-    control,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<ChangePasswordFormData>({
-    resolver: zodResolver(changePasswordSchema),
-    defaultValues: { newPassword: '', confirmPassword: '' },
-  });
-
-  // On mount: detect whether the URL hash carries a fresh recovery session,
-  // an explicit error, or nothing.
-  //
-  // The dedicated recoveryClient was created with detectSessionInUrl=true,
-  // so on construction it parses the hash and fires PASSWORD_RECOVERY /
-  // SIGNED_IN events. We listen for those to mark the link valid.
-  //
-  // Three URL shapes:
-  //   #access_token=...&refresh_token=...&type=recovery  → valid
-  //   #error=...&error_code=otp_expired                   → invalid
-  //   (empty)                                             → invalid (no link)
+  // Pick up the email from a URL ?email= param the first time it arrives
+  // (it can race with the initial state seeding on web).
   useEffect(() => {
-    let cancelled = false;
+    if (params.email && !email) setEmail(String(params.email));
+  }, [params.email]);
 
-    if (typeof window === 'undefined') return;
+  const onSubmit = async () => {
+    setError(null);
+    setInfo(null);
 
-    const rawHash = window.location.hash.replace(/^#/, '');
-    const params = new URLSearchParams(rawHash);
-
-    // Explicit error in URL — surface a friendly message.
-    const errorCode = params.get('error_code');
-    if (errorCode) {
-      const errorDescription = params.get('error_description');
-      const friendly =
-        errorCode === 'otp_expired'
-          ? 'This reset link has already been used or has expired.'
-          : (errorDescription?.replace(/\+/g, ' ') || 'This reset link is no longer valid.');
-      setLinkErrorReason(friendly);
-      setLinkState('invalid');
+    if (!email.trim() || !/\S+@\S+\.\S+/.test(email.trim())) {
+      setError('Enter the email you used to request the code.');
+      return;
+    }
+    const trimmedCode = code.trim();
+    if (!/^\d{6}$/.test(trimmedCode)) {
+      setError('The code is a 6-digit number sent to your inbox.');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('The two password fields do not match.');
       return;
     }
 
-    // Hard fallback — never let the user stare at "Verifying" forever.
-    const hardFallback = setTimeout(() => {
-      if (cancelled) return;
-      setLinkErrorReason(
-        'Reset link verification took too long. Please request a new link.'
-      );
-      setLinkState('invalid');
-    }, 6000);
-
-    // Listen for the recoveryClient to surface a session.
-    const { data: { subscription } } = recoveryClient.auth.onAuthStateChange(
-      (event, session) => {
-        if (cancelled) return;
-        if (
-          (event === 'PASSWORD_RECOVERY') ||
-          (event === 'SIGNED_IN' && session) ||
-          (event === 'INITIAL_SESSION' && session)
-        ) {
-          clearTimeout(hardFallback);
-          setLinkState('valid');
-          try {
-            window.history.replaceState({}, document.title, window.location.pathname);
-          } catch {}
-        }
-      }
-    );
-
-    // Belt-and-braces: also poll once after 800ms in case the event fired
-    // before the listener attached.
-    const earlyCheck = setTimeout(async () => {
-      try {
-        const { data: { session } } = await recoveryClient.auth.getSession();
-        if (!cancelled && session) {
-          clearTimeout(hardFallback);
-          setLinkState('valid');
-        }
-      } catch {
-        /* swallow — the hard fallback will handle it */
-      }
-    }, 800);
-
-    return () => {
-      cancelled = true;
-      subscription.unsubscribe();
-      clearTimeout(hardFallback);
-      clearTimeout(earlyCheck);
-    };
-  }, [recoveryClient]);
-
-  const onSubmit = async (data: ChangePasswordFormData) => {
-    setError(null);
     setLoading(true);
     try {
-      // Use the recoveryClient (which holds the recovery session) to update
-      // the password. The global supabase client shares the same storage
-      // key and will pick up the new session when the page reloads.
-      const { error: updateErr } = await recoveryClient.auth.updateUser({
-        password: data.newPassword,
+      // Exchange the typed OTP for a recovery session. This is the
+      // single-use step; if the user typed an old or already-used
+      // code, GoTrue rejects it here.
+      const { error: verifyErr } = await supabase.auth.verifyOtp({
+        email: email.trim(),
+        token: trimmedCode,
+        type: 'recovery',
       });
-      if (updateErr) throw updateErr;
-      setDone(true);
-
-      // Wipe the persisted Zustand auth store BEFORE the hard navigation.
-      //
-      // Why: the store persists `user` to AsyncStorage. After window.location
-      // reloads the page, Zustand restores that cached user — which may be
-      // STALE (e.g. for a user who just bulk-demoted themselves to
-      // `pending_info`, the cached value still says `active`). Index.tsx
-      // would route based on the stale status, briefly mounting the dashboard
-      // and triggering errors before fresh auth re-validates.
-      //
-      // Clearing the store forces Index.tsx to wait for the auth listener
-      // to fire with a fresh profile fetch, then route correctly.
-      try {
-        useAuthStore.getState().clear();
-      } catch {
-        /* non-fatal — worst case we get the brief dashboard flash again */
+      if (verifyErr) {
+        const msg = verifyErr.message?.toLowerCase() ?? '';
+        if (msg.includes('expired') || msg.includes('invalid')) {
+          throw new Error('Code is invalid or has expired. Request a new code below.');
+        }
+        throw verifyErr;
       }
 
-      // Force a hard navigation so the global client re-reads the session
-      // from localStorage and the auth guard sees the user as signed in.
-      // window.location.replace doesn't add a history entry, which is the
-      // right behaviour for a one-time recovery flow.
+      // Now signed in via the recovery session — set the new password.
+      const { error: pwErr } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (pwErr) throw pwErr;
+
+      setDone(true);
+
+      // Wipe the persisted Zustand user (it may hold a stale snapshot
+      // from before the password change) and hard-reload so the global
+      // auth listener picks up the fresh session and the layout guard
+      // routes correctly.
+      try {
+        useAuthStore.getState().clear();
+      } catch { /* non-fatal */ }
+
       setTimeout(() => {
         if (typeof window !== 'undefined') {
           window.location.replace('/');
@@ -195,59 +122,31 @@ export default function ResetPasswordScreen() {
         }
       }, 600);
     } catch (err: any) {
-      const msg = err?.message || '';
-      setError(
-        msg.toLowerCase().includes('session')
-          ? 'Your reset link has expired. Please request a new one.'
-          : msg || 'Failed to reset password'
-      );
+      setError(err?.message || 'Failed to reset password.');
     } finally {
       setLoading(false);
     }
   };
 
-  // ─── Invalid / used link state ──────────────────────────────────
-  if (linkState === 'invalid') {
-    return (
-      <SafeAreaView className="flex-1 bg-background dark:bg-slate-900">
-        <ScrollView
-          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
-          className="px-6"
-        >
-          <View className="items-center mb-6">
-            <View className="w-16 h-16 rounded-2xl bg-primary items-center justify-center mb-4">
-              <Text className="text-2xl font-bold text-white">HR</Text>
-            </View>
-            <Text className="text-2xl font-bold text-text-primary dark:text-white">
-              Reset link unavailable
-            </Text>
-          </View>
+  const handleResend = async () => {
+    setError(null);
+    setInfo(null);
+    if (!email.trim() || !/\S+@\S+\.\S+/.test(email.trim())) {
+      setError('Enter the email you want the code sent to.');
+      return;
+    }
+    setResending(true);
+    try {
+      await resetPasswordForEmail(email.trim());
+      setInfo('A new code has been sent. Check your inbox (and spam folder).');
+    } catch {
+      // Same as forgot-password — never disclose account existence.
+      setInfo('A new code has been sent. Check your inbox (and spam folder).');
+    } finally {
+      setResending(false);
+    }
+  };
 
-          <Banner variant="error" className="mb-6">
-            {linkErrorReason}
-          </Banner>
-
-          <Text className="text-sm text-text-muted dark:text-slate-400 mb-5 text-center">
-            Reset and invite links can only be used once. If you need to set or change your password, request a new link.
-          </Text>
-
-          <Button onPress={() => router.replace('/(auth)/forgot-password' as any)} fullWidth>
-            Request a new link
-          </Button>
-
-          <View className="mt-4 items-center">
-            <Pressable onPress={() => router.replace('/(auth)/sign-in' as any)}>
-              <Text className="text-sm font-semibold text-primary">
-                ← Back to sign in
-              </Text>
-            </Pressable>
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  // ─── Loading / valid-link form ──────────────────────────────────
   return (
     <SafeAreaView className="flex-1 bg-background dark:bg-slate-900">
       <KeyboardAvoidingView
@@ -266,13 +165,10 @@ export default function ResetPasswordScreen() {
             <Text className="text-2xl font-bold text-text-primary dark:text-white">
               Set a new password
             </Text>
+            <Text className="text-sm text-text-muted dark:text-slate-400 mt-2 text-center">
+              Enter the 6-digit code we emailed you, then your new password.
+            </Text>
           </View>
-
-          {linkState === 'checking' && (
-            <Banner variant="info" className="mb-4">
-              Verifying your reset link…
-            </Banner>
-          )}
 
           {done && (
             <Banner variant="success" className="mb-6">
@@ -286,49 +182,72 @@ export default function ResetPasswordScreen() {
             </Banner>
           )}
 
-          <Controller
-            control={control}
-            name="newPassword"
-            render={({ field: { onChange, value } }) => (
-              <Input
-                label="New Password"
-                placeholder="At least 8 characters"
-                value={value}
-                onChangeText={onChange}
-                error={errors.newPassword?.message}
-                secureTextEntry
-                autoComplete="new-password"
-              />
-            )}
+          {info && !error && (
+            <Banner variant="info" className="mb-4">
+              {info}
+            </Banner>
+          )}
+
+          <Input
+            label="Email"
+            placeholder="you@example.com"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            autoComplete="email"
+            keyboardType="email-address"
           />
 
-          <Controller
-            control={control}
-            name="confirmPassword"
-            render={({ field: { onChange, value } }) => (
-              <Input
-                label="Confirm New Password"
-                placeholder="Re-enter your new password"
-                value={value}
-                onChangeText={onChange}
-                error={errors.confirmPassword?.message}
-                secureTextEntry
-                autoComplete="new-password"
-                returnKeyType="go"
-                onSubmitEditing={handleSubmit(onSubmit)}
-              />
-            )}
+          <Input
+            label="6-digit code"
+            placeholder="123456"
+            value={code}
+            onChangeText={(v) => setCode(v.replace(/\D/g, '').slice(0, 6))}
+            keyboardType="number-pad"
+            autoComplete="one-time-code"
+            maxLength={6}
+          />
+
+          <Input
+            label="New password"
+            placeholder="At least 8 characters"
+            value={newPassword}
+            onChangeText={setNewPassword}
+            secureTextEntry
+            autoComplete="new-password"
+          />
+
+          <Input
+            label="Confirm new password"
+            placeholder="Re-enter your new password"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry
+            autoComplete="new-password"
+            returnKeyType="go"
+            onSubmitEditing={onSubmit}
           />
 
           <View className="mt-2">
-            <Button
-              onPress={handleSubmit(onSubmit)}
-              loading={loading}
-              disabled={done || linkState !== 'valid'}
-              fullWidth
-            >
-              Update Password
+            <Button onPress={onSubmit} loading={loading} disabled={done} fullWidth>
+              Update password
             </Button>
+          </View>
+
+          <View className="mt-4 items-center">
+            <Pressable onPress={handleResend} disabled={resending}>
+              <Text className="text-sm font-semibold text-primary">
+                {resending ? 'Sending…' : "Didn't get a code? Send it again"}
+              </Text>
+            </Pressable>
+          </View>
+
+          <View className="mt-6 items-center">
+            <Pressable onPress={() => router.replace('/(auth)/sign-in' as any)}>
+              <Text className="text-sm font-semibold text-text-muted dark:text-slate-400">
+                ← Back to sign in
+              </Text>
+            </Pressable>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
