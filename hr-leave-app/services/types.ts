@@ -186,6 +186,30 @@ export interface RegistrationService {
     profileIds: string[],
     options?: { allowInactive?: boolean },
   ): Promise<RequestProfileVerificationResult[]>;
+
+  /**
+   * Sets each selected employee's status to info_rejected (with optional
+   * HR comment), inserts an in-app notification, and sends the
+   * `info_form_request` email. No password reset — the recipient signs
+   * in with their existing credentials and is routed to the form. Used
+   * by the "Send Info Form Request" bulk action and the matching Edit
+   * Employee radio.
+   */
+  requestInfoFormUpdate(
+    profileIds: string[],
+    comment?: string,
+  ): Promise<RequestProfileVerificationResult[]>;
+
+  /**
+   * Manual one-off warning HR can fire at any time on uncompleted
+   * forms. Logs to form_warnings_log (warning_type='manual') and emails
+   * a `manual_form_warning` to each recipient with the optional custom
+   * message. Does NOT change status.
+   */
+  sendFormWarning(
+    profileIds: string[],
+    message?: string,
+  ): Promise<RequestProfileVerificationResult[]>;
 }
 
 // ============================================================

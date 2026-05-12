@@ -45,6 +45,14 @@ export interface Profile {
    * for any active employee; HR edits in Edit Employee.
    */
   annual_leave_entitlement_days: number | null;
+  /**
+   * Opts this employee in/out of the daily form-warning cron. When
+   * true (default) and they sit in pending_info / info_rejected past
+   * day 3, the daily check emails them + HR; on day 4 the salary-hold
+   * email goes out. HR can toggle off per-employee in Edit Employee
+   * for special cases. See migration 031.
+   */
+  warn_on_uncompleted_form: boolean;
   is_active: boolean;
   registration_status: RegistrationStatus;
   must_change_password: boolean;

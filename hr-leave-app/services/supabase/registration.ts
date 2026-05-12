@@ -403,4 +403,97 @@ export const registrationService: RegistrationService = {
     });
     return (result.results ?? []) as RequestProfileVerificationResult[];
   },
+
+  async requestInfoFormUpdate(profileIds, comment) {
+    // No password reset. For each employee: demote to info_rejected
+    // (preserving info_rejected meaning — HR needs changes), set the
+    // optional comment as registration_note, insert in-app notif, send
+    // the `info_form_request` email. Iterates client-side because each
+    // step uses an already-wired service / edge function.
+    const results: RequestProfileVerificationResult[] = [];
+    for (const id of profileIds) {
+      try {
+        const { data: profile, error: profErr } = await supabase
+          .from('profiles')
+          .select('id, email, full_name, registration_status, is_active')
+          .eq('id', id)
+          .single();
+        if (profErr || !profile) throw new Error('Profile not found');
+        if (!profile.is_active) {
+          throw new Error('Cannot request info update from an inactive employee');
+        }
+
+        const { error: updErr } = await supabase
+          .from('profiles')
+          .update({
+            registration_status: 'info_rejected',
+            registration_note: comment?.trim() || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', id);
+        if (updErr) throw new Error(updErr.message);
+
+        await supabase.from('notifications').insert({
+          user_id: id,
+          type: 'registration_rejected',
+          title: 'HR has asked you to update your profile',
+          body: comment?.trim() || 'Please sign in and update your registration info.',
+        });
+
+        try {
+          await callEdgeFunction('send-registration-email', {
+            type: 'info_form_request',
+            recipientEmail: profile.email,
+            recipientName: profile.full_name,
+            data: { reason: comment?.trim() },
+          });
+        } catch {
+          /* email failure is non-fatal — status change + notif already landed */
+        }
+
+        results.push({ profile_id: id, success: true });
+      } catch (err: any) {
+        results.push({ profile_id: id, success: false, error: err.message });
+      }
+    }
+    return results;
+  },
+
+  async sendFormWarning(profileIds, message) {
+    // Ad-hoc HR warning. Calls log_manual_form_warning to record it,
+    // then sends the `manual_form_warning` email. No status change.
+    const results: RequestProfileVerificationResult[] = [];
+    for (const id of profileIds) {
+      try {
+        const { data: profile, error: profErr } = await supabase
+          .from('profiles')
+          .select('id, email, full_name, is_active')
+          .eq('id', id)
+          .single();
+        if (profErr || !profile) throw new Error('Profile not found');
+
+        const { error: logErr } = await supabase.rpc('log_manual_form_warning', {
+          p_employee_id: id,
+          p_message: message?.trim() || null,
+        });
+        if (logErr) throw new Error(logErr.message);
+
+        try {
+          await callEdgeFunction('send-registration-email', {
+            type: 'manual_form_warning',
+            recipientEmail: profile.email,
+            recipientName: profile.full_name,
+            data: { message: message?.trim() },
+          });
+        } catch {
+          /* same as above — log already saved */
+        }
+
+        results.push({ profile_id: id, success: true });
+      } catch (err: any) {
+        results.push({ profile_id: id, success: false, error: err.message });
+      }
+    }
+    return results;
+  },
 };

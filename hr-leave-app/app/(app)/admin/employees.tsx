@@ -16,12 +16,14 @@ import {
   documentService,
   profileCapabilitiesService,
   lookupService,
+  authService,
   canonicaliseDepartment,
   canonicaliseDesignation,
 } from '@/services';
 import { supabase } from '@/services/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { getRoleLabel, getInitials } from '@/lib/utils';
+import { rotateImageBlob } from '@/lib/image-rotation';
 import { Role } from '@/types/enums';
 import type { Profile } from '@/types/models';
 
@@ -89,7 +91,27 @@ interface EditDialogState {
   is_active: boolean;
   show_all_supervisors: boolean;
   show_all_managers: boolean;
-  send_invite_now: boolean;
+  /**
+   * Replaces the old single `send_invite_now`. Mutually exclusive
+   * actions, picked via radio in the dialog:
+   *   - 'none'      → save only, no email
+   *   - 'reset'     → send password reset OTP, no status change
+   *   - 'invite'    → send reset OTP THEN, on success, info-form
+   *                   request (= both, sequenced)
+   *   - 'info_form' → send info-form request only (status →
+   *                   info_rejected). No password reset.
+   *   - 'warning'   → send manual warning email (no status change)
+   */
+  email_action: 'none' | 'reset' | 'invite' | 'info_form' | 'warning';
+  /** Free-text comment HR wants the employee to see (info_form / warning). */
+  email_action_comment: string;
+  /** Per-employee opt-in for the daily auto-warning cron. */
+  warn_on_uncompleted_form: boolean;
+  /** Existing on-file ID document, preview-only inside this dialog. */
+  id_document_url: string | null;
+  id_document_signed_url: string;
+  doc_rotation: number;
+  doc_rotation_saving: boolean;
   // Capability flags layered on top of Role (profile_capabilities table).
   // Stored separately so HR can grant approval / decision rights without
   // changing role assignments. Loaded on edit-open, persisted on submit.
@@ -119,7 +141,13 @@ const INITIAL_DIALOG: EditDialogState = {
   is_active: true,
   show_all_supervisors: false,
   show_all_managers: false,
-  send_invite_now: false,
+  email_action: 'none',
+  email_action_comment: '',
+  warn_on_uncompleted_form: true,
+  id_document_url: null,
+  id_document_signed_url: '',
+  doc_rotation: 0,
+  doc_rotation_saving: false,
   is_general_manager: false,
   is_operations_manager: false,
   can_approve_project_hours_changes: false,
@@ -192,7 +220,8 @@ const EDIT_DRAFT_KEYS: (keyof EditDialogState)[] = [
   'full_name', 'email', 'emp_code', 'phone', 'job_title', 'start_date',
   'role', 'department', 'supervisor_id', 'manager_id', 'workday_hours',
   'annual_leave_entitlement_days',
-  'is_active', 'show_all_supervisors', 'show_all_managers', 'send_invite_now',
+  'is_active', 'show_all_supervisors', 'show_all_managers',
+  'email_action', 'email_action_comment', 'warn_on_uncompleted_form',
   'is_general_manager', 'is_operations_manager',
   'can_approve_project_hours_changes', 'can_close_month',
 ];
@@ -751,32 +780,188 @@ function EditEmployeeDialog({
           <MenuItem value="inactive">Inactive</MenuItem>
         </MuiTextField>
 
-        {/* Send invite now — available for any active employee (first send or resend) */}
-        {canShowSendInviteNow && (
-          <div style={{ marginTop: 8, padding: 12, borderRadius: 8, border: '1px dashed rgba(148,163,184,0.5)' }}>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={state.send_invite_now}
-                  onChange={(e: any) => onChange('send_invite_now', e.target.checked)}
-                />
-              }
-              label={
-                <span style={{ fontSize: 13 }}>
-                  <strong>
-                    {isFirstInvite ? 'Send invite email after saving.' : 'Resend invite email after saving (regenerates password).'}
-                  </strong>{' '}
-                  <span style={{ opacity: 0.7 }}>
-                    {isFirstInvite
-                      ? "Use this once you've finished filling in the missing fields for a Not-Invited employee."
-                      : 'Useful if the employee lost the original email or you just changed their email address.'}
-                  </span>
-                </span>
-              }
-              sx={{ ml: 0 }}
-            />
+        {/* ID document on file — preview + rotate-and-save. Mirrors the
+            Review Registration dialog so HR doesn't have to leave Edit
+            to fix a sideways scan. PDFs render as a clickable card; only
+            images get the rotate button. */}
+        {state.id_document_url && (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.7, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              ID Document on File
+            </div>
+            {state.id_document_signed_url ? (
+              <>
+                {/\.pdf$/i.test(state.id_document_url) ? (
+                  <a
+                    href={state.id_document_signed_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: 12,
+                      border: '1px solid rgba(148,163,184,0.4)',
+                      borderRadius: 8,
+                      textDecoration: 'none',
+                      color: 'inherit',
+                    }}
+                  >
+                    <span style={{ fontSize: 22 }}>📄</span>
+                    <span style={{ fontSize: 13 }}>
+                      {state.id_document_url.split('/').pop()}
+                      <br />
+                      <span style={{ fontSize: 11, opacity: 0.7 }}>Click to open in a new tab</span>
+                    </span>
+                  </a>
+                ) : (
+                  <>
+                    <a
+                      href={state.id_document_signed_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'block',
+                        border: '1px solid rgba(148,163,184,0.4)',
+                        borderRadius: 8,
+                        padding: 16,
+                        backgroundColor: 'rgba(255,255,255,0.02)',
+                      }}
+                      title="Click to open full size"
+                    >
+                      <img
+                        src={state.id_document_signed_url}
+                        alt="ID document"
+                        style={{
+                          display: 'block',
+                          maxWidth: '100%',
+                          maxHeight: 240,
+                          margin: '0 auto',
+                          transform: `rotate(${state.doc_rotation}deg)`,
+                          transition: 'transform 200ms',
+                        }}
+                      />
+                    </a>
+                    <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <MuiButton
+                        size="small"
+                        variant="outlined"
+                        onClick={() => onChange('doc_rotation', (state.doc_rotation + 90) % 360)}
+                        disabled={state.doc_rotation_saving}
+                        title="Rotate 90° clockwise — click Save rotation to persist"
+                        sx={{ textTransform: 'none' }}
+                      >
+                        ⟲ Rotate 90°
+                      </MuiButton>
+                      {state.doc_rotation !== 0 && (
+                        <>
+                          <MuiButton
+                            size="small"
+                            variant="contained"
+                            color="success"
+                            onClick={() => onChange('__save_rotation__', true)}
+                            disabled={state.doc_rotation_saving}
+                            sx={{ textTransform: 'none' }}
+                          >
+                            {state.doc_rotation_saving ? 'Saving…' : 'Save rotation'}
+                          </MuiButton>
+                          <MuiButton
+                            size="small"
+                            color="inherit"
+                            onClick={() => onChange('doc_rotation', 0)}
+                            disabled={state.doc_rotation_saving}
+                            sx={{ textTransform: 'none' }}
+                          >
+                            Reset
+                          </MuiButton>
+                        </>
+                      )}
+                    </div>
+                  </>
+                )}
+              </>
+            ) : (
+              <div style={{ fontSize: 12, opacity: 0.6, fontStyle: 'italic' }}>Loading preview…</div>
+            )}
           </div>
         )}
+
+        {/* Email actions — mutually exclusive (radio). Picking Invite
+            is the same as picking Reset + Info Form; we send the reset
+            first and the form request after the reset succeeds, per
+            the agreed sequence. Auto-warning opt-in lives at the
+            bottom so HR can toggle it independent of any send action. */}
+        {canShowSendInviteNow && (
+          <div style={{ marginTop: 8, padding: 12, borderRadius: 8, border: '1px dashed rgba(148,163,184,0.5)' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.75, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Email After Save
+            </div>
+            {([
+              { val: 'none',      label: 'Save only',                     hint: 'No email.' },
+              { val: 'reset',     label: 'Send password reset',           hint: 'Just the 6-digit OTP. Status unchanged.' },
+              { val: 'invite',    label: 'Send invite (reset + form)',    hint: 'Two emails, sent in order: password reset first; on success, info-form request.' },
+              { val: 'info_form', label: 'Send info-form request',        hint: 'No password reset. Sets status to Info Rejected and emails them a link to update.' },
+              { val: 'warning',   label: 'Send manual warning',           hint: 'Logs to form_warnings_log with type=manual. No status change.' },
+            ] as const).map((opt) => (
+              <FormControlLabel
+                key={opt.val}
+                control={
+                  <Checkbox
+                    checked={state.email_action === opt.val}
+                    onChange={() => onChange('email_action', opt.val)}
+                    sx={{ py: 0.5 }}
+                  />
+                }
+                label={
+                  <span style={{ fontSize: 13 }}>
+                    <strong>{opt.label}</strong>{' '}
+                    <span style={{ opacity: 0.7 }}>— {opt.hint}</span>
+                  </span>
+                }
+                sx={{ ml: 0, display: 'flex', mb: 0.25 }}
+              />
+            ))}
+
+            {(state.email_action === 'info_form' || state.email_action === 'warning') && (
+              <MuiTextField
+                label={state.email_action === 'info_form' ? 'Comment for employee (optional)' : 'Warning message (optional)'}
+                value={state.email_action_comment}
+                onChange={(e: any) => onChange('email_action_comment', e.target.value)}
+                fullWidth size="small"
+                multiline rows={2}
+                placeholder={state.email_action === 'info_form'
+                  ? 'e.g. "Please update your iqama expiry and re-upload the scan."'
+                  : 'e.g. "Day-5 reminder: this is now blocking payroll."'}
+                sx={{ mt: 1 }}
+              />
+            )}
+          </div>
+        )}
+
+        {/* Auto-warning opt-in. Persisted to profiles.warn_on_uncompleted_form
+            (migration 031). The daily cron only emails when this is true
+            AND the employee has been in pending_info / info_rejected
+            for 3+ days. */}
+        <div style={{ marginTop: 4, padding: 10, borderRadius: 8, border: '1px solid rgba(148,163,184,0.25)' }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={state.warn_on_uncompleted_form}
+                onChange={(e: any) => onChange('warn_on_uncompleted_form', e.target.checked)}
+                size="small"
+              />
+            }
+            label={
+              <span style={{ fontSize: 13 }}>
+                <strong>Auto-warn if registration form goes uncompleted</strong>{' '}
+                <span style={{ opacity: 0.7 }}>
+                  — at day 3 a reminder email is sent to the employee + HR; at day 4 a "salary on hold" email is sent.
+                </span>
+              </span>
+            }
+            sx={{ ml: 0 }}
+          />
+        </div>
 
         {/* Capability flags — layered on top of Role for specific approval
             and decision rights without growing the Role enum. */}
@@ -840,9 +1025,11 @@ function EditEmployeeDialog({
           disabled={!isValid || state.submitting}
           sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, px: 3 }}
         >
-          {state.submitting
-            ? (state.send_invite_now ? 'Saving + Sending...' : 'Saving...')
-            : (state.send_invite_now ? 'Save + Send Invite' : 'Save Changes')}
+          {(() => {
+            const willSendEmail = state.email_action !== 'none';
+            if (state.submitting) return willSendEmail ? 'Saving + sending…' : 'Saving…';
+            return willSendEmail ? 'Save + send email' : 'Save Changes';
+          })()}
         </MuiButton>
       </DialogActions>
     </Dialog>
@@ -1137,37 +1324,76 @@ function InviteEmployeeDialog({
   );
 }
 
-// --------------- Resend Sign-in Email Dialog ---------------
+// --------------- Bulk Email Action Dialog ---------------
 
 /**
- * Bulk resend dialog. Lists every selected employee with an editable
- * email field, status chip, and an Inactive warning for is_active=false
- * rows. HR can:
- *   - Edit the destination email per-row (saves via update-employee-email
- *     edge function on confirm).
- *   - Remove rows they don't actually want to email (× icon).
- *   - Click Send to fire the resend for whatever's left.
+ * Bulk action dialog. Used by the four buttons in the Employee
+ * Directory header (Send Invite / Reset / Info Form Request / Warning).
+ * One dialog, four behaviors — the `action` prop drives the title,
+ * subtitle, CTA wording, and whether the comment box renders.
  *
- * Status-based behavior is enforced server-side: active employees get
- * demoted to pending_info; other statuses just get the email.
+ * Common features regardless of action:
+ *   - Editable email per row (saves via update-employee-email
+ *     edge function before the bulk send fires).
+ *   - Remove × per row.
+ *   - Inactive-row warning chip + top-of-dialog summary.
  */
+const ACTION_META: Record<
+  'reset' | 'invite' | 'info_form' | 'warning',
+  { title: string; subtitle: string; cta: string; commentLabel?: string; commentPlaceholder?: string }
+> = {
+  reset: {
+    title: 'Send password reset',
+    subtitle: 'Each recipient gets a 6-digit OTP. No status change — they reset and sign in normally.',
+    cta: 'Send password reset',
+  },
+  invite: {
+    title: 'Send invite (reset + info-form)',
+    subtitle: 'Two emails sent in order: password-reset first, then the info-form request on success. Active employees get demoted to Info Rejected for the form step.',
+    cta: 'Send invite to',
+    commentLabel: 'Comment for employee (optional)',
+    commentPlaceholder: 'e.g. "Welcome back — please re-confirm your iqama details."',
+  },
+  info_form: {
+    title: 'Send info-form request',
+    subtitle: 'No password reset. Status moves to Info Rejected; recipient signs in with their current password and sees the task on their dashboard.',
+    cta: 'Send info-form request',
+    commentLabel: 'Comment for employee (optional)',
+    commentPlaceholder: 'e.g. "Please update your iqama expiry and re-upload the scan."',
+  },
+  warning: {
+    title: 'Send manual warning',
+    subtitle: 'Logs to form_warnings_log with type=manual. Sends the manual_form_warning email. No status change.',
+    cta: 'Send warning',
+    commentLabel: 'Warning message (optional)',
+    commentPlaceholder: 'e.g. "Final reminder before this blocks payroll."',
+  },
+};
+
 function ResendEmailDialog({
   open,
+  action,
   rows,
+  comment,
   submitting,
   onChangeEmail,
+  onChangeComment,
   onRemoveRow,
   onClose,
   onConfirm,
 }: {
   open: boolean;
+  action: 'reset' | 'invite' | 'info_form' | 'warning';
   rows: ResendRow[];
+  comment: string;
   submitting: boolean;
   onChangeEmail: (id: string, email: string) => void;
+  onChangeComment: (comment: string) => void;
   onRemoveRow: (id: string) => void;
   onClose: () => void;
   onConfirm: () => void;
 }) {
+  const meta = ACTION_META[action];
   const inactiveCount = rows.filter((r) => !r.is_active).length;
   const editedCount = rows.filter((r) => r.emailDirty).length;
   const validEmail = (e: string) => /^\S+@\S+\.\S+$/.test(e.trim());
@@ -1182,12 +1408,9 @@ function ResendEmailDialog({
       PaperProps={{ sx: { borderRadius: 3, backgroundImage: 'none' } }}
     >
       <DialogTitle sx={{ pb: 1, pt: 3, px: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
-        <div style={{ fontSize: 18, fontWeight: 700 }}>Resend sign-in email</div>
+        <div style={{ fontSize: 18, fontWeight: 700 }}>{meta.title}</div>
         <div style={{ fontSize: 13, fontWeight: 400, opacity: 0.65, marginTop: 4 }}>
-          Each recipient gets a 6-digit code by email. Active employees are demoted
-          to Pending Info so they refill the registration form on next sign-in;
-          other statuses get the email only. Edit the destination email per-row if
-          needed.
+          {meta.subtitle} Edit the destination email per-row if needed.
         </div>
       </DialogTitle>
 
@@ -1296,8 +1519,19 @@ function ResendEmailDialog({
         {editedCount > 0 && (
           <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
             {editedCount} email{editedCount === 1 ? '' : 's'} edited &mdash; the
-            change will be saved to auth + profiles before the resend fires.
+            change will be saved to auth + profiles before the send fires.
           </div>
+        )}
+
+        {meta.commentLabel && (
+          <MuiTextField
+            label={meta.commentLabel}
+            value={comment}
+            onChange={(e: any) => onChangeComment(e.target.value)}
+            fullWidth size="small" multiline rows={2}
+            placeholder={meta.commentPlaceholder}
+            sx={{ mt: 1 }}
+          />
         )}
       </DialogContent>
 
@@ -1313,7 +1547,7 @@ function ResendEmailDialog({
           disabled={submitting || rows.length === 0 || !allValid}
           sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, px: 3 }}
         >
-          {submitting ? 'Sending…' : `Send to ${rows.length}`}
+          {submitting ? 'Sending…' : `${meta.cta} (${rows.length})`}
         </MuiButton>
       </DialogActions>
     </Dialog>
@@ -1396,6 +1630,7 @@ export default function EmployeesScreen() {
       manager_id: emp.manager_id,
       workday_hours: String(emp.workday_hours),
       annual_leave_entitlement_days: emp.annual_leave_entitlement_days != null ? String(emp.annual_leave_entitlement_days) : '21',
+      warn_on_uncompleted_form: emp.warn_on_uncompleted_form !== false,
       is_active: emp.is_active,
       ...draftFields,
     });
@@ -1406,6 +1641,24 @@ export default function EmployeesScreen() {
         setDialog((s) =>
           s.employee?.id === emp.id && !draftFields.emp_code ? { ...s, emp_code: doc.emp_code } : s,
         );
+      }
+      // Surface the on-file ID document in the dialog. Fetch a short
+      // signed URL (10 min) so the preview can render. Non-fatal if
+      // the document doesn't exist yet — preview just hides.
+      if (doc?.id_document_url) {
+        setDialog((s) =>
+          s.employee?.id === emp.id ? { ...s, id_document_url: doc.id_document_url } : s,
+        );
+        supabase.storage
+          .from('employee-id-documents')
+          .createSignedUrl(doc.id_document_url, 60 * 10)
+          .then(({ data }) => {
+            if (!data?.signedUrl) return;
+            setDialog((s) =>
+              s.employee?.id === emp.id ? { ...s, id_document_signed_url: data.signedUrl } : s,
+            );
+          })
+          .catch(() => { /* preview just won't render */ });
       }
     } catch {
       // Non-fatal — emp_code stays empty and HR will see the required-field warning.
@@ -1448,7 +1701,51 @@ export default function EmployeesScreen() {
   };
 
   const handleChange = (field: string, value: any) => {
+    // Synthetic action: the document preview dispatches __save_rotation__
+    // through the same onChange path so the parent owns the
+    // Storage write logic. Keeps the dialog component pure.
+    if (field === '__save_rotation__') {
+      void handleSaveEditRotation();
+      return;
+    }
     setDialog((s) => ({ ...s, [field]: value, error: '' }));
+  };
+
+  /**
+   * Persist the in-dialog rotation back to Storage, then refresh the
+   * signed URL so the preview shows the saved bytes. Same flow as the
+   * Review Registration dialog's rotate-and-save.
+   */
+  const handleSaveEditRotation = async () => {
+    const path = dialog.id_document_url;
+    const url = dialog.id_document_signed_url;
+    if (!path || !url || dialog.doc_rotation === 0) return;
+    setDialog((s) => ({ ...s, doc_rotation_saving: true }));
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('Could not fetch current file');
+      const blob = await resp.blob();
+      if (!blob.type.startsWith('image/')) {
+        throw new Error('Rotation is only supported for image files');
+      }
+      const rotated = await rotateImageBlob(blob, dialog.doc_rotation);
+      const { error: upErr } = await supabase.storage
+        .from('employee-id-documents')
+        .upload(path, rotated, { upsert: true, contentType: blob.type });
+      if (upErr) throw new Error(upErr.message);
+      const { data: signed } = await supabase.storage
+        .from('employee-id-documents')
+        .createSignedUrl(path, 60 * 10);
+      setDialog((s) => ({
+        ...s,
+        id_document_signed_url: signed?.signedUrl || s.id_document_signed_url,
+        doc_rotation: 0,
+        doc_rotation_saving: false,
+      }));
+      setSuccessMsg('Document rotation saved.');
+    } catch (err: any) {
+      setDialog((s) => ({ ...s, doc_rotation_saving: false, error: err.message || 'Rotation save failed' }));
+    }
   };
 
   // Persist edit-form fields to draft on every change, keyed by employee id
@@ -1523,6 +1820,7 @@ export default function EmployeesScreen() {
         manager_id: dialog.manager_id,
         workday_hours: parseFloat(dialog.workday_hours) || 8,
         annual_leave_entitlement_days: parseFloat(dialog.annual_leave_entitlement_days) || 21,
+        warn_on_uncompleted_form: dialog.warn_on_uncompleted_form,
         is_active: dialog.is_active,
       } as any);
 
@@ -1545,18 +1843,54 @@ export default function EmployeesScreen() {
         can_close_month: dialog.can_close_month,
       });
 
-      // 4. Optional: HR ticked "Send invite now". Works for any active
-      //    employee — first invite for not_invited, resend (regenerates
-      //    password) for everyone else.
-      let inviteSummary = '';
-      if (dialog.send_invite_now && dialog.is_active) {
-        const results = await registrationService.sendInvites([employeeId]);
-        const result = results[0];
-        const verb = dialog.employee.registration_status === 'not_invited' ? 'invite emailed' : 'invite resent';
-        inviteSummary = result?.success
-          ? ` and ${verb}`
-          : ` but invite email failed: ${result?.error || 'unknown error'}`;
+      // 4. Email action dispatch. Mutually exclusive (radio).
+      //
+      //    'reset'     → just OTP, no status change
+      //    'info_form' → demote to info_rejected + Resend email, no OTP
+      //    'invite'    → reset FIRST, then info_form (sequenced per the
+      //                  agreed flow)
+      //    'warning'   → manual warning email + log row, no status change
+      //    'none'      → save only
+      //
+      //    Skips email side-effects entirely if the employee is inactive
+      //    (they can't sign in anyway, so emails would dead-end).
+      const summaryParts: string[] = [];
+      const action = dialog.is_active ? dialog.email_action : 'none';
+      const targetEmail = newEmail || oldEmail;
+      const comment = dialog.email_action_comment.trim() || undefined;
+
+      const fireReset = async () => {
+        await authService.resetPasswordForEmail(targetEmail);
+        summaryParts.push('password reset sent');
+      };
+      const fireInfoForm = async () => {
+        const r = await registrationService.requestInfoFormUpdate([employeeId], comment);
+        const ok = r[0]?.success;
+        summaryParts.push(ok ? 'info-form request sent' : `info-form request failed: ${r[0]?.error || 'unknown'}`);
+      };
+      const fireWarning = async () => {
+        const r = await registrationService.sendFormWarning([employeeId], comment);
+        const ok = r[0]?.success;
+        summaryParts.push(ok ? 'warning sent' : `warning failed: ${r[0]?.error || 'unknown'}`);
+      };
+
+      try {
+        if (action === 'reset') {
+          await fireReset();
+        } else if (action === 'invite') {
+          // Per HR spec: reset email first, info-form request after it
+          // succeeds. If reset fails, don't fire info_form.
+          await fireReset();
+          await fireInfoForm();
+        } else if (action === 'info_form') {
+          await fireInfoForm();
+        } else if (action === 'warning') {
+          await fireWarning();
+        }
+      } catch (err: any) {
+        summaryParts.push(`email action failed: ${err.message || 'unknown'}`);
       }
+      const inviteSummary = summaryParts.length ? ' (' + summaryParts.join('; ') + ')' : '';
 
       setEditDraft(null);
       setDialog(INITIAL_DIALOG);
@@ -1709,13 +2043,21 @@ export default function EmployeesScreen() {
   //     before sending. The legacy "demote active → pending_info"
   //     semantic still applies for rows currently at status='active';
   //     all other statuses get a pure resend.
+  // The bulk dialog used to do one thing ("resend sign-in email").
+  // It now supports four mutually-exclusive actions, picked by which
+  // button HR clicks in the header. The dialog UX stays the same
+  // (editable emails + remove × per row + inactive warnings); only
+  // the title, CTA wording, and dispatch differ.
+  type BulkAction = 'reset' | 'invite' | 'info_form' | 'warning';
   const [bulkVerifying, setBulkVerifying] = useState(false);
   const [resendDialog, setResendDialog] = useState<{
     open: boolean;
+    action: BulkAction;
     rows: ResendRow[];
-  }>({ open: false, rows: [] });
+    comment: string;
+  }>({ open: false, action: 'reset', rows: [], comment: '' });
 
-  const openResendDialog = (ids: string[]) => {
+  const openBulkDialog = (action: BulkAction, ids: string[]) => {
     if (ids.length === 0) return;
     const rows: ResendRow[] = ids
       .map((id) => employees.find((e) => e.id === id))
@@ -1729,16 +2071,14 @@ export default function EmployeesScreen() {
         registration_status: e.registration_status,
         emailDirty: false,
       }));
-    setResendDialog({ open: true, rows });
+    setResendDialog({ open: true, action, rows, comment: '' });
   };
 
-  const runResend = async (rows: ResendRow[]) => {
+  const runBulk = async (action: BulkAction, rows: ResendRow[], comment: string) => {
     if (rows.length === 0) return;
     setBulkVerifying(true);
     try {
-      // 1. Persist any per-row email changes first. We do these in
-      //    sequence rather than parallel so a partial failure leaves a
-      //    clear trail in the audit log (and rate limits stay sane).
+      // 1. Persist per-row email changes first (same as before).
       const emailFailures: string[] = [];
       for (const r of rows) {
         if (r.emailDirty && r.email.trim() && r.email.trim().toLowerCase() !== r.original_email.toLowerCase()) {
@@ -1750,16 +2090,59 @@ export default function EmployeesScreen() {
         }
       }
 
-      // 2. Bulk send. allowInactive is set unconditionally — the dialog
-      //    already showed an explicit warning for any inactive row and
-      //    HR clicked Send anyway. The edge function still enforces the
-      //    HR/HR-Director caller role.
+      // 2. Dispatch the chosen action. All call paths return the same
+      //    RequestProfileVerificationResult[] shape so the summary
+      //    rendering below is identical.
       const ids = rows.map((r) => r.id);
-      const results = await registrationService.requestProfileVerification(ids, { allowInactive: true });
+      const trimmed = comment.trim() || undefined;
+      let results: { profile_id: string; success: boolean; error?: string }[];
+
+      if (action === 'reset') {
+        // Password-reset only. authService.resetPasswordForEmail is
+        // per-email; iterate to keep the return shape consistent.
+        results = [];
+        for (const r of rows) {
+          try {
+            await authService.resetPasswordForEmail(r.email.trim());
+            results.push({ profile_id: r.id, success: true });
+          } catch (err: any) {
+            results.push({ profile_id: r.id, success: false, error: err.message || 'reset failed' });
+          }
+        }
+      } else if (action === 'invite') {
+        // Reset first, then info-form request per HR's agreed flow.
+        results = [];
+        for (const r of rows) {
+          try {
+            await authService.resetPasswordForEmail(r.email.trim());
+            const ir = await registrationService.requestInfoFormUpdate([r.id], trimmed);
+            const ok = ir[0]?.success ?? false;
+            results.push({
+              profile_id: r.id,
+              success: ok,
+              error: ok ? undefined : (ir[0]?.error || 'info-form step failed'),
+            });
+          } catch (err: any) {
+            results.push({ profile_id: r.id, success: false, error: err.message || 'invite failed' });
+          }
+        }
+      } else if (action === 'info_form') {
+        results = await registrationService.requestInfoFormUpdate(ids, trimmed);
+      } else {
+        // warning
+        results = await registrationService.sendFormWarning(ids, trimmed);
+      }
+
       const okCount = results.filter((r) => r.success).length;
       const sendFailures = results.filter((r) => !r.success);
 
-      let msg = `Sign-in email sent to ${okCount} of ${results.length} employee(s).`;
+      const labels: Record<BulkAction, string> = {
+        reset:     'password reset',
+        invite:    'invite (reset + info-form)',
+        info_form: 'info-form request',
+        warning:   'manual warning',
+      };
+      let msg = `${labels[action]} sent to ${okCount} of ${results.length} employee(s).`;
       if (emailFailures.length > 0) {
         msg += ` Email-update issues: ${emailFailures.slice(0, 2).join('; ')}${emailFailures.length > 2 ? '…' : ''}`;
       }
@@ -1768,11 +2151,11 @@ export default function EmployeesScreen() {
       }
       setSuccessMsg(msg);
       setSelectedIds([]);
-      setResendDialog({ open: false, rows: [] });
+      setResendDialog({ open: false, action: 'reset', rows: [], comment: '' });
       invalidate();
       loadLookups();
     } catch (err: any) {
-      setSuccessMsg(`Bulk resend failed: ${err.message || 'unknown error'}`);
+      setSuccessMsg(`Bulk action failed: ${err.message || 'unknown error'}`);
     } finally {
       setBulkVerifying(false);
     }
@@ -1877,9 +2260,35 @@ export default function EmployeesScreen() {
               </button>
 
               <button
-                onClick={() => openResendDialog(selectedIds)}
+                onClick={() => openBulkDialog('reset', selectedIds)}
                 disabled={bulkSending || bulkVerifying}
-                title="Resend the sign-in email to selected employees. Active employees are demoted to Pending Info so they refill the form; other statuses get the email only. HR can edit each employee's email in the dialog before sending."
+                title="Send only the password-reset OTP. No status change. Use when employees have forgotten their password."
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '10px 16px',
+                  backgroundColor: (bulkSending || bulkVerifying) ? '#94A3B8' : '#2563EB',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: 10,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: (bulkSending || bulkVerifying) ? 'wait' : 'pointer',
+                  flexShrink: 0,
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                {`Send Reset Password (${selectedIds.length})`}
+              </button>
+
+              <button
+                onClick={() => openBulkDialog('info_form', selectedIds)}
+                disabled={bulkSending || bulkVerifying}
+                title="Demote to Info Rejected and email the employee asking them to update their profile info. No password reset. They sign in normally and see a task on their dashboard."
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -1896,10 +2305,39 @@ export default function EmployeesScreen() {
                 }}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9 11l3 3L22 4" />
-                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="9" y1="13" x2="15" y2="13" />
+                  <line x1="9" y1="17" x2="15" y2="17" />
                 </svg>
-                {bulkVerifying ? 'Sending...' : `Resend Sign-in Email (${selectedIds.length})`}
+                {`Send Info Form Request (${selectedIds.length})`}
+              </button>
+
+              <button
+                onClick={() => openBulkDialog('warning', selectedIds)}
+                disabled={bulkSending || bulkVerifying}
+                title="Send a manual warning email about an uncompleted form. Logs to form_warnings_log. No status change."
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '10px 16px',
+                  backgroundColor: (bulkSending || bulkVerifying) ? '#94A3B8' : '#DC2626',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: 10,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: (bulkSending || bulkVerifying) ? 'wait' : 'pointer',
+                  flexShrink: 0,
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                {`Send Warning (${selectedIds.length})`}
               </button>
             </>
           )}
@@ -1966,7 +2404,9 @@ export default function EmployeesScreen() {
                 />
                 <ResendEmailDialog
                   open={resendDialog.open}
+                  action={resendDialog.action}
                   rows={resendDialog.rows}
+                  comment={resendDialog.comment}
                   submitting={bulkVerifying}
                   onChangeEmail={(id, email) =>
                     setResendDialog((prev) => ({
@@ -1978,14 +2418,17 @@ export default function EmployeesScreen() {
                       ),
                     }))
                   }
+                  onChangeComment={(comment) =>
+                    setResendDialog((prev) => ({ ...prev, comment }))
+                  }
                   onRemoveRow={(id) =>
                     setResendDialog((prev) => ({
                       ...prev,
                       rows: prev.rows.filter((r) => r.id !== id),
                     }))
                   }
-                  onClose={() => setResendDialog({ open: false, rows: [] })}
-                  onConfirm={() => runResend(resendDialog.rows)}
+                  onClose={() => setResendDialog({ open: false, action: 'reset', rows: [], comment: '' })}
+                  onConfirm={() => runBulk(resendDialog.action, resendDialog.rows, resendDialog.comment)}
                 />
                 <Snackbar
                   open={!!successMsg}
