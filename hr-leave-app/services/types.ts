@@ -19,6 +19,7 @@ import type {
   RenewalTaskHistory,
   RenewalTaskFilters,
   RegistrationFormData,
+  RegistrationFieldEdits,
   InviteEmployeeData,
   CreateEmployeeData,
   SendInviteResult,
@@ -159,6 +160,14 @@ export interface RegistrationService {
   getPendingRegistrations(): Promise<PendingRegistration[]>;
   approveRegistration(userId: string, data: ApproveRegistrationData, approvedBy: string): Promise<Profile>;
   rejectRegistration(userId: string, reason: string, rejectedBy: string): Promise<Profile>;
+
+  // HR review-time edits to employee-supplied fields. Each property in
+  // `edits` that is non-undefined gets considered for update; the RPC
+  // logs each actual change to profile_audit_log. Email changes are
+  // separate (see updateRegistrationEmail) because they have to go
+  // through auth.admin.updateUserById.
+  updateRegistrationFields(userId: string, edits: RegistrationFieldEdits): Promise<Profile>;
+  updateRegistrationEmail(userId: string, newEmail: string): Promise<void>;
 
   // HR invite (legacy single-step; calls Edge Function — kept for backward compat)
   inviteEmployee(data: InviteEmployeeData, invitedBy: string): Promise<void>;

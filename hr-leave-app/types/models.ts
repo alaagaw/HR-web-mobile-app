@@ -450,6 +450,27 @@ export interface ApproveRegistrationData {
   manager_id: string | null;
 }
 
+/**
+ * HR-supplied overrides to a pending registration's employee-supplied
+ * fields, applied via the Review Registration dialog before approval.
+ * Every property is optional — undefined means "leave alone" and is
+ * translated to NULL on the RPC side. Empty string is a valid "set
+ * blank" intent and will be sent through (the RPC's IS DISTINCT FROM
+ * check decides if it's actually a change).
+ */
+export interface RegistrationFieldEdits {
+  full_name?: string;
+  phone?: string;
+  nationality?: string;
+  id_type?: IdType | '';
+  national_id_number?: string;
+  iqama_number?: string;
+  iqama_expiry?: string;     // ISO date (yyyy-mm-dd)
+  passport_number?: string;
+  passport_expiry?: string;  // ISO date
+  id_document_url?: string;  // storage path, not signed URL
+}
+
 // ============================================================
 // TIME TRACKING (Clock In / Clock Out)
 // ============================================================

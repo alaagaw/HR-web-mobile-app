@@ -246,6 +246,39 @@ export const registrationService: RegistrationService = {
     return profile as Profile;
   },
 
+  async updateRegistrationFields(userId, edits) {
+    // Translate "undefined" → NULL (no change). Empty strings are
+    // forwarded as-is so HR can intentionally blank a field.
+    const orNull = (v: unknown) => (v === undefined ? null : v);
+
+    const { data, error } = await supabase.rpc('hr_update_pending_profile', {
+      p_user_id: userId,
+      p_full_name:          orNull(edits.full_name),
+      p_phone:              orNull(edits.phone),
+      p_nationality:        orNull(edits.nationality),
+      p_id_type:            orNull(edits.id_type),
+      p_national_id_number: orNull(edits.national_id_number),
+      p_iqama_number:       orNull(edits.iqama_number),
+      p_iqama_expiry:       orNull(edits.iqama_expiry),
+      p_passport_number:    orNull(edits.passport_number),
+      p_passport_expiry:    orNull(edits.passport_expiry),
+      p_id_document_url:    orNull(edits.id_document_url),
+    });
+
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error('hr_update_pending_profile returned no data');
+    return data as Profile;
+  },
+
+  async updateRegistrationEmail(userId, newEmail) {
+    // Edge function handles the auth.admin.updateUserById call; trigger
+    // 015 (sync_profile_email) mirrors the new email into profiles.
+    await callEdgeFunction('update-employee-email', {
+      profile_id: userId,
+      new_email: newEmail,
+    });
+  },
+
   async rejectRegistration(userId, reason, rejectedBy) {
     const { error: profileError } = await supabase
       .from('profiles')
