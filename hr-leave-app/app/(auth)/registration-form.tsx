@@ -51,7 +51,6 @@ export default function RegistrationFormScreen() {
       full_name: '',
       phone: '',
       nationality: '',
-      birth_date: '',
       id_type: 'iqama',
       id_document_url: '',
       national_id_number: '',
@@ -101,7 +100,6 @@ export default function RegistrationFormScreen() {
           full_name: user.full_name || '',
           phone: user.phone || '',
           nationality: user.nationality || '',
-          birth_date: docRow?.birth_date || '',
           id_type: (docRow?.id_type as any) || 'iqama',
           id_document_url: docRow?.id_document_url || '',
           national_id_number: docRow?.national_id_number || '',
@@ -167,7 +165,6 @@ export default function RegistrationFormScreen() {
       'full_name',
       'phone',
       'nationality',
-      'birth_date',
       'id_type',
       'national_id_number',
       'iqama_number',
@@ -201,7 +198,6 @@ export default function RegistrationFormScreen() {
         full_name: data.full_name.trim(),
         phone: data.phone.trim(),
         nationality: data.nationality.trim(),
-        birth_date: data.birth_date,
         id_type: data.id_type,
         id_document_url: data.id_document_url,
         national_id_number: blank(data.national_id_number),
@@ -372,19 +368,6 @@ export default function RegistrationFormScreen() {
                 onChangeText={onChange}
                 error={errors.nationality?.message}
                 autoCapitalize="words"
-              />
-            )}
-          />
-
-          <Controller
-            control={control}
-            name="birth_date"
-            render={({ field: { onChange, value } }) => (
-              <NativeDateField
-                label="Date of Birth"
-                value={value}
-                onChange={onChange}
-                error={errors.birth_date?.message}
               />
             )}
           />

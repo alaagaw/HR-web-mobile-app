@@ -32,7 +32,8 @@ import { registrationService, userService } from '@/services';
 import { supabase } from '@/services/supabase/client';
 import { Role } from '@/types/enums';
 import { getRoleLabel } from '@/lib/utils';
-import type { PendingRegistration, Profile } from '@/types/models';
+import { FilePreviewModal } from '@/components/ui/file-preview-modal';
+import type { Attachment, PendingRegistration, Profile } from '@/types/models';
 
 const ROLE_OPTIONS = [
   { value: Role.Employee, label: 'Employee' },
@@ -95,6 +96,7 @@ export function ReviewRegistrationDialog({
 
   const [employees, setEmployees] = useState<Profile[]>([]);
   const [idDocSignedUrl, setIdDocSignedUrl] = useState<string>('');
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const [mode, setMode] = useState<'review' | 'reject'>('review');
   const [empCode, setEmpCode] = useState('');
@@ -129,6 +131,7 @@ export function ReviewRegistrationDialog({
     setManagerId(reg.manager_id);
 
     setIdDocSignedUrl('');
+    setPreviewOpen(false);
     const path = reg.employee_documents?.id_document_url;
     if (path) {
       supabase.storage
@@ -209,7 +212,31 @@ export function ReviewRegistrationDialog({
     doc?.id_type === 'passport' ? 'Passport Expiry' :
     doc?.id_type === 'iqama'    ? 'Iqama Expiry'    : '';
 
-  const isImage = /\.(jpe?g|png|webp)$/i.test(doc?.id_document_url || '');
+  // Derive file metadata from the storage path so FilePreviewModal can
+  // distinguish image vs PDF (same component PTO approvers use).
+  const docPath = doc?.id_document_url || '';
+  const isImage = /\.(jpe?g|png|webp)$/i.test(docPath);
+  const isPdf   = /\.pdf$/i.test(docPath);
+  const docFileName = docPath ? docPath.split('/').pop() || 'ID document' : '';
+  const docFileType = isPdf
+    ? 'application/pdf'
+    : /\.(jpe?g)$/i.test(docPath) ? 'image/jpeg'
+    : /\.png$/i.test(docPath)     ? 'image/png'
+    : /\.webp$/i.test(docPath)    ? 'image/webp'
+    : '';
+
+  const docAttachment: Attachment | null = idDocSignedUrl
+    ? {
+        id: 0,
+        request_id: reg?.id || '',
+        file_name: docFileName,
+        file_url: idDocSignedUrl,
+        file_size: 0,
+        file_type: docFileType,
+        uploaded_by: reg?.id || '',
+        uploaded_at: reg?.created_at || '',
+      }
+    : null;
 
   return (
     <>
@@ -287,30 +314,11 @@ export function ReviewRegistrationDialog({
 
               {/* Personal info */}
               <SectionLabel>Personal Info (employee-supplied)</SectionLabel>
-              <Box sx={{ display: 'flex', gap: 1.5 }}>
-                <MuiTextField
-                  label="Nationality"
-                  value={reg.nationality || ''}
-                  fullWidth size="small" disabled
-                />
-                <MuiTextField
-                  label="Date of Birth"
-                  value={doc?.birth_date || ''}
-                  fullWidth size="small" disabled
-                />
-              </Box>
-              <Box sx={{ display: 'flex', gap: 1.5 }}>
-                <MuiTextField
-                  label="Insurance Number"
-                  value={doc?.insurance_number || ''}
-                  fullWidth size="small" disabled
-                />
-                <MuiTextField
-                  label="Insurance Expiry"
-                  value={doc?.insurance_expiry || ''}
-                  fullWidth size="small" disabled
-                />
-              </Box>
+              <MuiTextField
+                label="Nationality"
+                value={reg.nationality || ''}
+                fullWidth size="small" disabled
+              />
 
               {/* Primary identification */}
               <SectionLabel>Primary Identification</SectionLabel>
@@ -334,19 +342,26 @@ export function ReviewRegistrationDialog({
                 />
               )}
 
-              {/* Document preview */}
+              {/* Document preview — same FilePreviewModal HR uses to review
+                  PTO request attachments. Image: clickable thumbnail; PDF:
+                  clickable file row. Both open the full-screen previewer
+                  with zoom + download. */}
               <Box>
                 <Box sx={{ fontSize: 11, fontWeight: 700, opacity: 0.7, mb: 0.75, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                   Uploaded Document
                 </Box>
-                {idDocSignedUrl ? (
+                {docAttachment ? (
                   <Box
+                    onClick={() => setPreviewOpen(true)}
                     sx={{
                       border: '1px solid',
                       borderColor: 'divider',
                       borderRadius: 2,
                       overflow: 'hidden',
                       bgcolor: 'background.default',
+                      cursor: 'pointer',
+                      transition: 'border-color 120ms',
+                      '&:hover': { borderColor: 'primary.main' },
                     }}
                   >
                     {isImage ? (
@@ -356,10 +371,16 @@ export function ReviewRegistrationDialog({
                         style={{ display: 'block', maxWidth: '100%', maxHeight: 320, margin: '0 auto' }}
                       />
                     ) : (
-                      <Box sx={{ p: 2 }}>
-                        <a href={idDocSignedUrl} target="_blank" rel="noreferrer" style={{ color: '#3B82F6', fontWeight: 600 }}>
-                          Open uploaded document ↗
-                        </a>
+                      <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        <Box sx={{ fontSize: 24 }}>📄</Box>
+                        <Box sx={{ flex: 1 }}>
+                          <Box sx={{ fontSize: 13, fontWeight: 600, color: 'primary.main' }}>
+                            {docFileName}
+                          </Box>
+                          <Box sx={{ fontSize: 11, opacity: 0.6 }}>
+                            Click to preview
+                          </Box>
+                        </Box>
                       </Box>
                     )}
                   </Box>
@@ -544,6 +565,12 @@ export function ReviewRegistrationDialog({
           {snack.message}
         </MuiAlert>
       </Snackbar>
+
+      <FilePreviewModal
+        visible={previewOpen && !!docAttachment}
+        attachment={docAttachment}
+        onClose={() => setPreviewOpen(false)}
+      />
     </>
   );
 }

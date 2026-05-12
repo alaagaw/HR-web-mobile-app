@@ -369,7 +369,6 @@ export interface RegistrationFormData {
   full_name: string;
   phone: string;
   nationality: string;
-  birth_date: string;
 
   // Primary identification
   id_type: IdType;

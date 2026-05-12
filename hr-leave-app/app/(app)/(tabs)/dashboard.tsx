@@ -1067,15 +1067,20 @@ export default function DashboardScreen() {
           </div>
 
           {/* Review Registration dialog — mounted inline so HR can act
-              without navigating away from the dashboard. */}
+              without navigating away from the dashboard. Wrapped in
+              MuiThemeProvider so it picks up the user's selected dark/light
+              theme (the admin/registrations page already does this; the
+              dashboard mount was missing it and defaulted to MUI's light). */}
           {isHR && ReviewRegistrationDialog && (
-            <ReviewRegistrationDialog
-              open={!!reviewingReg}
-              registration={reviewingReg}
-              currentUserId={user?.id}
-              onClose={() => setReviewingReg(null)}
-              onProcessed={refreshPendingRegistrations}
-            />
+            <MuiThemeProvider isDark={isDark}>
+              <ReviewRegistrationDialog
+                open={!!reviewingReg}
+                registration={reviewingReg}
+                currentUserId={user?.id}
+                onClose={() => setReviewingReg(null)}
+                onProcessed={refreshPendingRegistrations}
+              />
+            </MuiThemeProvider>
           )}
 
           {/* Recent Requests — full width */}

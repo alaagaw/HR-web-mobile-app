@@ -80,7 +80,6 @@ export const registrationService: RegistrationService = {
       passport_number: data.passport_number,
       passport_expiry: data.passport_expiry,
       occupation: data.occupation,
-      birth_date: data.birth_date,
       updated_at: new Date().toISOString(),
     };
     if (!existingDoc) {

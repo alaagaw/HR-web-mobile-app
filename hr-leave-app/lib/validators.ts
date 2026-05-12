@@ -133,7 +133,6 @@ export const registrationFormSchema = z
     full_name: z.string().min(2, 'Full name is required'),
     phone: z.string().min(5, 'Phone number is required'),
     nationality: z.string().min(2, 'Nationality is required'),
-    birth_date: z.string().min(1, 'Date of birth is required'),
 
     // Primary ID — the document the employee chose to upload
     id_type: z.enum(['national_id', 'iqama', 'passport'], {
