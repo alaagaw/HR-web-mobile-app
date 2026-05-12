@@ -7,10 +7,16 @@
 project_id = "vwalbkxighagreetxczi"
 
 [auth]
-site_url = "https://gaw-hr.vercel.app"
+# Canonical app URL — drives {{ .SiteURL }} in all Supabase auth email
+# templates. Cutover from gaw-hr.vercel.app to polytech-hr.com (apex +
+# www, both DNS-mapped via Cloudflare to Vercel). The Vercel preview
+# URL is kept in the allow-list so any in-flight emails still resolve.
+site_url = "https://www.polytech-hr.com"
 additional_redirect_urls = [
-  "https://gaw-hr.vercel.app/reset-password",
-  "http://localhost:8081/reset-password",
+  "https://www.polytech-hr.com/**",
+  "https://polytech-hr.com/**",
+  "https://gaw-hr.vercel.app/**",
+  "http://localhost:8081/**",
 ]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
