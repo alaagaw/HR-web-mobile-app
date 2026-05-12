@@ -36,6 +36,11 @@ export default function RegistrationFormScreen() {
   const [managerName, setManagerName] = useState<string>('—');
   const [uploading, setUploading] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState<string>('');
+  // Signed URL for the existing/newly-uploaded document so the user
+  // can see what HR has on file. Short-lived (10 min) — refetched on
+  // bootstrap and after every upload.
+  const [docSignedUrl, setDocSignedUrl] = useState<string>('');
+  const [docFileType, setDocFileType] = useState<string>('');
 
   const {
     control,
@@ -114,7 +119,21 @@ export default function RegistrationFormScreen() {
         if (docRow?.id_document_url) {
           // Strip the path so we can show "uploaded" indicator
           const parts = docRow.id_document_url.split('/');
-          setUploadedFileName(parts[parts.length - 1] || 'Uploaded');
+          const name = parts[parts.length - 1] || 'Uploaded';
+          setUploadedFileName(name);
+          // Infer content type from the extension so the preview can
+          // distinguish image vs PDF without an HTTP HEAD round-trip.
+          if (/\.pdf$/i.test(name)) setDocFileType('application/pdf');
+          else if (/\.(jpe?g)$/i.test(name)) setDocFileType('image/jpeg');
+          else if (/\.png$/i.test(name)) setDocFileType('image/png');
+          else if (/\.webp$/i.test(name)) setDocFileType('image/webp');
+          else setDocFileType('');
+          // Short-lived signed URL — refreshed if the user uploads.
+          supabase.storage
+            .from('employee-id-documents')
+            .createSignedUrl(docRow.id_document_url, 60 * 10)
+            .then(({ data }) => { if (data?.signedUrl && !cancelled) setDocSignedUrl(data.signedUrl); })
+            .catch(() => { /* preview just won't render */ });
         }
       } finally {
         if (!cancelled) setBootstrapping(false);
@@ -152,6 +171,12 @@ export default function RegistrationFormScreen() {
       // request a fresh signed URL when displaying.
       setValue('id_document_url', path, { shouldValidate: true });
       setUploadedFileName(file.name);
+      setDocFileType(file.type);
+      // Fresh signed URL so the inline preview shows the new file.
+      const { data: signed } = await supabase.storage
+        .from('employee-id-documents')
+        .createSignedUrl(path, 60 * 10);
+      if (signed?.signedUrl) setDocSignedUrl(signed.signedUrl);
     } catch (err: any) {
       setError(err.message || 'Failed to upload file');
     } finally {
@@ -567,6 +592,69 @@ export default function RegistrationFormScreen() {
                       <Text style={{ fontSize: 12, color: '#16A34A', marginTop: 4 }}>
                         ✓ Uploaded: {uploadedFileName}
                       </Text>
+                    )}
+                    {!!value && !uploading && !!docSignedUrl && (
+                      // Inline preview so the user can check what's
+                      // currently on file and decide whether to upload
+                      // a new one. Image renders directly; PDF surfaces
+                      // a clickable card that opens the file in a new
+                      // tab (full preview).
+                      <View style={{ marginTop: 8 }}>
+                        {docFileType === 'application/pdf' ? (
+                          <a
+                            href={docSignedUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 12,
+                              padding: 12,
+                              border: '1px solid #334155',
+                              borderRadius: 8,
+                              textDecoration: 'none',
+                              color: '#E2E8F0',
+                              backgroundColor: 'rgba(255,255,255,0.02)',
+                            }}
+                          >
+                            <span style={{ fontSize: 22 }}>📄</span>
+                            <span style={{ flex: 1, fontSize: 13 }}>
+                              <span style={{ fontWeight: 600, color: '#60A5FA' }}>{uploadedFileName}</span>
+                              <br />
+                              <span style={{ fontSize: 11, opacity: 0.7 }}>Click to open in a new tab</span>
+                            </span>
+                          </a>
+                        ) : (
+                          <a
+                            href={docSignedUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: 'block',
+                              border: '1px solid #334155',
+                              borderRadius: 8,
+                              overflow: 'hidden',
+                              padding: 0,
+                              backgroundColor: 'rgba(255,255,255,0.02)',
+                            }}
+                            title="Click to open full size"
+                          >
+                            <img
+                              src={docSignedUrl}
+                              alt={uploadedFileName || 'ID document'}
+                              style={{
+                                display: 'block',
+                                maxWidth: '100%',
+                                maxHeight: 280,
+                                margin: '0 auto',
+                              }}
+                            />
+                          </a>
+                        )}
+                        <Text style={{ fontSize: 11, color: '#94A3B8', marginTop: 4 }}>
+                          This is the document HR currently has on file. Upload a new file above to replace it.
+                        </Text>
+                      </View>
                     )}
                   </View>
                 ) : (
