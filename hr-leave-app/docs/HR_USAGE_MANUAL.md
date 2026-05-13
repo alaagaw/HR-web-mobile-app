@@ -4,7 +4,7 @@
 > Add new sections at the bottom as we build more.
 
 **Last updated:** 2026-05-13
-**Latest commits covered:** through `577f78b` (form-warnings pipeline) + compensation & leave-payouts (this commit)
+**Latest commits covered:** through `5886494` (compensation + leave payouts) + compensation bulk Excel (this commit)
 
 ---
 
@@ -323,6 +323,20 @@ Components per row:
 ### Past-month payouts
 
 Because rows are effective-dated, [Leave Payouts](#12-leave-payouts) for any past month automatically uses the row that was in effect on the **1st of that month**. Raises don't retroactively change historical payouts.
+
+### Bulk Excel (mass updates)
+
+For setting up the initial values across the whole company, or applying a uniform raise to many people at once, the page header has two extra buttons:
+
+- **Export Excel** — downloads `compensation_<today>.xlsx` with one row per active employee. Columns: Emp Code (key) · Name · Department · Current Effective From · Basic Salary · HRA · Transportation · Other Allowances · Notes. The latter five are editable; the rest are context.
+- **Import Excel** — opens a confirm dialog asking for the **Effective From** date that applies to every row in the batch. After picking it and clicking Import, the system:
+  - Matches each row to an employee by Emp Code.
+  - Compares the four amount fields (and Notes) to the current row.
+  - For every row that changed → inserts a new effective-dated row with the chosen date.
+  - For every row that's unchanged → no-op (counted as "unchanged" in the summary).
+  - For rows that fail → reported per-row in the result banner. Most common failure: a row already exists with that exact `effective_from` for that employee. Pick a different date or edit by hand.
+
+The metadata array lives in [`lib/compensation-bulk-fields.ts`](../lib/compensation-bulk-fields.ts) — adding a new pay component later = one entry there + a migration + nothing else.
 
 ---
 

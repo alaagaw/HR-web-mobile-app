@@ -10,7 +10,7 @@
  *
  * Web-only for now (MUI components, like the other admin pages).
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { View, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useColorScheme } from 'nativewind';
@@ -18,6 +18,11 @@ import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { useAuth } from '@/hooks/use-auth';
 import { userService, compensationService } from '@/services';
 import { EmptyState } from '@/components/ui/empty-state';
+import {
+  exportCompensationXlsx,
+  importCompensationXlsx,
+  type CompensationBulkImportSummary,
+} from '@/lib/compensation-bulk-excel';
 import type { Profile, EmployeeCompensation } from '@/types/models';
 
 const isWeb = Platform.OS === 'web';
@@ -107,6 +112,15 @@ export default function CompensationScreen() {
   const [addDialog, setAddDialog] = useState<AddDialogState>(INITIAL_ADD);
   const [historyDialog, setHistoryDialog] = useState<HistoryDialogState>(INITIAL_HISTORY);
 
+  // Bulk Excel state
+  const [busy, setBusy] = useState<null | 'export' | 'import'>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [importEffectiveFrom, setImportEffectiveFrom] = useState<string>(
+    new Date().toISOString().slice(0, 10),
+  );
+  const [importSummary, setImportSummary] = useState<CompensationBulkImportSummary | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
@@ -161,6 +175,53 @@ export default function CompensationScreen() {
       transportation: String(emp.comp_transportation || ''),
       other_allowances: String(emp.comp_other_allowances || ''),
     });
+  };
+
+  // ─── Bulk Excel handlers ───────────────────────────────────────
+  const handleExportExcel = async () => {
+    if (busy) return;
+    setBusy('export');
+    try {
+      const r = await exportCompensationXlsx({ is_active: true });
+      setSuccessMsg(`Exported ${r.count} employee(s) to ${r.filename}`);
+    } catch (err: any) {
+      setSuccessMsg(`Export failed: ${err.message || 'unknown error'}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handlePickImportFile = () => {
+    if (busy || !fileInputRef.current) return;
+    fileInputRef.current.value = '';
+    fileInputRef.current.click();
+  };
+
+  const handleImportFileChosen = (file: File) => {
+    // Stash the file + open the effective_from dialog. We don't run
+    // the import immediately because HR must pick the effective date
+    // that applies to every changed row.
+    setPendingFile(file);
+    setImportEffectiveFrom(new Date().toISOString().slice(0, 10));
+    setImportSummary(null);
+  };
+
+  const handleConfirmImport = async () => {
+    if (!pendingFile || !user) return;
+    setBusy('import');
+    try {
+      const summary = await importCompensationXlsx(pendingFile, importEffectiveFrom, user.id);
+      setImportSummary(summary);
+      setSuccessMsg(
+        `Import complete: ${summary.inserted} inserted, ${summary.skipped} unchanged, ${summary.failed} failed`,
+      );
+      setPendingFile(null);
+      invalidate();
+    } catch (err: any) {
+      setSuccessMsg(`Import failed: ${err.message || 'unknown error'}`);
+    } finally {
+      setBusy(null);
+    }
   };
 
   const submitAdd = async () => {
@@ -240,10 +301,86 @@ export default function CompensationScreen() {
             Compensation
           </div>
           <div style={{ fontSize: 13, color: isDark ? '#94A3B8' : '#64748B', marginTop: 2 }}>
-            Click any row to see history or add a raise.
+            Click any row to see history or add a raise. Or use Export / Import for bulk updates.
           </div>
         </div>
+
+        {/* Bulk Excel — hidden file picker fed by Import button */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".xlsx,.xls"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleImportFileChosen(f);
+          }}
+        />
+        <button
+          onClick={handleExportExcel}
+          disabled={!!busy}
+          title="Download an Excel with every active employee's current Basic / HRA / Transport / Other. Edit it then upload via Import."
+          style={{
+            padding: '10px 16px',
+            backgroundColor: busy === 'export' ? '#94A3B8' : '#2563EB',
+            color: '#FFFFFF', border: 'none', borderRadius: 10,
+            fontSize: 13, fontWeight: 600, cursor: busy ? 'wait' : 'pointer', flexShrink: 0,
+          }}
+        >
+          {busy === 'export' ? 'Exporting…' : 'Export Excel'}
+        </button>
+        <button
+          onClick={handlePickImportFile}
+          disabled={!!busy}
+          title="Upload a previously-downloaded Excel after edits. Inserts a new effective-dated row for every employee whose values changed. You pick the effective_from in the next dialog."
+          style={{
+            padding: '10px 16px',
+            backgroundColor: busy === 'import' ? '#94A3B8' : '#D97706',
+            color: '#FFFFFF', border: 'none', borderRadius: 10,
+            fontSize: 13, fontWeight: 600, cursor: busy ? 'wait' : 'pointer', flexShrink: 0,
+          }}
+        >
+          {busy === 'import' ? 'Importing…' : 'Import Excel'}
+        </button>
       </div>
+
+      {/* Import result banner */}
+      {importSummary && (
+        <div
+          style={{
+            margin: '12px 24px 0',
+            padding: '10px 14px',
+            borderRadius: 10,
+            border: `1px solid ${importSummary.failed > 0 ? '#D97706' : '#16A34A'}`,
+            backgroundColor: importSummary.failed > 0 ? 'rgba(217,119,6,0.08)' : 'rgba(22,163,74,0.08)',
+            fontSize: 13,
+            color: isDark ? '#E2E8F0' : '#0F172A',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 12,
+          }}
+        >
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>
+              Bulk import @ {importSummary.effective_from}: {importSummary.inserted} inserted, {importSummary.skipped} unchanged, {importSummary.failed} failed
+            </div>
+            {importSummary.failed > 0 && (
+              <div style={{ fontSize: 12, opacity: 0.85 }}>
+                {importSummary.results.filter((r) => !r.success).slice(0, 5).map((r) => (
+                  <div key={r.emp_code}>{r.emp_code} — {r.error}</div>
+                ))}
+                {importSummary.failed > 5 && <div>…and {importSummary.failed - 5} more</div>}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => setImportSummary(null)}
+            style={{ background: 'transparent', border: 'none', color: 'inherit', fontSize: 18, cursor: 'pointer', padding: '0 4px' }}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       <View style={{ flex: 1, padding: 16 }}>
         {rows.length === 0 && !loading ? (
@@ -399,6 +536,56 @@ export default function CompensationScreen() {
                     sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, px: 3 }}
                   >
                     {addDialog.submitting ? 'Saving…' : 'Save'}
+                  </MuiButton>
+                </DialogActions>
+              </Dialog>
+
+              {/* Import-confirm dialog. Opens once HR has picked a file
+                  via the hidden input; closes either by Cancel or by
+                  the import run completing. */}
+              <Dialog
+                open={!!pendingFile}
+                onClose={() => busy !== 'import' && setPendingFile(null)}
+                maxWidth="xs"
+                fullWidth
+                PaperProps={{ sx: { borderRadius: 3, backgroundImage: 'none' } }}
+              >
+                <DialogTitle sx={{ pb: 1, pt: 3, px: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
+                  <div style={{ fontSize: 18, fontWeight: 700 }}>Import compensation</div>
+                  <div style={{ fontSize: 13, opacity: 0.65, marginTop: 4 }}>
+                    {pendingFile?.name}
+                  </div>
+                </DialogTitle>
+                <DialogContent sx={{ pt: '20px !important', pb: 1, px: 3, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                  <div style={{ fontSize: 13 }}>
+                    The Excel will be matched by <b>Emp Code</b>. For every employee whose Basic / HRA / Transportation / Other / Notes differ from the current row, a new effective-dated row will be inserted.
+                  </div>
+                  <MuiTextField
+                    label="Effective From"
+                    type="date"
+                    value={importEffectiveFrom}
+                    onChange={(e: any) => setImportEffectiveFrom(e.target.value)}
+                    fullWidth size="small"
+                    InputLabelProps={{ shrink: true }}
+                    helperText="Applies to every inserted row in this batch."
+                  />
+                  <div style={{ fontSize: 12, opacity: 0.7 }}>
+                    Tip: If a row already exists with this date for some employee, that row will fail with a duplicate-key error in the result banner — pick a different date or fix by hand.
+                  </div>
+                </DialogContent>
+                <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider', gap: 1 }}>
+                  <MuiButton onClick={() => setPendingFile(null)} disabled={busy === 'import'} sx={{ textTransform: 'none', fontWeight: 600 }}>
+                    Cancel
+                  </MuiButton>
+                  <div style={{ flex: 1 }} />
+                  <MuiButton
+                    variant="contained"
+                    color="success"
+                    onClick={handleConfirmImport}
+                    disabled={busy === 'import' || !importEffectiveFrom}
+                    sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, px: 3 }}
+                  >
+                    {busy === 'import' ? 'Running…' : 'Import'}
                   </MuiButton>
                 </DialogActions>
               </Dialog>
