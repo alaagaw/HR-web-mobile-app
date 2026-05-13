@@ -28,7 +28,7 @@ import type { LeavePayoutRow } from '@/types/models';
 
 const isWeb = Platform.OS === 'web';
 
-let MuiTextField: any, MuiButton: any, MuiAlert: any, Snackbar: any;
+let MuiTextField: any, MuiButton: any, MuiAlert: any, Snackbar: any, MenuItem: any;
 let DataGrid: any, MuiThemeProvider: any;
 
 if (isWeb) {
@@ -36,6 +36,7 @@ if (isWeb) {
   MuiButton = require('@mui/material/Button').default;
   MuiAlert = require('@mui/material/Alert').default;
   Snackbar = require('@mui/material/Snackbar').default;
+  MenuItem = require('@mui/material/MenuItem').default;
   DataGrid = require('@mui/x-data-grid').DataGrid;
   MuiThemeProvider = require('@/components/web/mui-theme-provider').MuiThemeProvider;
 }
@@ -264,40 +265,45 @@ export default function LeavePayoutsScreen() {
         </button>
       </div>
 
-      {/* Filters row */}
-      <div style={{ padding: '12px 24px', display: 'flex', gap: 12, alignItems: 'center', borderBottom: `1px solid ${isDark ? '#334155' : '#E2E8F0'}` }}>
-        <MuiTextField
-          label="Search"
-          size="small"
-          value={search}
-          onChange={(e: any) => setSearch(e.target.value)}
-          placeholder="Name, emp code, department…"
-          sx={{ minWidth: 280 }}
-        />
-        <MuiTextField
-          label="Department"
-          size="small"
-          select
-          SelectProps={{ native: true }}
-          value={departmentFilter}
-          onChange={(e: any) => setDepartmentFilter(e.target.value)}
-          sx={{ minWidth: 200 }}
-        >
-          <option value="">(All departments)</option>
-          {departments.map((d) => <option key={d} value={d}>{d}</option>)}
-        </MuiTextField>
-        <div style={{ flex: 1 }} />
-        <div style={{ fontSize: 13, fontWeight: 600, color: isDark ? '#E2E8F0' : '#0F172A' }}>
-          {filteredRows.length} employees · {totals.days.toFixed(totals.days % 1 !== 0 ? 2 : 0)} days · <span style={{ color: '#2563EB' }}>TOTAL {formatMoney(totals.total)} SAR</span>
+      {/* MuiThemeProvider wraps the filter row AND the DataGrid so
+          every MUI component (TextField, Select popover, MenuItem,
+          DataGrid, Snackbar) picks up the same dark/light/system
+          theme as the rest of the app. Previously only the DataGrid
+          was wrapped, which left the filter dropdown rendered with
+          MUI's default white theme. */}
+      <MuiThemeProvider isDark={isDark}>
+        {/* Filters row */}
+        <div style={{ padding: '12px 24px', display: 'flex', gap: 12, alignItems: 'center', borderBottom: `1px solid ${isDark ? '#334155' : '#E2E8F0'}` }}>
+          <MuiTextField
+            label="Search"
+            size="small"
+            value={search}
+            onChange={(e: any) => setSearch(e.target.value)}
+            placeholder="Name, emp code, department…"
+            sx={{ minWidth: 280 }}
+          />
+          <MuiTextField
+            label="Department"
+            size="small"
+            select
+            value={departmentFilter}
+            onChange={(e: any) => setDepartmentFilter(e.target.value)}
+            sx={{ minWidth: 200 }}
+          >
+            <MenuItem value=""><em>(All departments)</em></MenuItem>
+            {departments.map((d: string) => <MenuItem key={d} value={d}>{d}</MenuItem>)}
+          </MuiTextField>
+          <div style={{ flex: 1 }} />
+          <div style={{ fontSize: 13, fontWeight: 600, color: isDark ? '#E2E8F0' : '#0F172A' }}>
+            {filteredRows.length} employees · {totals.days.toFixed(totals.days % 1 !== 0 ? 2 : 0)} days · <span style={{ color: '#2563EB' }}>TOTAL {formatMoney(totals.total)} SAR</span>
+          </div>
         </div>
-      </div>
 
-      <View style={{ flex: 1, padding: 16 }}>
-        {filteredRows.length === 0 && !loading ? (
-          <EmptyState title="No payouts for this month" description="Either nobody took leave or no compensation rows are in effect yet." />
-        ) : (
-          <View style={{ flex: 1, borderRadius: 12, overflow: 'hidden' }}>
-            <MuiThemeProvider isDark={isDark}>
+        <View style={{ flex: 1, padding: 16 }}>
+          {filteredRows.length === 0 && !loading ? (
+            <EmptyState title="No payouts for this month" description="Either nobody took leave or no compensation rows are in effect yet." />
+          ) : (
+            <View style={{ flex: 1, borderRadius: 12, overflow: 'hidden' }}>
               <DataGrid
                 rows={filteredRows}
                 columns={columns}
@@ -315,20 +321,21 @@ export default function LeavePayoutsScreen() {
                   '& .total-payable-cell': { fontWeight: 700, color: '#2563EB' },
                 }}
               />
-              <Snackbar
-                open={!!successMsg}
-                autoHideDuration={3500}
-                onClose={() => setSuccessMsg('')}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-              >
-                <MuiAlert severity="success" onClose={() => setSuccessMsg('')} sx={{ fontWeight: 600 }}>
-                  {successMsg}
-                </MuiAlert>
-              </Snackbar>
-            </MuiThemeProvider>
-          </View>
-        )}
-      </View>
+            </View>
+          )}
+        </View>
+
+        <Snackbar
+          open={!!successMsg}
+          autoHideDuration={3500}
+          onClose={() => setSuccessMsg('')}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        >
+          <MuiAlert severity="success" onClose={() => setSuccessMsg('')} sx={{ fontWeight: 600 }}>
+            {successMsg}
+          </MuiAlert>
+        </Snackbar>
+      </MuiThemeProvider>
     </View>
   );
 }
