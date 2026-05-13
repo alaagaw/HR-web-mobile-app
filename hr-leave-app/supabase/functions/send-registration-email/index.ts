@@ -33,6 +33,12 @@ interface EmailPayload {
     | 'manual_form_warning';
   recipientEmail: string;
   recipientName: string;
+  /**
+   * Blind-CC addresses forwarded to the email provider. Used by the
+   * run-form-warnings flow so HR + HR Director are silently copied on
+   * every warning sent to an employee. Empty / missing = no BCC.
+   */
+  bcc?: string[];
   data?: {
     reason?: string;
     employeeName?: string;
@@ -53,8 +59,14 @@ serve(async (req: Request) => {
     if (!authHeader) throw new Error('Missing authorization header');
 
     const callerToken = authHeader.replace('Bearer ', '');
-    const { data: { user: caller } } = await supabase.auth.getUser(callerToken);
-    if (!caller) throw new Error('Invalid token');
+    // Service-role bypass: the run-form-warnings edge function (and
+    // any future internal scheduler) authenticates with the
+    // SERVICE_ROLE_KEY rather than a user JWT. Skip the user lookup
+    // for those callers; user JWTs still go through getUser.
+    if (callerToken !== SUPABASE_SERVICE_ROLE_KEY) {
+      const { data: { user: caller } } = await supabase.auth.getUser(callerToken);
+      if (!caller) throw new Error('Invalid token');
+    }
 
     const payload: EmailPayload = await req.json();
     if (!payload.type || !payload.recipientEmail) {
@@ -62,7 +74,12 @@ serve(async (req: Request) => {
     }
 
     const { subject, html } = buildEmail(payload);
-    await sendEmail({ to: payload.recipientEmail, subject, html });
+    await sendEmail({
+      to: payload.recipientEmail,
+      subject,
+      html,
+      bcc: payload.bcc && payload.bcc.length > 0 ? payload.bcc : undefined,
+    });
 
     return new Response(
       JSON.stringify({ success: true }),

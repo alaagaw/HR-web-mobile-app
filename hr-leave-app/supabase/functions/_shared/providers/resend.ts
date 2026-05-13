@@ -10,7 +10,12 @@ import type { SendEmailInput } from '../email.ts';
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 
-export async function sendViaResend(input: Required<Omit<SendEmailInput, 'replyTo'>> & { replyTo?: string }): Promise<void> {
+type ProviderInput = Required<Omit<SendEmailInput, 'replyTo' | 'bcc'>> & {
+  replyTo?: string;
+  bcc?: string[];
+};
+
+export async function sendViaResend(input: ProviderInput): Promise<void> {
   if (!RESEND_API_KEY) {
     throw new Error('RESEND_API_KEY is not configured on this Edge Function.');
   }
@@ -22,6 +27,7 @@ export async function sendViaResend(input: Required<Omit<SendEmailInput, 'replyT
     html: input.html,
   };
   if (input.replyTo) body.reply_to = input.replyTo;
+  if (input.bcc && input.bcc.length > 0) body.bcc = input.bcc;
 
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',

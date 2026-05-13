@@ -25,10 +25,21 @@ export interface SendEmailInput {
   from?: string;
   /** Optional Reply-To override. */
   replyTo?: string;
+  /**
+   * Blind-CC addresses. Used for the form-warning flow so HR + HR Director
+   * see each warning that goes to an employee without the employee seeing
+   * HR's address in the headers.
+   */
+  bcc?: string[];
 }
 
+type ProviderInput = Required<Omit<SendEmailInput, 'replyTo' | 'bcc'>> & {
+  replyTo?: string;
+  bcc?: string[];
+};
+
 export interface EmailProvider {
-  send(input: Required<Omit<SendEmailInput, 'replyTo'>> & { replyTo?: string }): Promise<void>;
+  send(input: ProviderInput): Promise<void>;
 }
 
 const DEFAULT_FROM =
