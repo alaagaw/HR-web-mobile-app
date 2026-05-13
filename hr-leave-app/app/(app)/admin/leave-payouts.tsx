@@ -16,7 +16,7 @@
  *
  * Web-only.
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useColorScheme } from 'nativewind';
@@ -80,6 +80,14 @@ export default function LeavePayoutsScreen() {
     }
   }, [year, month, departmentFilter]);
 
+  // useAutoRefresh has a 30s staleness gate — it skips refetching if
+  // the previous fetch was under 30s old, even when its deps change.
+  // That's fine for the periodic polling it's designed for, but it
+  // breaks "user changed a filter, refetch now". A plain useEffect
+  // alongside it handles the immediate refresh on filter changes;
+  // useAutoRefresh continues to do the 30s polling on top. This is
+  // the pattern Manage Employees uses too.
+  useEffect(() => { void loadData(); }, [loadData]);
   useAutoRefresh(() => { void loadData(); }, [year, month, departmentFilter]);
 
   const departments = useMemo(() => {
