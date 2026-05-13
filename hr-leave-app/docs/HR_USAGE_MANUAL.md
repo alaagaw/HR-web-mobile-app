@@ -374,15 +374,16 @@ Two tabs at the top, both keyed off the same month picker, search, and departmen
 
 What-if calculator. Mimics the Excel HR has been using.
 
-- Defaults each row's **Days** to the employee's full PTO balance (capped at the calendar days in the selected month) — so when you open it, you see "if every employee took their accrued PTO this month, here's the total leave-pay impact."
-- **Per-row edits** are live — typing in a different Days value or filling in **Start Date** instantly updates that row's pay columns AND the top-right TOTAL summary. No re-load, no save button.
-- **Two input modes** per row:
-  - **Days only** (Start Date empty): treats `Days` as days-this-month, capped at calendar days for sanity (so a typo of 999 doesn't produce a 33× monthly comp).
-  - **Date range** (Start Date filled): leave spans `[Start Date, Start Date + Days − 1]`. The calculator computes only the days that fall inside the currently selected month. Cross-month leaves split correctly when you flip the month picker — e.g., May 25 + 14 days → 7 days in May, 7 in June.
-- **Available Days** column shows the current PTO balance (read-only), so HR can see at a glance what the employee actually has banked.
-- **Export Forecast** writes the current Days / Start Date values + computed pay to xlsx with a TOTAL footer row.
+- Two **global inputs** at the top of the filter row apply to every visible row:
+  - **Forecast Days** — type a single number (e.g. 10) and every visible employee's pay columns recompute as `comp/30 × 10`. The TOTAL summary refreshes live.
+  - **Start Date (optional)** — when filled, treats Days as a date range starting from this date. Days falling outside the selected month are clipped, so a cross-month leave (e.g., May 25 + 14 days) splits correctly when you flip the month picker.
+- Defaults are empty (Days = 0, Start Date = none) so the page opens at 0 pay until HR types something. **Clear** button resets both.
+- The grid itself is read-only — Available Days shown for context, pay columns derived from the globals.
+- **Available Days** column shows each employee's current PTO balance, so HR can spot who's near their cap before typing a forecast.
+- The search and department filters are the way to narrow which people the globals apply to. Filter to "OPERATIONS" and type 5 days → see "if every operations person took 5 days this month, here's the total."
+- **Export Forecast** writes the grid + the global Days/Start Date as audit columns + a TOTAL footer row.
 
-Backing RPC: `compute_predicted_payouts(year, month, department?)` — returns comp + balance per employee; all what-if math is client-side for instant feedback.
+Backing RPC: `compute_predicted_payouts(year, month, department?)` — returns comp + balance per employee; the what-if math (single Days × every row, or date-range overlap) is client-side for instant feedback.
 
 ### Tab 2 — Actual (from approved leave) — *payroll view*
 
@@ -403,9 +404,10 @@ Backing RPC: `compute_leave_payouts(year, month, department?)`.
 
 ### Common use cases
 
-- "What's our leave-pay budget for next quarter?" → Forecast tab, flip through Jun/Jul/Aug, top-right TOTAL each month.
+- "What's our leave-pay budget for next quarter?" → Forecast tab, Days=30 + empty Start Date, flip through Jun/Jul/Aug, top-right TOTAL each month.
 - "How much do I add to May's payroll for leave?" → Actual tab, end of May.
-- "If Aqeel takes 10 days starting June 20, how much pays in June vs July?" → Forecast tab, set Aqeel's Days = 10 + Start Date = 2026-06-20, then toggle month picker between Jun and Jul. June shows 11 days × comp/30; July shows 3 days × comp/30.
+- "If Aqeel takes 10 days starting June 20, how much pays in June vs July?" → Forecast tab → search "Aqeel" so only his row is visible → Days=10 + Start Date=2026-06-20 → toggle month picker between Jun and Jul. June shows 11 days × comp/30; July shows 3 days × comp/30.
+- "What does it cost if Operations takes a 5-day company-wide break?" → Forecast tab → Department=OPERATIONS → Days=5 → TOTAL is your number.
 
 ---
 

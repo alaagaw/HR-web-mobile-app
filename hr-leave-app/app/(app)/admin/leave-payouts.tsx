@@ -52,35 +52,38 @@ if (isWeb) {
 }
 
 /**
- * One row in the Forecast tab. Extends the server-returned snapshot
- * with per-row editable inputs (days + optional start_date). Pay
- * columns are derived live from these via valueGetter.
- */
-interface ForecastRow extends PredictedPayoutRow {
-  forecast_days: number;
-  forecast_start_date: string;
-}
-
-/**
  * Days of the (possibly cross-month) forecast that fall inside the
- * selected month. Two modes:
+ * selected month. Two modes — both driven by the GLOBAL inputs at
+ * the top of the page (one Days + optional Start Date that applies
+ * to every visible row):
+ *
  *   - start_date empty: treat `days` as days-this-month, cap at the
  *     calendar days of the selected month so a typo of 999 doesn't
  *     produce a 33x monthly comp payout.
  *   - start_date set: overlap of [start_date, start_date + days - 1]
  *     with the selected month. Cross-month leaves split correctly
  *     when HR flips the month picker.
+ *
+ * `daysInCalendarMonth` is the # of days of the SELECTED month (28
+ * for Feb 2026, 31 for May, etc.) — passed in so the function
+ * doesn't have to recompute it per row.
  */
-function computeDaysThisMonth(row: ForecastRow, year: number, month: number): number {
-  const days = Number(row.forecast_days) || 0;
-  if (days <= 0) return 0;
-  if (!row.forecast_start_date) {
-    return Math.min(days, row.days_in_calendar_month || 30);
+function computeDaysThisMonth(
+  days: number,
+  startDate: string,
+  year: number,
+  month: number,
+  daysInCalendarMonth: number,
+): number {
+  const d = Number(days) || 0;
+  if (d <= 0) return 0;
+  if (!startDate) {
+    return Math.min(d, daysInCalendarMonth || 30);
   }
-  const start = new Date(row.forecast_start_date);
+  const start = new Date(startDate);
   if (Number.isNaN(start.getTime())) return 0;
   const end = new Date(start);
-  end.setDate(end.getDate() + days - 1);
+  end.setDate(end.getDate() + d - 1);
   const monthStart = new Date(year, month - 1, 1);
   const monthEnd = new Date(year, month, 0);
   const overlapStart = start > monthStart ? start : monthStart;
@@ -118,8 +121,21 @@ export default function LeavePayoutsScreen() {
     'forecast',
   );
 
+  // Forecast tab inputs — GLOBAL across every visible row. Sticky via
+  // useViewState so HR's typed values survive nav-away/come-back, and
+  // both inputs are pre-filled with sensible defaults so the page
+  // shows something meaningful on first open without HR doing anything.
+  const [forecastDays, setForecastDays] = useViewState<number>(
+    'admin/leave-payouts.forecast_days',
+    0,
+  );
+  const [forecastStartDate, setForecastStartDate] = useViewState<string>(
+    'admin/leave-payouts.forecast_start_date',
+    '',
+  );
+
   const [rows, setRows] = useState<LeavePayoutRow[]>([]);
-  const [forecastRows, setForecastRows] = useState<ForecastRow[]>([]);
+  const [forecastRows, setForecastRows] = useState<PredictedPayoutRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [forecastLoading, setForecastLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -145,18 +161,7 @@ export default function LeavePayoutsScreen() {
         month,
         departmentFilter || undefined,
       );
-      // Seed forecast inputs: default Days = MIN(available balance,
-      // calendar days in month). Start Date empty. HR can edit per-row.
-      setForecastRows(
-        data.map((d) => ({
-          ...d,
-          forecast_days: Math.max(
-            0,
-            Math.min(Number(d.pto_balance_days) || 0, d.days_in_calendar_month || 30),
-          ),
-          forecast_start_date: '',
-        })),
-      );
+      setForecastRows(data);
     } catch (err: any) {
       setSuccessMsg(`Forecast load failed: ${err.message || 'unknown'}`);
     } finally {
@@ -217,12 +222,24 @@ export default function LeavePayoutsScreen() {
     );
   }, [filteredRows]);
 
-  // Live totals for the Forecast tab. Recomputed every time HR edits
-  // any forecast input.
+  // Days-in-month-overlap is the same number for every row (driven
+  // by the GLOBAL inputs) once we know the calendar length of the
+  // selected month. Compute it once per render.
+  const daysInMonth = useMemo(() => {
+    const last = new Date(year, month, 0);
+    return last.getDate();
+  }, [year, month]);
+
+  const forecastDaysThisMonth = useMemo(() => {
+    return computeDaysThisMonth(forecastDays, forecastStartDate, year, month, daysInMonth);
+  }, [forecastDays, forecastStartDate, year, month, daysInMonth]);
+
+  // Live totals for the Forecast tab. Recomputed when the global
+  // inputs (or filter) change.
   const forecastTotals = useMemo(() => {
+    const d = forecastDaysThisMonth;
     return filteredForecastRows.reduce(
       (acc, r) => {
-        const d = computeDaysThisMonth(r, year, month);
         acc.days += d;
         acc.basic += Number(r.basic_salary) / 30 * d;
         acc.hra += Number(r.hra) / 30 * d;
@@ -233,13 +250,7 @@ export default function LeavePayoutsScreen() {
       },
       { days: 0, basic: 0, hra: 0, transport: 0, other: 0, total: 0 },
     );
-  }, [filteredForecastRows, year, month]);
-
-  // Update a single forecast row's input. Used by the editable cell
-  // renderers below.
-  const updateForecastRow = useCallback((id: string, patch: Partial<ForecastRow>) => {
-    setForecastRows((prev) => prev.map((r) => (r.employee_id === id ? { ...r, ...patch } : r)));
-  }, []);
+  }, [filteredForecastRows, forecastDaysThisMonth]);
 
   const stepMonth = (delta: number) => {
     let m = month + delta;
@@ -306,28 +317,29 @@ export default function LeavePayoutsScreen() {
     setExporting(true);
     try {
       const XLSX = await import('xlsx');
-      const out = filteredForecastRows.map((r) => {
-        const d = computeDaysThisMonth(r, year, month);
-        return {
-          'Emp Code': r.emp_code || '',
-          'Name': r.full_name,
-          'Department': r.department || '',
-          'Basic / mo': Number(r.basic_salary) || 0,
-          'HRA / mo': Number(r.hra) || 0,
-          'Transport / mo': Number(r.transportation) || 0,
-          'Other / mo': Number(r.other_allowances) || 0,
-          'Available Days': Number(r.pto_balance_days) || 0,
-          'Start Date': r.forecast_start_date || '',
-          'Days': Number(r.forecast_days) || 0,
-          'Days in Month': d,
-          'Basic Payable': +(Number(r.basic_salary) / 30 * d).toFixed(2),
-          'HRA Payable': +(Number(r.hra) / 30 * d).toFixed(2),
-          'Transport Payable': +(Number(r.transportation) / 30 * d).toFixed(2),
-          'Other Payable': +(Number(r.other_allowances) / 30 * d).toFixed(2),
-          'TOTAL Payable': +(Number(r.total_monthly) / 30 * d).toFixed(2),
-          'Effective From': r.effective_from || '',
-        };
-      });
+      const d = forecastDaysThisMonth;
+      const out = filteredForecastRows.map((r) => ({
+        'Emp Code': r.emp_code || '',
+        'Name': r.full_name,
+        'Department': r.department || '',
+        'Basic / mo': Number(r.basic_salary) || 0,
+        'HRA / mo': Number(r.hra) || 0,
+        'Transport / mo': Number(r.transportation) || 0,
+        'Other / mo': Number(r.other_allowances) || 0,
+        'Available Days': Number(r.pto_balance_days) || 0,
+        // Same globals applied to every row. We keep them in the
+        // export so HR has a paper trail of WHAT scenario produced
+        // these numbers.
+        'Forecast Start Date': forecastStartDate || '',
+        'Forecast Days (input)': Number(forecastDays) || 0,
+        'Days in Month': d,
+        'Basic Payable': +(Number(r.basic_salary) / 30 * d).toFixed(2),
+        'HRA Payable': +(Number(r.hra) / 30 * d).toFixed(2),
+        'Transport Payable': +(Number(r.transportation) / 30 * d).toFixed(2),
+        'Other Payable': +(Number(r.other_allowances) / 30 * d).toFixed(2),
+        'TOTAL Payable': +(Number(r.total_monthly) / 30 * d).toFixed(2),
+        'Effective From': r.effective_from || '',
+      }));
       out.push({
         'Emp Code': '',
         'Name': 'TOTAL',
@@ -337,8 +349,8 @@ export default function LeavePayoutsScreen() {
         'Transport / mo': 0,
         'Other / mo': 0,
         'Available Days': 0,
-        'Start Date': '',
-        'Days': 0,
+        'Forecast Start Date': '',
+        'Forecast Days (input)': 0,
         'Days in Month': forecastTotals.days,
         'Basic Payable': +forecastTotals.basic.toFixed(2),
         'HRA Payable': +forecastTotals.hra.toFixed(2),
@@ -388,124 +400,64 @@ export default function LeavePayoutsScreen() {
       cellClassName: 'total-payable-cell' },
   ]), []);
 
-  // Forecast columns. Editable inputs use renderCell so the values
-  // live in our component state (forecastRows), not in DataGrid edit
-  // mode. The valueGetter on the computed columns (days_this_month,
-  // pay columns) reads from the row + the current month, recomputing
-  // every render.
-  const forecastColumns = useMemo(() => ([
-    { field: 'emp_code', headerName: 'Emp #', width: 80,
-      valueGetter: (_value: any, row: ForecastRow) => row.emp_code || '—' },
-    { field: 'full_name', headerName: 'Employee', flex: 1.2, minWidth: 160 },
-    { field: 'department', headerName: 'Dept', flex: 0.9, minWidth: 110,
-      valueGetter: (_value: any, row: ForecastRow) => row.department || '—' },
-    { field: 'basic_salary', headerName: 'Basic/mo', flex: 0.8, minWidth: 100, type: 'number',
-      valueFormatter: (value: any) => formatMoney(Number(value) || 0) },
-    { field: 'hra', headerName: 'HRA/mo', flex: 0.8, minWidth: 100, type: 'number',
-      valueFormatter: (value: any) => formatMoney(Number(value) || 0) },
-    { field: 'transportation', headerName: 'Transport/mo', flex: 0.8, minWidth: 100, type: 'number',
-      valueFormatter: (value: any) => formatMoney(Number(value) || 0) },
-    { field: 'pto_balance_days', headerName: 'Available Days', flex: 0.7, minWidth: 110, type: 'number',
-      valueFormatter: (value: any) => Number(value || 0).toFixed(Number(value) % 1 !== 0 ? 2 : 0) },
-    {
-      field: 'forecast_start_date',
-      headerName: 'Start Date',
-      width: 140,
-      sortable: false,
-      filterable: false,
-      renderCell: (p: any) => (
-        <input
-          type="date"
-          value={p.row.forecast_start_date || ''}
-          onChange={(e) => updateForecastRow(p.row.employee_id, { forecast_start_date: e.target.value })}
-          style={{
-            background: 'transparent',
-            border: '1px solid rgba(148,163,184,0.25)',
-            borderRadius: 4,
-            padding: '2px 4px',
-            color: 'inherit',
-            fontSize: 12,
-            width: '100%',
-            colorScheme: isDark ? 'dark' : 'light',
-          } as React.CSSProperties}
-        />
-      ),
-    },
-    {
-      field: 'forecast_days',
-      headerName: 'Days',
-      width: 80,
-      sortable: false,
-      filterable: false,
-      renderCell: (p: any) => (
-        <input
-          type="number"
-          min={0}
-          max={365}
-          step={0.5}
-          value={Number(p.row.forecast_days) || 0}
-          onChange={(e) => updateForecastRow(p.row.employee_id, { forecast_days: parseFloat(e.target.value) || 0 })}
-          style={{
-            background: 'transparent',
-            border: '1px solid rgba(148,163,184,0.25)',
-            borderRadius: 4,
-            padding: '2px 4px',
-            color: 'inherit',
-            fontSize: 13,
-            width: '100%',
-            textAlign: 'right',
-            colorScheme: isDark ? 'dark' : 'light',
-          } as React.CSSProperties}
-        />
-      ),
-    },
-    {
-      field: 'days_this_month',
-      headerName: 'Days in Mo',
-      width: 100,
-      type: 'number',
-      sortable: false,
-      filterable: false,
-      valueGetter: (_value: any, row: ForecastRow) => computeDaysThisMonth(row, year, month),
-      valueFormatter: (value: any) => Number(value || 0).toFixed(Number(value) % 1 !== 0 ? 2 : 0),
-    },
-    {
-      field: 'basic_pay_forecast',
-      headerName: 'Basic Pay',
-      flex: 0.9, minWidth: 100, type: 'number',
-      sortable: false,
-      valueGetter: (_v: any, row: ForecastRow) => Number(row.basic_salary) / 30 * computeDaysThisMonth(row, year, month),
-      valueFormatter: (value: any) => formatMoney(Number(value) || 0),
-      cellClassName: 'payable-cell',
-    },
-    {
-      field: 'hra_pay_forecast',
-      headerName: 'HRA Pay',
-      flex: 0.9, minWidth: 100, type: 'number',
-      sortable: false,
-      valueGetter: (_v: any, row: ForecastRow) => Number(row.hra) / 30 * computeDaysThisMonth(row, year, month),
-      valueFormatter: (value: any) => formatMoney(Number(value) || 0),
-      cellClassName: 'payable-cell',
-    },
-    {
-      field: 'transport_pay_forecast',
-      headerName: 'Transport Pay',
-      flex: 0.9, minWidth: 110, type: 'number',
-      sortable: false,
-      valueGetter: (_v: any, row: ForecastRow) => Number(row.transportation) / 30 * computeDaysThisMonth(row, year, month),
-      valueFormatter: (value: any) => formatMoney(Number(value) || 0),
-      cellClassName: 'payable-cell',
-    },
-    {
-      field: 'total_pay_forecast',
-      headerName: 'TOTAL',
-      flex: 1, minWidth: 110, type: 'number',
-      sortable: false,
-      valueGetter: (_v: any, row: ForecastRow) => Number(row.total_monthly) / 30 * computeDaysThisMonth(row, year, month),
-      valueFormatter: (value: any) => formatMoney(Number(value) || 0),
-      cellClassName: 'total-payable-cell',
-    },
-  ]), [year, month, isDark, updateForecastRow]);
+  // Forecast columns — read-only display. Days + Start Date are
+  // GLOBAL inputs at the top of the page; every row inherits the
+  // same "days in month" number, so the pay columns are simple
+  // multiplications of the row's comp by the shared days.
+  const forecastColumns = useMemo(() => {
+    const d = forecastDaysThisMonth;
+    return [
+      { field: 'emp_code', headerName: 'Emp #', width: 80,
+        valueGetter: (_value: any, row: PredictedPayoutRow) => row.emp_code || '—' },
+      { field: 'full_name', headerName: 'Employee', flex: 1.2, minWidth: 160 },
+      { field: 'department', headerName: 'Dept', flex: 0.9, minWidth: 110,
+        valueGetter: (_value: any, row: PredictedPayoutRow) => row.department || '—' },
+      { field: 'basic_salary', headerName: 'Basic/mo', flex: 0.8, minWidth: 100, type: 'number',
+        valueFormatter: (value: any) => formatMoney(Number(value) || 0) },
+      { field: 'hra', headerName: 'HRA/mo', flex: 0.8, minWidth: 100, type: 'number',
+        valueFormatter: (value: any) => formatMoney(Number(value) || 0) },
+      { field: 'transportation', headerName: 'Transport/mo', flex: 0.8, minWidth: 100, type: 'number',
+        valueFormatter: (value: any) => formatMoney(Number(value) || 0) },
+      { field: 'pto_balance_days', headerName: 'Available Days', flex: 0.7, minWidth: 110, type: 'number',
+        valueFormatter: (value: any) => Number(value || 0).toFixed(Number(value) % 1 !== 0 ? 2 : 0) },
+      {
+        field: 'basic_pay_forecast',
+        headerName: 'Basic Pay',
+        flex: 0.9, minWidth: 100, type: 'number',
+        sortable: false,
+        valueGetter: (_v: any, row: PredictedPayoutRow) => Number(row.basic_salary) / 30 * d,
+        valueFormatter: (value: any) => formatMoney(Number(value) || 0),
+        cellClassName: 'payable-cell',
+      },
+      {
+        field: 'hra_pay_forecast',
+        headerName: 'HRA Pay',
+        flex: 0.9, minWidth: 100, type: 'number',
+        sortable: false,
+        valueGetter: (_v: any, row: PredictedPayoutRow) => Number(row.hra) / 30 * d,
+        valueFormatter: (value: any) => formatMoney(Number(value) || 0),
+        cellClassName: 'payable-cell',
+      },
+      {
+        field: 'transport_pay_forecast',
+        headerName: 'Transport Pay',
+        flex: 0.9, minWidth: 110, type: 'number',
+        sortable: false,
+        valueGetter: (_v: any, row: PredictedPayoutRow) => Number(row.transportation) / 30 * d,
+        valueFormatter: (value: any) => formatMoney(Number(value) || 0),
+        cellClassName: 'payable-cell',
+      },
+      {
+        field: 'total_pay_forecast',
+        headerName: 'TOTAL',
+        flex: 1, minWidth: 110, type: 'number',
+        sortable: false,
+        valueGetter: (_v: any, row: PredictedPayoutRow) => Number(row.total_monthly) / 30 * d,
+        valueFormatter: (value: any) => formatMoney(Number(value) || 0),
+        cellClassName: 'total-payable-cell',
+      },
+    ];
+  }, [forecastDaysThisMonth]);
 
   if (!isWeb) {
     return (
@@ -600,14 +552,14 @@ export default function LeavePayoutsScreen() {
         </div>
 
         {/* Filters row — shared across tabs. */}
-        <div style={{ padding: '12px 24px', display: 'flex', gap: 12, alignItems: 'center', borderBottom: `1px solid ${isDark ? '#334155' : '#E2E8F0'}` }}>
+        <div style={{ padding: '12px 24px', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', borderBottom: `1px solid ${isDark ? '#334155' : '#E2E8F0'}` }}>
           <MuiTextField
             label="Search"
             size="small"
             value={search}
             onChange={(e: any) => setSearch(e.target.value)}
             placeholder="Name, emp code, department…"
-            sx={{ minWidth: 280 }}
+            sx={{ minWidth: 240 }}
           />
           <MuiTextField
             label="Department"
@@ -615,16 +567,56 @@ export default function LeavePayoutsScreen() {
             select
             value={departmentFilter}
             onChange={(e: any) => setDepartmentFilter(e.target.value)}
-            sx={{ minWidth: 200 }}
+            sx={{ minWidth: 180 }}
           >
             <MenuItem value=""><em>(All departments)</em></MenuItem>
             {departments.map((d: string) => <MenuItem key={d} value={d}>{d}</MenuItem>)}
           </MuiTextField>
+
+          {/* Forecast-only global inputs. One Days and one Start Date
+              applied to every visible row. Hidden on the Actual tab
+              because that one doesn't take inputs. */}
+          {activeTab === 'forecast' && (
+            <>
+              <div style={{ borderLeft: `1px solid ${isDark ? '#334155' : '#CBD5E1'}`, height: 32, alignSelf: 'center' }} />
+              <MuiTextField
+                label="Forecast Days"
+                size="small"
+                type="number"
+                value={forecastDays || ''}
+                onChange={(e: any) => setForecastDays(parseFloat(e.target.value) || 0)}
+                inputProps={{ min: 0, max: 365, step: 0.5 }}
+                placeholder="0"
+                helperText="Days to apply to every row"
+                sx={{ width: 140 }}
+              />
+              <MuiTextField
+                label="Start Date (optional)"
+                size="small"
+                type="date"
+                value={forecastStartDate}
+                onChange={(e: any) => setForecastStartDate(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                helperText={forecastStartDate ? 'Range mode: days span from here' : 'Empty = days within this month'}
+                sx={{ width: 200 }}
+              />
+              {(forecastDays !== 0 || forecastStartDate) && (
+                <MuiButton
+                  size="small"
+                  onClick={() => { setForecastDays(0); setForecastStartDate(''); }}
+                  sx={{ textTransform: 'none' }}
+                >
+                  Clear
+                </MuiButton>
+              )}
+            </>
+          )}
+
           <div style={{ flex: 1 }} />
           <div style={{ fontSize: 13, fontWeight: 600, color: isDark ? '#E2E8F0' : '#0F172A' }}>
             {activeTab === 'forecast' ? (
               <>
-                {filteredForecastRows.length} employees · {forecastTotals.days.toFixed(forecastTotals.days % 1 !== 0 ? 2 : 0)} days · <span style={{ color: '#2563EB' }}>FORECAST TOTAL {formatMoney(forecastTotals.total)} SAR</span>
+                {filteredForecastRows.length} employees · {forecastDaysThisMonth.toFixed(forecastDaysThisMonth % 1 !== 0 ? 2 : 0)} days/each · <span style={{ color: '#2563EB' }}>FORECAST TOTAL {formatMoney(forecastTotals.total)} SAR</span>
               </>
             ) : (
               <>
