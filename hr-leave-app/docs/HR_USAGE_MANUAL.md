@@ -93,6 +93,30 @@ Click any row → **Edit Employee** dialog opens. From there you can change:
 
 **New Employee** button (top right) opens the invite dialog. Required: name, email, role, department, supervisor, manager, job title, start date, workday hours. Employee code is auto-generated from the `emp_code_seq` Postgres sequence; HR can override with a legacy code.
 
+### Bulk remap Emp Codes (admin tool)
+
+For one-off legacy code migrations (e.g. renumbering everyone from `70xxx` to `80xxx`), the header has a **Remap Emp Codes** button (outlined style, less prominent than New Employee). It opens a small dialog:
+
+1. Pick an Excel file with **two columns** — headers can be any wording that contains "Old" + "Code" and "New" + "Code" (case-insensitive). Example:
+
+   | Old Emp Code | New Emp Code |
+   |---|---|
+   | 70023 | 80023 |
+   | 70025 | 80025 |
+
+2. The dialog parses the file and validates each row against the live data:
+   - **✓ valid** — old exists and new is free
+   - **✗ old not found** — no employee has that code
+   - **✗ new already used** — another employee already has that code
+   - **✗ duplicate in batch** — same new_code used more than once in the upload
+   - **✗ identical** — old equals new
+   - **✗ blank** — one of the cells is empty
+
+3. **Apply** is disabled until every row is ✓.
+4. Each successful rename updates `employee_documents.emp_code` AND writes one row to `profile_audit_log` with `context='bulk_remap'`, `old_value`, `new_value`. The change is reversible by inspecting the audit log.
+
+This isn't meant for daily use — for one-off renames, use the **Employee Code** field in Edit Employee instead.
+
 ---
 
 ## 4. Reviewing registrations

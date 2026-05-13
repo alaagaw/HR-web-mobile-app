@@ -104,11 +104,32 @@ export interface AuditService {
   getRequestHistory(requestId: string): Promise<HistoryEntry[]>;
 }
 
+export interface RemapEmpCodeInput {
+  old_code: string;
+  new_code: string;
+}
+
+export interface RemapEmpCodeResult {
+  old_code: string;
+  new_code: string;
+  success: boolean;
+  employee_id?: string;
+  full_name?: string;
+  error?: string;
+}
+
 export interface UserService {
   getProfile(userId: string): Promise<Profile>;
   updateProfile(userId: string, data: Partial<Profile>): Promise<Profile>;
   getEmployees(filters?: EmployeeFilters): Promise<Profile[]>;
   updateEmployeeOrg(employeeId: string, supervisorId: string, managerId: string): Promise<void>;
+  /**
+   * Bulk rename emp_codes. One row per (old, new) pair. Validates and
+   * applies each rename in sequence; writes one profile_audit_log row
+   * per successful rename so HR can trace who/when/what later.
+   * Returns per-row results so the UI can surface partial successes.
+   */
+  remapEmpCodes(remaps: RemapEmpCodeInput[]): Promise<RemapEmpCodeResult[]>;
 }
 
 export interface DocumentService {

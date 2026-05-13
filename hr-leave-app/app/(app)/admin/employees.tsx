@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, FlatList, TextInput, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -1661,6 +1661,269 @@ function ResendEmailDialog({
   );
 }
 
+// --------------- Bulk emp_code remap dialog ---------------
+
+/**
+ * One-off admin tool. Two-column xlsx: Old Emp Code → New Emp Code.
+ * Parsed client-side; every row is validated against the live
+ * v_emp_codes (does old exist? is new free? intra-batch dupes?)
+ * before HR can click Apply. Per-row results displayed after apply
+ * so partial successes are visible.
+ */
+interface RemapRow {
+  old_code: string;
+  new_code: string;
+  status: 'ok' | 'old_missing' | 'new_taken' | 'duplicate' | 'identical' | 'blank' | 'applied' | 'failed';
+  message?: string;
+  employee_name?: string;
+  result_error?: string;
+}
+
+function EmpCodeRemapDialog({
+  open,
+  onClose,
+  onApplied,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onApplied: (summary: { succeeded: number; failed: number }) => void;
+}) {
+  const [rows, setRows] = useState<RemapRow[]>([]);
+  const [fileName, setFileName] = useState<string>('');
+  const [parsing, setParsing] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [error, setError] = useState<string>('');
+  const [appliedResults, setAppliedResults] = useState<RemapRow[] | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const reset = () => {
+    setRows([]);
+    setFileName('');
+    setError('');
+    setAppliedResults(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleFilePicked = async (file: File) => {
+    setParsing(true);
+    setError('');
+    setAppliedResults(null);
+    try {
+      const XLSX = await import('xlsx');
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      if (!sheet) throw new Error('Workbook has no sheets');
+      const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { raw: false, defval: '' });
+      if (raw.length === 0) throw new Error('Sheet is empty');
+
+      // Accept any header containing "old" / "new" + "code". Tolerant of
+      // case + punctuation so HR doesn't have to match exactly.
+      const headers = Object.keys(raw[0]);
+      const oldHeader = headers.find((h) => /old/i.test(h) && /code/i.test(h));
+      const newHeader = headers.find((h) => /new/i.test(h) && /code/i.test(h));
+      if (!oldHeader || !newHeader) {
+        throw new Error('Need two columns whose headers contain "Old" + "Code" and "New" + "Code".');
+      }
+
+      // Load current emp_codes for validation.
+      const { data: codes, error: codesErr } = await supabase
+        .from('v_emp_codes')
+        .select('employee_id, emp_code');
+      if (codesErr) throw new Error(codesErr.message);
+      const idByCode = new Map<string, string>();
+      for (const r of codes ?? []) idByCode.set(String((r as any).emp_code), (r as any).employee_id);
+
+      const { data: profiles } = await supabase.from('profiles').select('id, full_name');
+      const nameById = new Map<string, string>();
+      for (const p of profiles ?? []) nameById.set((p as any).id, (p as any).full_name);
+
+      // First pass — tally each new_code so we can flag duplicates.
+      const newCodeCounts = new Map<string, number>();
+      for (const r of raw) {
+        const nc = String(r[newHeader] ?? '').trim();
+        if (nc) newCodeCounts.set(nc, (newCodeCounts.get(nc) ?? 0) + 1);
+      }
+
+      const parsed: RemapRow[] = raw.map((r) => {
+        const oc = String(r[oldHeader] ?? '').trim();
+        const nc = String(r[newHeader] ?? '').trim();
+        if (!oc || !nc) return { old_code: oc, new_code: nc, status: 'blank' as const, message: 'Both codes are required' };
+        if (oc === nc) return { old_code: oc, new_code: nc, status: 'identical' as const, message: 'Old and new are identical' };
+        const empId = idByCode.get(oc);
+        if (!empId) return { old_code: oc, new_code: nc, status: 'old_missing' as const, message: `No employee with emp_code "${oc}"` };
+        const collides = idByCode.get(nc);
+        if (collides && collides !== empId) return { old_code: oc, new_code: nc, status: 'new_taken' as const, message: `"${nc}" is used by another employee`, employee_name: nameById.get(empId) };
+        if ((newCodeCounts.get(nc) ?? 0) > 1) return { old_code: oc, new_code: nc, status: 'duplicate' as const, message: `"${nc}" appears more than once in this batch`, employee_name: nameById.get(empId) };
+        return { old_code: oc, new_code: nc, status: 'ok' as const, employee_name: nameById.get(empId) };
+      });
+
+      setRows(parsed);
+      setFileName(file.name);
+    } catch (err: any) {
+      setError(err.message || 'Failed to parse file');
+    } finally {
+      setParsing(false);
+    }
+  };
+
+  const allValid = rows.length > 0 && rows.every((r) => r.status === 'ok');
+  const validCount = rows.filter((r) => r.status === 'ok').length;
+
+  const handleApply = async () => {
+    if (!allValid || applying) return;
+    setApplying(true);
+    setError('');
+    try {
+      const results = await userService.remapEmpCodes(
+        rows.map((r) => ({ old_code: r.old_code, new_code: r.new_code })),
+      );
+      const merged: RemapRow[] = rows.map((r, i) => {
+        const res = results[i];
+        return res?.success
+          ? { ...r, status: 'applied', employee_name: res.full_name ?? r.employee_name }
+          : { ...r, status: 'failed', result_error: res?.error };
+      });
+      setAppliedResults(merged);
+      onApplied({
+        succeeded: results.filter((x) => x.success).length,
+        failed: results.filter((x) => !x.success).length,
+      });
+    } catch (err: any) {
+      setError(err.message || 'Apply failed');
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const displayRows = appliedResults ?? rows;
+
+  return (
+    <Dialog
+      open={open}
+      onClose={applying ? undefined : () => { reset(); onClose(); }}
+      maxWidth="md"
+      fullWidth
+      PaperProps={{ sx: { borderRadius: 3, backgroundImage: 'none' } }}
+    >
+      <DialogTitle sx={{ pb: 1, pt: 3, px: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
+        <div style={{ fontSize: 18, fontWeight: 700 }}>Remap Emp Codes</div>
+        <div style={{ fontSize: 13, opacity: 0.65, marginTop: 4 }}>
+          Upload a two-column Excel: <b>Old Emp Code</b> · <b>New Emp Code</b>. Every row is validated before you can Apply.
+        </div>
+      </DialogTitle>
+      <DialogContent sx={{ pt: '20px !important', pb: 1, px: 3, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        {error && <MuiAlert severity="error">{error}</MuiAlert>}
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleFilePicked(f);
+            }}
+          />
+          <MuiButton
+            size="small"
+            variant="outlined"
+            onClick={() => { if (fileInputRef.current) { fileInputRef.current.value = ''; fileInputRef.current.click(); } }}
+            disabled={parsing || applying}
+            sx={{ textTransform: 'none' }}
+          >
+            {fileName ? 'Replace file…' : 'Pick Excel file…'}
+          </MuiButton>
+          <div style={{ fontSize: 12, opacity: 0.7, flex: 1 }}>
+            {parsing ? 'Parsing…' : fileName ? fileName : 'No file selected yet.'}
+          </div>
+          {rows.length > 0 && !appliedResults && (
+            <MuiButton size="small" color="inherit" onClick={reset} sx={{ textTransform: 'none' }}>
+              Clear
+            </MuiButton>
+          )}
+        </div>
+
+        {displayRows.length > 0 && (
+          <div style={{ border: '1px solid', borderColor: 'rgba(148,163,184,0.3)', borderRadius: 8, maxHeight: 320, overflow: 'auto' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr 1fr', gap: 0, fontSize: 12, fontWeight: 700, opacity: 0.7, padding: '8px 12px', borderBottom: '1px solid rgba(148,163,184,0.2)' }}>
+              <div>Old → New</div>
+              <div>Employee</div>
+              <div>Status</div>
+              <div>Note</div>
+            </div>
+            {displayRows.map((r, idx) => {
+              const isOk = r.status === 'ok' || r.status === 'applied';
+              const isFail = r.status !== 'ok' && r.status !== 'applied';
+              return (
+                <div key={idx} style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr 1.5fr 1fr',
+                  gap: 0,
+                  fontSize: 13,
+                  padding: '8px 12px',
+                  borderBottom: idx < displayRows.length - 1 ? '1px solid rgba(148,163,184,0.15)' : undefined,
+                  backgroundColor: isFail ? 'rgba(239,68,68,0.06)' : undefined,
+                }}>
+                  <div>
+                    <span style={{ fontWeight: 600 }}>{r.old_code || '—'}</span>
+                    <span style={{ opacity: 0.5, margin: '0 6px' }}>→</span>
+                    <span style={{ fontWeight: 600 }}>{r.new_code || '—'}</span>
+                  </div>
+                  <div style={{ opacity: 0.85 }}>{r.employee_name || '—'}</div>
+                  <div style={{ color: isOk ? '#16A34A' : '#DC2626', fontWeight: 600 }}>
+                    {r.status === 'ok' ? '✓ valid' :
+                     r.status === 'applied' ? '✓ renamed' :
+                     r.status === 'failed' ? '✗ failed' :
+                     r.status === 'old_missing' ? '✗ old not found' :
+                     r.status === 'new_taken' ? '✗ new already used' :
+                     r.status === 'duplicate' ? '✗ duplicate in batch' :
+                     r.status === 'identical' ? '✗ identical' :
+                     '✗ blank'}
+                  </div>
+                  <div style={{ fontSize: 12, opacity: 0.75 }}>
+                    {r.result_error || r.message || ''}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {appliedResults && (
+          <div style={{ fontSize: 12, opacity: 0.75 }}>
+            Run complete. Close this dialog to refresh the list.
+          </div>
+        )}
+
+        {rows.length > 0 && !appliedResults && (
+          <div style={{ fontSize: 12, opacity: 0.7 }}>
+            {validCount} of {rows.length} valid. Apply is disabled until every row is ✓.
+          </div>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider', gap: 1 }}>
+        <MuiButton onClick={() => { reset(); onClose(); }} disabled={applying} sx={{ textTransform: 'none', fontWeight: 600 }}>
+          {appliedResults ? 'Close' : 'Cancel'}
+        </MuiButton>
+        <div style={{ flex: 1 }} />
+        {!appliedResults && (
+          <MuiButton
+            variant="contained"
+            color="success"
+            onClick={handleApply}
+            disabled={!allValid || applying}
+            sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, px: 3 }}
+          >
+            {applying ? 'Renaming…' : `Apply ${validCount} rename${validCount === 1 ? '' : 's'}`}
+          </MuiButton>
+        )}
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 // --------------- Main Screen ---------------
 
 export default function EmployeesScreen() {
@@ -2211,6 +2474,11 @@ export default function EmployeesScreen() {
   //     before sending. The legacy "demote active → pending_info"
   //     semantic still applies for rows currently at status='active';
   //     all other statuses get a pure resend.
+  // Bulk emp_code remap (one-off admin tool — separate from the
+  // resend-email bulk flow because the data shape is different:
+  // 2 cols old→new, no email needed).
+  const [remapDialogOpen, setRemapDialogOpen] = useState(false);
+
   // The bulk dialog used to do one thing ("resend sign-in email").
   // It now supports four mutually-exclusive actions, picked by which
   // button HR clicks in the header. The dialog UX stays the same
@@ -2510,6 +2778,36 @@ export default function EmployeesScreen() {
             </>
           )}
 
+          {/* Bulk remap tool — outlined style so it doesn't compete
+              with the primary action. One-off use, but kept in the
+              header so HR doesn't have to dig for it. */}
+          <button
+            onClick={() => setRemapDialogOpen(true)}
+            title="Bulk-rename emp_codes via Excel upload. Useful for legacy code migration; rarely used otherwise."
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '10px 14px',
+              backgroundColor: 'transparent',
+              color: isDark ? '#E2E8F0' : '#0F172A',
+              border: `1px solid ${isDark ? '#475569' : '#CBD5E1'}`,
+              borderRadius: 10,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="17 1 21 5 17 9" />
+              <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+              <polyline points="7 23 3 19 7 15" />
+              <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+            </svg>
+            Remap Emp Codes
+          </button>
+
           <button
             onClick={handleOpenInvite}
             style={{
@@ -2597,6 +2895,14 @@ export default function EmployeesScreen() {
                   }
                   onClose={() => setResendDialog({ open: false, action: 'reset', rows: [], comment: '' })}
                   onConfirm={() => runBulk(resendDialog.action, resendDialog.rows, resendDialog.comment)}
+                />
+                <EmpCodeRemapDialog
+                  open={remapDialogOpen}
+                  onClose={() => setRemapDialogOpen(false)}
+                  onApplied={(summary) => {
+                    setSuccessMsg(`Emp-code remap: ${summary.succeeded} renamed, ${summary.failed} failed`);
+                    invalidate();
+                  }}
                 />
                 <Snackbar
                   open={!!successMsg}
