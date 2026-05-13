@@ -17,6 +17,7 @@ import {
   profileCapabilitiesService,
   lookupService,
   authService,
+  compensationService,
   canonicaliseDepartment,
   canonicaliseDesignation,
 } from '@/services';
@@ -88,6 +89,22 @@ interface EditDialogState {
   manager_id: string | null;
   workday_hours: string;
   annual_leave_entitlement_days: string;
+  // Compensation (effective-dated). Loaded from v_current_compensation
+  // on dialog open. If HR changes any of the four fields, a NEW row is
+  // inserted into employee_compensation on save with the picked
+  // effective_from — never an in-place overwrite. `comp_loaded_*` keep
+  // the original snapshot so we can detect a change vs the stored row.
+  comp_basic_salary: string;
+  comp_hra: string;
+  comp_transportation: string;
+  comp_other_allowances: string;
+  comp_currency: string;
+  comp_effective_from: string;
+  comp_notes: string;
+  comp_loaded_basic_salary: string;
+  comp_loaded_hra: string;
+  comp_loaded_transportation: string;
+  comp_loaded_other_allowances: string;
   is_active: boolean;
   show_all_supervisors: boolean;
   show_all_managers: boolean;
@@ -138,6 +155,17 @@ const INITIAL_DIALOG: EditDialogState = {
   manager_id: null,
   workday_hours: '8',
   annual_leave_entitlement_days: '21',
+  comp_basic_salary: '',
+  comp_hra: '',
+  comp_transportation: '',
+  comp_other_allowances: '',
+  comp_currency: 'SAR',
+  comp_effective_from: '',
+  comp_notes: '',
+  comp_loaded_basic_salary: '',
+  comp_loaded_hra: '',
+  comp_loaded_transportation: '',
+  comp_loaded_other_allowances: '',
   is_active: true,
   show_all_supervisors: false,
   show_all_managers: false,
@@ -222,6 +250,8 @@ const EDIT_DRAFT_KEYS: (keyof EditDialogState)[] = [
   'annual_leave_entitlement_days',
   'is_active', 'show_all_supervisors', 'show_all_managers',
   'email_action', 'email_action_comment', 'warn_on_uncompleted_form',
+  'comp_basic_salary', 'comp_hra', 'comp_transportation', 'comp_other_allowances',
+  'comp_effective_from', 'comp_notes',
   'is_general_manager', 'is_operations_manager',
   'can_approve_project_hours_changes', 'can_close_month',
 ];
@@ -701,6 +731,83 @@ function EditEmployeeDialog({
             fullWidth size="small"
             InputProps={{ readOnly: true }}
             helperText="Auto-credited on day 1 of each month"
+          />
+        </div>
+
+        {/* ── Compensation ─────────────────────────────────────────
+            Effective-dated rows in employee_compensation (migration
+            033). On save, if ANY of the four amounts changed vs the
+            loaded snapshot, we INSERT a new row with the picked
+            effective_from. Past rows stay as the audit trail. */}
+        <div style={{ marginTop: 4, padding: 12, borderRadius: 8, border: '1px solid rgba(148,163,184,0.25)' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.75, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Compensation ({state.comp_currency || 'SAR'})
+          </div>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <MuiTextField
+              label="Basic Salary"
+              value={state.comp_basic_salary}
+              onChange={(e: any) => onChange('comp_basic_salary', e.target.value)}
+              fullWidth size="small" type="number"
+              inputProps={{ min: 0, step: 0.01 }}
+            />
+            <MuiTextField
+              label="HRA (Housing)"
+              value={state.comp_hra}
+              onChange={(e: any) => onChange('comp_hra', e.target.value)}
+              fullWidth size="small" type="number"
+              inputProps={{ min: 0, step: 0.01 }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+            <MuiTextField
+              label="Transportation"
+              value={state.comp_transportation}
+              onChange={(e: any) => onChange('comp_transportation', e.target.value)}
+              fullWidth size="small" type="number"
+              inputProps={{ min: 0, step: 0.01 }}
+            />
+            <MuiTextField
+              label="Other Allowances"
+              value={state.comp_other_allowances}
+              onChange={(e: any) => onChange('comp_other_allowances', e.target.value)}
+              fullWidth size="small" type="number"
+              inputProps={{ min: 0, step: 0.01 }}
+              helperText="Phone, food, etc. — single bucket for now"
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 12, marginTop: 8, alignItems: 'flex-start' }}>
+            <MuiTextField
+              label="Effective From"
+              type="date"
+              value={state.comp_effective_from}
+              onChange={(e: any) => onChange('comp_effective_from', e.target.value)}
+              fullWidth size="small"
+              InputLabelProps={{ shrink: true }}
+              helperText="Only applies if any amount above changed"
+            />
+            <MuiTextField
+              label="Monthly Pay (auto)"
+              value={(() => {
+                const sum =
+                  (parseFloat(state.comp_basic_salary) || 0) +
+                  (parseFloat(state.comp_hra) || 0) +
+                  (parseFloat(state.comp_transportation) || 0) +
+                  (parseFloat(state.comp_other_allowances) || 0);
+                return sum > 0 ? sum.toFixed(2) + ' ' + (state.comp_currency || 'SAR') : '—';
+              })()}
+              fullWidth size="small"
+              InputProps={{ readOnly: true }}
+            />
+          </div>
+          <MuiTextField
+            label="Notes (optional)"
+            value={state.comp_notes}
+            onChange={(e: any) => onChange('comp_notes', e.target.value)}
+            fullWidth size="small"
+            multiline rows={1}
+            placeholder='e.g. "2026 annual raise" or "Promotion to Senior Engineer"'
+            sx={{ mt: 1 }}
           />
         </div>
 
@@ -1664,6 +1771,37 @@ export default function EmployeesScreen() {
       // Non-fatal — emp_code stays empty and HR will see the required-field warning.
     }
 
+    // Load current compensation row (latest effective). Falls back to
+    // zeros if HR hasn't entered anything for this employee yet.
+    try {
+      const current = await compensationService.getCurrent(emp.id);
+      setDialog((s) => {
+        if (s.employee?.id !== emp.id) return s;
+        const b = current?.basic_salary != null ? String(current.basic_salary) : '';
+        const h = current?.hra != null ? String(current.hra) : '';
+        const t = current?.transportation != null ? String(current.transportation) : '';
+        const o = current?.other_allowances != null ? String(current.other_allowances) : '';
+        return {
+          ...s,
+          comp_basic_salary: draftFields.comp_basic_salary ?? b,
+          comp_hra: draftFields.comp_hra ?? h,
+          comp_transportation: draftFields.comp_transportation ?? t,
+          comp_other_allowances: draftFields.comp_other_allowances ?? o,
+          comp_currency: current?.currency || 'SAR',
+          comp_effective_from: draftFields.comp_effective_from ?? new Date().toISOString().slice(0, 10),
+          comp_notes: draftFields.comp_notes ?? '',
+          // Snapshot of the loaded values — used at submit time to
+          // tell whether HR actually changed anything.
+          comp_loaded_basic_salary: b,
+          comp_loaded_hra: h,
+          comp_loaded_transportation: t,
+          comp_loaded_other_allowances: o,
+        };
+      });
+    } catch {
+      /* non-fatal — section just shows 0s */
+    }
+
     // Load capability flags asynchronously. If the row doesn't exist yet,
     // every flag stays false (the INITIAL_DIALOG default).
     try {
@@ -1823,6 +1961,36 @@ export default function EmployeesScreen() {
         warn_on_uncompleted_form: dialog.warn_on_uncompleted_form,
         is_active: dialog.is_active,
       } as any);
+
+      // Compensation: insert a new effective-dated row only if any of
+      // the four amounts changed vs what we loaded. The PK is
+      // (employee_id, effective_from) so HR picking today's date for
+      // two different raises in one day would conflict — surfaced as
+      // an error toast.
+      const compChanged =
+        (dialog.comp_basic_salary || '') !== (dialog.comp_loaded_basic_salary || '') ||
+        (dialog.comp_hra || '') !== (dialog.comp_loaded_hra || '') ||
+        (dialog.comp_transportation || '') !== (dialog.comp_loaded_transportation || '') ||
+        (dialog.comp_other_allowances || '') !== (dialog.comp_loaded_other_allowances || '');
+      if (compChanged) {
+        try {
+          await compensationService.addNewRow({
+            employee_id: employeeId,
+            effective_from: dialog.comp_effective_from || new Date().toISOString().slice(0, 10),
+            basic_salary: parseFloat(dialog.comp_basic_salary) || 0,
+            hra: parseFloat(dialog.comp_hra) || 0,
+            transportation: parseFloat(dialog.comp_transportation) || 0,
+            other_allowances: parseFloat(dialog.comp_other_allowances) || 0,
+            notes: dialog.comp_notes.trim() || undefined,
+            created_by: user?.id,
+          });
+        } catch (err: any) {
+          // Don't roll back the rest of the save — surface the comp
+          // failure separately. Most common cause: PK violation when
+          // effective_from collides with an existing row.
+          throw new Error('Compensation save failed: ' + (err.message || 'unknown'));
+        }
+      }
 
       // 3. emp_code lives in employee_documents — upsert separately.
       const newEmpCode = dialog.emp_code.trim();

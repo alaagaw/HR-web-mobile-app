@@ -15,6 +15,8 @@ import {
   FolderOpen,
   Building2,
   UserCheck,
+  DollarSign,
+  Calculator,
 } from 'lucide-react-native';
 import { Card } from '@/components/ui/card';
 
@@ -70,6 +72,20 @@ const ADMIN_GROUPS: AdminGroup[] = [
         icon: Wallet,
         iconColor: '#16A34A',
         path: '/(app)/admin/balances',
+      },
+      {
+        title: 'Compensation',
+        description: 'Track BASIC + HRA + Transportation + other allowances. Effective-dated rows preserve history through raises.',
+        icon: DollarSign,
+        iconColor: '#16A34A',
+        path: '/(app)/admin/compensation',
+      },
+      {
+        title: 'Leave Payouts',
+        description: 'Calculate per-month leave payouts for any year/month. Auto-fills basic/HRA/transport based on compensation in effect.',
+        icon: Calculator,
+        iconColor: '#0891B2',
+        path: '/(app)/admin/leave-payouts',
       },
     ],
   },

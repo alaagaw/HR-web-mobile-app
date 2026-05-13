@@ -411,6 +411,50 @@ export interface RequestProfileVerificationResult {
   error?: string;
 }
 
+/**
+ * One row in the effective-dated `employee_compensation` table.
+ * Saved on every salary change (insert a new row with effective_from
+ * = today). Past rows stay around as the audit trail; the row
+ * "currently in effect" is the one with the latest effective_from
+ * <= today.
+ */
+export interface EmployeeCompensation {
+  employee_id: string;
+  effective_from: string;       // ISO date
+  basic_salary: number;
+  hra: number;
+  transportation: number;
+  other_allowances: number;
+  currency: string;
+  notes: string | null;
+  total_monthly?: number;       // present when read via v_current_compensation
+  created_at?: string;
+  created_by?: string | null;
+}
+
+/**
+ * One row returned by the compute_leave_payouts RPC. The /admin/leave-payouts
+ * grid renders these directly; totals are summed client-side.
+ */
+export interface LeavePayoutRow {
+  employee_id: string;
+  full_name: string;
+  emp_code: string | null;
+  department: string | null;
+  basic_salary: number;
+  hra: number;
+  transportation: number;
+  other_allowances: number;
+  total_monthly: number;
+  days_in_month: number;
+  basic_payable: number;
+  hra_payable: number;
+  transport_payable: number;
+  other_payable: number;
+  total_payable: number;
+  effective_from: string | null;
+}
+
 export interface InviteEmployeeData {
   email: string;
   full_name: string;

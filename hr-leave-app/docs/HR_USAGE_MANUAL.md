@@ -4,7 +4,7 @@
 > Add new sections at the bottom as we build more.
 
 **Last updated:** 2026-05-13
-**Latest commits covered:** through `577f78b` (form-warnings pipeline)
+**Latest commits covered:** through `577f78b` (form-warnings pipeline) + compensation & leave-payouts (this commit)
 
 ---
 
@@ -20,9 +20,11 @@
 8. [Bulk Excel import / export (Balance Management)](#8-bulk-excel-import--export)
 9. [Uncompleted-form warning system](#9-uncompleted-form-warning-system)
 10. [Timesheet entry & Monthly Consolidated](#10-timesheets)
-11. [What runs automatically (cron schedules)](#11-automated-jobs)
-12. [Domain & email infrastructure](#12-domain--email)
-13. [Known follow-ups](#13-known-follow-ups)
+11. [Compensation (BASIC + HRA + Transport)](#11-compensation)
+12. [Leave Payouts calculator](#12-leave-payouts)
+13. [What runs automatically (cron schedules)](#13-automated-jobs)
+14. [Domain & email infrastructure](#14-domain--email)
+15. [Known follow-ups](#15-known-follow-ups)
 
 ---
 
@@ -295,7 +297,64 @@ HR can fire ad-hoc warnings at any time via the bulk **Send Warning** button. Op
 
 ---
 
-## 11. Automated jobs
+## 11. Compensation
+
+**Path:** Admin → **Compensation** (`/admin/compensation`)
+**Also accessible from:** Employee Directory → click any row → Edit Employee → **Compensation** section
+
+### Model
+
+`employee_compensation` is **effective-dated**: each row has an `effective_from` date. The row currently "in effect" is the one with the latest `effective_from <= today`. To record a raise, HR inserts a **new** row — past rows are kept as the audit trail and as the source of truth for past-month payouts.
+
+Components per row:
+- **Basic Salary**
+- **HRA** (housing allowance)
+- **Transportation**
+- **Other Allowances** (single catch-all bucket for now — phone, food, etc.)
+- **Notes** (free text, e.g. "Annual raise 2026")
+- **Currency** (default SAR)
+
+### Two entry points
+
+**Quick-edit (most common):** Open any employee via Edit Employee → scroll to the **Compensation** section. Change any of the four amounts + pick **Effective From** date. Save fires a `compensationService.addNewRow()` call only if at least one amount changed; unchanged saves don't write a new row.
+
+**Standalone page (history view):** Admin → Compensation lists every active employee with their current row + monthly total. Click any row → modal opens showing the full effective-dated history (most recent first, "current" tagged). **+ Add new pay row** button inserts a new effective-dated row without leaving the page.
+
+### Past-month payouts
+
+Because rows are effective-dated, [Leave Payouts](#12-leave-payouts) for any past month automatically uses the row that was in effect on the **1st of that month**. Raises don't retroactively change historical payouts.
+
+---
+
+## 12. Leave Payouts
+
+**Path:** Admin → **Leave Payouts** (`/admin/leave-payouts`)
+
+### What it computes
+
+Per the Saudi convention: `payable = (component / 30) × days_off_in_month` for each of Basic, HRA, Transportation, Other. **Total payable** = sum of the four.
+
+`days_off_in_month` = sum of approved PTO + emergency-leave days falling inside the selected month, clamped at month boundaries (so a leave spanning May 28 → June 5 contributes 4 days to May, 5 days to June).
+
+### UI
+
+- **Month nav** at the top right (`‹ May 2026 ›`) — go any direction, past or future.
+- **Search box** (name / emp code / department) and **Department dropdown** for filtering.
+- Live summary row above the grid: *"237 employees · 18 days · TOTAL 45,250.00 SAR"*.
+- **Grid columns**: Emp #, Name, Dept, Basic/mo, HRA/mo, Transport/mo, Days off, Basic Payable, HRA Payable, Transport Payable, **TOTAL**. TOTAL column is bolded in blue.
+- **Export Excel** button — writes the grid contents plus a TOTALS row at the bottom, filename `leave_payouts_<year>_<month>.xlsx`.
+
+### Single read for performance
+
+The whole page is backed by one server-side RPC — `compute_leave_payouts(year, month, department?)` — which does the join across `profiles` + `employee_compensation` + `leave_requests` and returns one pre-computed row per employee. No client-side N+1; sub-second load even at 237 employees.
+
+### Future months work
+
+Pick e.g. December 2026 today and you'll see the payouts that **would** apply for any future leave already approved. Useful for budget forecasting before approving more leave.
+
+---
+
+## 13. Automated jobs
 
 Confirmed scheduled via `pg_cron`:
 
@@ -310,7 +369,7 @@ Manual escape hatches for all of the above are present in the UI — see section
 
 ---
 
-## 12. Domain & email
+## 14. Domain & email
 
 ### Canonical domain
 
@@ -342,7 +401,7 @@ Manual escape hatches for all of the above are present in the UI — see section
 
 ---
 
-## 13. Known follow-ups
+## 15. Known follow-ups
 
 Items deferred from today's work, listed in priority order so we don't forget:
 

@@ -24,5 +24,6 @@ export { projectManagersService } from './supabase/project-managers';
 export { projectHoursChangeService } from './supabase/project-hours-change';
 export { monthClosureService } from './supabase/month-closure';
 export { overtimeService } from './supabase/overtime';
+export { compensationService } from './supabase/compensation';
 export { lookupService, canonicaliseDepartment, canonicaliseNationality, canonicaliseDesignation } from './supabase/lookup';
 export type { LookupItem } from './supabase/lookup';
