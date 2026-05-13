@@ -7,7 +7,7 @@
  * is read via the `v_current_compensation` view.
  */
 import { supabase } from './client';
-import type { EmployeeCompensation, LeavePayoutRow } from '@/types/models';
+import type { EmployeeCompensation, LeavePayoutRow, PredictedPayoutRow } from '@/types/models';
 
 export const compensationService = {
   /**
@@ -116,5 +116,24 @@ export const compensationService = {
     });
     if (error) throw new Error(error.message);
     return (data ?? []) as LeavePayoutRow[];
+  },
+
+  /**
+   * Forecast inputs for the "Forecast (from balance)" tab. Returns
+   * comp + current PTO balance per employee; the actual what-if math
+   * (days input, optional start_date) is client-side.
+   */
+  async computePredictedPayouts(
+    year: number,
+    month: number,
+    department?: string,
+  ): Promise<PredictedPayoutRow[]> {
+    const { data, error } = await supabase.rpc('compute_predicted_payouts', {
+      p_year: year,
+      p_month: month,
+      p_department: department ?? null,
+    });
+    if (error) throw new Error(error.message);
+    return (data ?? []) as PredictedPayoutRow[];
   },
 };

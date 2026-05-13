@@ -4,7 +4,7 @@
 > Add new sections at the bottom as we build more.
 
 **Last updated:** 2026-05-13
-**Latest commits covered:** through `5886494` (compensation + leave payouts) + compensation bulk Excel (this commit)
+**Latest commits covered:** through `979f54d` (filter refresh fix) + Forecast tab on Leave Payouts (this commit)
 
 ---
 
@@ -368,27 +368,44 @@ The metadata array lives in [`lib/compensation-bulk-fields.ts`](../lib/compensat
 
 **Path:** Admin → **Leave Payouts** (`/admin/leave-payouts`)
 
-### What it computes
+Two tabs at the top, both keyed off the same month picker, search, and department filter:
 
-Per the Saudi convention: `payable = (component / 30) × days_off_in_month` for each of Basic, HRA, Transportation, Other. **Total payable** = sum of the four.
+### Tab 1 — Forecast (from balance) — *default, planning view*
 
-`days_off_in_month` = sum of approved PTO + emergency-leave days falling inside the selected month, clamped at month boundaries (so a leave spanning May 28 → June 5 contributes 4 days to May, 5 days to June).
+What-if calculator. Mimics the Excel HR has been using.
 
-### UI
+- Defaults each row's **Days** to the employee's full PTO balance (capped at the calendar days in the selected month) — so when you open it, you see "if every employee took their accrued PTO this month, here's the total leave-pay impact."
+- **Per-row edits** are live — typing in a different Days value or filling in **Start Date** instantly updates that row's pay columns AND the top-right TOTAL summary. No re-load, no save button.
+- **Two input modes** per row:
+  - **Days only** (Start Date empty): treats `Days` as days-this-month, capped at calendar days for sanity (so a typo of 999 doesn't produce a 33× monthly comp).
+  - **Date range** (Start Date filled): leave spans `[Start Date, Start Date + Days − 1]`. The calculator computes only the days that fall inside the currently selected month. Cross-month leaves split correctly when you flip the month picker — e.g., May 25 + 14 days → 7 days in May, 7 in June.
+- **Available Days** column shows the current PTO balance (read-only), so HR can see at a glance what the employee actually has banked.
+- **Export Forecast** writes the current Days / Start Date values + computed pay to xlsx with a TOTAL footer row.
 
-- **Month nav** at the top right (`‹ May 2026 ›`) — go any direction, past or future.
-- **Search box** (name / emp code / department) and **Department dropdown** for filtering.
-- Live summary row above the grid: *"237 employees · 18 days · TOTAL 45,250.00 SAR"*.
-- **Grid columns**: Emp #, Name, Dept, Basic/mo, HRA/mo, Transport/mo, Days off, Basic Payable, HRA Payable, Transport Payable, **TOTAL**. TOTAL column is bolded in blue.
-- **Export Excel** button — writes the grid contents plus a TOTALS row at the bottom, filename `leave_payouts_<year>_<month>.xlsx`.
+Backing RPC: `compute_predicted_payouts(year, month, department?)` — returns comp + balance per employee; all what-if math is client-side for instant feedback.
 
-### Single read for performance
+### Tab 2 — Actual (from approved leave) — *payroll view*
 
-The whole page is backed by one server-side RPC — `compute_leave_payouts(year, month, department?)` — which does the join across `profiles` + `employee_compensation` + `leave_requests` and returns one pre-computed row per employee. No client-side N+1; sub-second load even at 237 employees.
+End-of-month payroll number. Use this to know what to add to the payroll ledger.
 
-### Future months work
+- Sums **approved leave-request days** that fall inside the selected month → `payable = (component / 30) × days`.
+- Cross-month leaves (May 28 → Jun 5) contribute the right slice per month (4 days to May, 5 to June).
+- No editable inputs — the data comes straight from the approval workflow.
+- **Export Actual** for the payroll team.
 
-Pick e.g. December 2026 today and you'll see the payouts that **would** apply for any future leave already approved. Useful for budget forecasting before approving more leave.
+Backing RPC: `compute_leave_payouts(year, month, department?)`.
+
+### Shared between tabs
+
+- **Month nav** (`‹ May 2026 ›`) — past, present, or future.
+- **Search box** (name / emp code / department) and **Department dropdown**.
+- **Compensation snapshot** for both is taken at `month_end` of the selected month (migration 034). So a comp row entered on 2026-05-13 counts for May 2026 onwards; past months still use the row that was effective then. Honest historical accuracy + forgiving for new hires entered mid-month.
+
+### Common use cases
+
+- "What's our leave-pay budget for next quarter?" → Forecast tab, flip through Jun/Jul/Aug, top-right TOTAL each month.
+- "How much do I add to May's payroll for leave?" → Actual tab, end of May.
+- "If Aqeel takes 10 days starting June 20, how much pays in June vs July?" → Forecast tab, set Aqeel's Days = 10 + Start Date = 2026-06-20, then toggle month picker between Jun and Jul. June shows 11 days × comp/30; July shows 3 days × comp/30.
 
 ---
 

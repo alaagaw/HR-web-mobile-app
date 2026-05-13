@@ -433,6 +433,29 @@ export interface EmployeeCompensation {
 }
 
 /**
+ * One row returned by the compute_predicted_payouts RPC. Backs the
+ * "Forecast (from balance)" tab on /admin/leave-payouts. Pay totals
+ * are computed client-side based on HR's days/start_date inputs so
+ * editing is live and doesn't need a round-trip per keystroke.
+ */
+export interface PredictedPayoutRow {
+  employee_id: string;
+  full_name: string;
+  emp_code: string | null;
+  department: string | null;
+  workday_hours: number;
+  basic_salary: number;
+  hra: number;
+  transportation: number;
+  other_allowances: number;
+  total_monthly: number;
+  pto_balance_hours: number;
+  pto_balance_days: number;
+  effective_from: string | null;
+  days_in_calendar_month: number;
+}
+
+/**
  * One row returned by the compute_leave_payouts RPC. The /admin/leave-payouts
  * grid renders these directly; totals are summed client-side.
  */
