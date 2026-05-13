@@ -248,20 +248,21 @@ export default function CompensationScreen() {
 
   const columns = useMemo(() => ([
     { field: 'full_name', headerName: 'Employee', flex: 1.5, minWidth: 180 },
-    { field: 'department', headerName: 'Department', flex: 1, minWidth: 140, valueGetter: (p: any) => p.row.department || '—' },
+    { field: 'department', headerName: 'Department', flex: 1, minWidth: 140,
+      valueGetter: (_value: any, row: EmpWithComp) => row.department || '—' },
     { field: 'comp_basic_salary', headerName: 'Basic', flex: 1, minWidth: 110, type: 'number',
-      valueFormatter: (p: any) => formatMoney(p.value || 0) },
+      valueFormatter: (value: any) => formatMoney(Number(value) || 0) },
     { field: 'comp_hra', headerName: 'HRA', flex: 1, minWidth: 110, type: 'number',
-      valueFormatter: (p: any) => formatMoney(p.value || 0) },
+      valueFormatter: (value: any) => formatMoney(Number(value) || 0) },
     { field: 'comp_transportation', headerName: 'Transport', flex: 1, minWidth: 110, type: 'number',
-      valueFormatter: (p: any) => formatMoney(p.value || 0) },
+      valueFormatter: (value: any) => formatMoney(Number(value) || 0) },
     { field: 'comp_other_allowances', headerName: 'Other', flex: 1, minWidth: 110, type: 'number',
-      valueFormatter: (p: any) => formatMoney(p.value || 0) },
+      valueFormatter: (value: any) => formatMoney(Number(value) || 0) },
     { field: 'comp_total', headerName: 'Monthly Total', flex: 1, minWidth: 130, type: 'number',
-      valueFormatter: (p: any) => formatMoney(p.value || 0),
+      valueFormatter: (value: any) => formatMoney(Number(value) || 0),
       cellClassName: 'comp-total-cell' },
     { field: 'comp_effective_from', headerName: 'Effective From', flex: 1, minWidth: 120,
-      valueGetter: (p: any) => p.row.comp_effective_from || '—' },
+      valueGetter: (_value: any, row: EmpWithComp) => row.comp_effective_from || '—' },
   ]), []);
 
   if (!isWeb) {
