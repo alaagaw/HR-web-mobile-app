@@ -17,7 +17,6 @@ import {
   UserCheck,
   DollarSign,
   Calculator,
-  Library,
 } from 'lucide-react-native';
 import { Card } from '@/components/ui/card';
 
@@ -87,13 +86,6 @@ const ADMIN_GROUPS: AdminGroup[] = [
         icon: Calculator,
         iconColor: '#0891B2',
         path: '/(app)/admin/leave-payouts',
-      },
-      {
-        title: 'HR Policies and Documents',
-        description: 'Curate company policies and documents in a folder tree. Upload, search contents, preview, version, and archive.',
-        icon: Library,
-        iconColor: '#7C3AED',
-        path: '/(app)/admin/hr-policies-documents',
       },
     ],
   },

@@ -12,6 +12,7 @@ import {
   Bell,
   Clock,
   ClipboardList,
+  Library,
 } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
 import { useAuth } from '@/hooks/use-auth';
@@ -34,6 +35,7 @@ const NAV_ITEMS = [
   { name: 'timesheet-entry', title: 'Timesheet', Icon: ClipboardList, approverOnly: false, hrOnly: false },
   { name: 'calendar', title: 'Calendar', Icon: CalendarDays, approverOnly: false, hrOnly: false },
   { name: 'notifications', title: 'Notifications', Icon: Bell, approverOnly: false, hrOnly: false, route: '/(app)/notifications' },
+  { name: 'hr-policies-documents', title: 'HR Policies and Documents', Icon: Library, approverOnly: false, hrOnly: false, route: '/(app)/admin/hr-policies-documents' },
   { name: 'admin', title: 'HR Admin', Icon: Settings, approverOnly: false, hrOnly: true },
   { name: 'profile', title: 'Profile', Icon: User, approverOnly: false, hrOnly: false },
 ] as const;
