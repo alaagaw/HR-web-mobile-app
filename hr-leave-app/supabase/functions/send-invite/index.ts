@@ -166,6 +166,9 @@ async function inviteWithMagicLink(supabase: any, profileId: string, redirectBas
   };
   if (isFirstTimeInvite) {
     updates.registration_status = 'pending_info';
+    // First invite = HR sent the form. Start the day-3/day-4 clock
+    // (send_form_warnings_check counts from form_request_sent_at).
+    updates.form_request_sent_at = new Date().toISOString();
   }
   await supabase.from('profiles').update(updates).eq('id', profileId);
 

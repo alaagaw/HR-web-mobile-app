@@ -76,6 +76,12 @@ export interface Profile {
    * created_at as a last-resort fallback.
    */
   registration_submitted_at: string | null;
+  /**
+   * When HR last SENT this employee a form request (first invite,
+   * re-verification, or info-form request). The day-3/day-4 form-
+   * warning clock counts from here. Null = HR never sent one.
+   */
+  form_request_sent_at: string | null;
   created_at: string;
   updated_at: string;
   /**

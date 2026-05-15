@@ -115,6 +115,9 @@ serve(async (req: Request) => {
             .from('profiles')
             .update({
               registration_status: 'pending_info',
+              // HR sent the form → start the day-3/day-4 clock
+              // (send_form_warnings_check counts from here).
+              form_request_sent_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             })
             .eq('id', profileId);

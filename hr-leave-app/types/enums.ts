@@ -66,6 +66,13 @@ export enum NotificationType {
   RegistrationSubmitted = 'registration_submitted',
   RegistrationApproved = 'registration_approved',
   RegistrationRejected = 'registration_rejected',
+  /**
+   * HR asked an *approved* employee to refresh their profile info.
+   * Distinct from RegistrationRejected: nothing was rejected — this is
+   * a neutral "please update" request, paired with the neutral
+   * `info_form_request` email.
+   */
+  RegistrationInfoRequested = 'registration_info_requested',
   EmployeeInvited = 'employee_invited',
 }
 

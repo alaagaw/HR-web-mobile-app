@@ -191,7 +191,9 @@ export const registrationService: RegistrationService = {
   },
 
   async approveRegistration(userId, data, approvedBy) {
-    // 1. Update profile with HR-assigned fields
+    // 1. Assign the HR-chosen org fields (role / department / chain).
+    //    Status is NOT flipped here — that goes through the audited
+    //    transition chokepoint in step 1b.
     const { error: profileError } = await supabase
       .from('profiles')
       .update({
@@ -199,13 +201,20 @@ export const registrationService: RegistrationService = {
         department: data.department,
         supervisor_id: data.supervisor_id,
         manager_id: data.manager_id,
-        registration_status: RegistrationStatus.Active,
-        registration_note: null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', userId);
 
     if (profileError) throw new Error(profileError.message);
+
+    // 1b. registration_status → active via the HR-only chokepoint RPC.
+    //     Enforces the legal transition and auto-audits it (the
+    //     active/note write is captured by trg_profiles_log_*).
+    const { error: approveError } = await supabase.rpc('hr_set_registration_status', {
+      p_user_id: userId,
+      p_action: 'approve',
+    });
+    if (approveError) throw new Error(approveError.message);
 
     // 2. Update emp_code in employee_documents.
     //    emp_code is NOT NULL UNIQUE. Pre-check for a collision with a
@@ -322,20 +331,18 @@ export const registrationService: RegistrationService = {
   },
 
   async rejectRegistration(userId, reason, rejectedBy) {
-    // "Reject" here is really "send back for changes". We flip status
-    // to info_rejected so the employee is bounced back to the form (one
-    // time, on next sign-in) and shown HR's comment. We do NOT change
-    // is_active — that's only HR's call via Edit Employee.
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .update({
-        registration_status: RegistrationStatus.InfoRejected,
-        registration_note: reason,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', userId);
+    // "Reject" here is really "send a pending submission back for
+    // changes". The chokepoint RPC enforces this is only valid from
+    // pending_approval, flips status → info_rejected, stores HR's
+    // comment, and auto-audits the change. is_active is NOT touched —
+    // that's only HR's call via Edit Employee.
+    const { error: rejectError } = await supabase.rpc('hr_set_registration_status', {
+      p_user_id: userId,
+      p_action: 'reject',
+      p_note: reason,
+    });
 
-    if (profileError) throw new Error(profileError.message);
+    if (rejectError) throw new Error(rejectError.message);
 
     // In-app notification — keep the `registration_rejected` type so any
     // historical notifications still render correctly; the title/body
@@ -435,11 +442,13 @@ export const registrationService: RegistrationService = {
   },
 
   async requestInfoFormUpdate(profileIds, comment) {
-    // No password reset. For each employee: demote to info_rejected
-    // (preserving info_rejected meaning — HR needs changes), set the
-    // optional comment as registration_note, insert in-app notif, send
-    // the `info_form_request` email. Iterates client-side because each
-    // step uses an already-wired service / edge function.
+    // No password reset, NOT a rejection. For each employee: route the
+    // status change through the HR-only chokepoint RPC (active →
+    // pending_info, or a clock-restarting re-send if they're already
+    // pending_info / info_rejected), set the optional comment as
+    // registration_note, send a *neutral* in-app notif + the neutral
+    // `info_form_request` email. Iterates client-side because each step
+    // uses an already-wired service / edge function.
     const results: RequestProfileVerificationResult[] = [];
     for (const id of profileIds) {
       try {
@@ -453,19 +462,19 @@ export const registrationService: RegistrationService = {
           throw new Error('Cannot request info update from an inactive employee');
         }
 
-        const { error: updErr } = await supabase
-          .from('profiles')
-          .update({
-            registration_status: 'info_rejected',
-            registration_note: comment?.trim() || null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', id);
-        if (updErr) throw new Error(updErr.message);
+        // Chokepoint: enforces the legal transition, stamps
+        // form_request_sent_at (the salary-hold clock), and the DB
+        // trigger audits the status/note change.
+        const { error: rpcErr } = await supabase.rpc('hr_set_registration_status', {
+          p_user_id: id,
+          p_action: 'request_info',
+          p_note: comment?.trim() || null,
+        });
+        if (rpcErr) throw new Error(rpcErr.message);
 
         await supabase.from('notifications').insert({
           user_id: id,
-          type: 'registration_rejected',
+          type: 'registration_info_requested',
           title: 'HR has asked you to update your profile',
           body: comment?.trim() || 'Please sign in and update your registration info.',
         });
