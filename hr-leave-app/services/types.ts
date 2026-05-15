@@ -40,6 +40,11 @@ import type {
   TimesheetFilters,
   ConsolidatedMonthEntry,
   MonthlyHourSetting,
+  HRDocumentFolder,
+  HRDocument,
+  HRDocumentVersion,
+  HRDocumentDraft,
+  HRDocUploadFile,
 } from '@/types/models';
 import type { ExcessDetermination, RegistrationStatus } from '@/types/enums';
 
@@ -301,4 +306,36 @@ export interface TimesheetService {
   // Monthly hour settings
   getMonthlyHourSetting(month: number, year: number): Promise<MonthlyHourSetting | null>;
   upsertMonthlyHourSetting(month: number, year: number, regularHoursLimit: number, setBy: string): Promise<MonthlyHourSetting>;
+}
+
+export interface HRPoliciesService {
+  // Folders (the navigation tree)
+  listFolders(): Promise<HRDocumentFolder[]>;
+  createFolder(name: string, parentId: string | null, createdBy: string): Promise<HRDocumentFolder>;
+  renameFolder(folderId: string, name: string): Promise<HRDocumentFolder>;
+  deleteFolder(folderId: string): Promise<void>;
+
+  // Documents
+  listDocuments(includeArchived: boolean): Promise<HRDocument[]>;
+  searchDocuments(query: string): Promise<HRDocument[]>;
+  getVersions(documentId: string): Promise<HRDocumentVersion[]>;
+  updateDocument(documentId: string, draft: HRDocumentDraft): Promise<HRDocument>;
+
+  /** Creates the document (if no documentId) or adds a new version to
+   *  an existing one, uploads the file, moves the current-version
+   *  pointer, then kicks off text extraction. */
+  uploadDocument(params: {
+    documentId: string | null;
+    draft: HRDocumentDraft;
+    file: HRDocUploadFile;
+    changeNote: string | null;
+    uploadedBy: string;
+  }): Promise<HRDocument>;
+
+  archiveDocument(documentId: string, archivedBy: string): Promise<void>;
+  reactivateDocument(documentId: string): Promise<void>;
+
+  /** Short-lived signed URL via the hr-document-url edge function.
+   *  download=true forces a Save-As of the original file. */
+  getFileUrl(versionId: string, download: boolean): Promise<{ url: string; file_name: string; file_type: string }>;
 }

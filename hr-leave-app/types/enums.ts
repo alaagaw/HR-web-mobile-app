@@ -90,6 +90,22 @@ export enum RegistrationStatus {
   Rejected = 'rejected',
 }
 
+// ============================================================
+// HR POLICIES & DOCUMENTS
+// ============================================================
+
+export enum HRDocumentStatus {
+  Active = 'active',
+  Archived = 'archived',
+}
+
+export enum HRDocumentVisibility {
+  /** Any signed-in employee may read it. */
+  All = 'all',
+  /** HR / HR Director only. */
+  HROnly = 'hr_only',
+}
+
 export enum EmergencyTier {
   Auto = 'auto',
   Manager = 'manager',

@@ -24,6 +24,24 @@ export const APPROVAL_SLA_HOURS = 48;
 export const CASE_NUMBER_PREFIX = 'LR';
 export const ATTACHMENTS_BUCKET = 'leave-attachments';
 
+// ── HR Policies & Documents ───────────────────────────────────
+// Private bucket — files are only ever fetched via the
+// `hr-document-url` edge function (signed URLs). Keep the allowed
+// MIME list in sync with migration 041's storage.buckets row.
+export const HR_DOCUMENTS_BUCKET = 'hr-documents';
+export const HR_DOC_MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
+export const HR_DOC_ALLOWED_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+];
+
 // ── Timesheet System ──────────────────────────────────────────
 export const COMPANY_NAME = 'POLY-TECH';
 export const TIMESHEET_DOC_NUMBER = 'PT-OPR-FM-0008';

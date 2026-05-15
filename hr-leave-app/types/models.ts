@@ -19,6 +19,8 @@ import {
   ProjectHoursChangeScope,
   ProjectHoursChangeStatus,
   ProjectHoursChangeAction,
+  HRDocumentStatus,
+  HRDocumentVisibility,
 } from './enums';
 
 // ============================================================
@@ -874,4 +876,73 @@ export interface EmployeeOvertimeCurrentMonth {
   overtime_hours_total: number;
   month_start: string;
   month_end: string;
+}
+
+// ============================================================
+// HR POLICIES & DOCUMENTS
+// ============================================================
+
+/** A node in the document navigation tree. */
+export interface HRDocumentFolder {
+  id: string;
+  parent_id: string | null;
+  name: string;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A logical document — the thing users open. File bytes live on
+ *  its versions, not here. */
+export interface HRDocument {
+  id: string;
+  folder_id: string | null;
+  title: string;
+  description: string | null;
+  tags: string[];
+  status: HRDocumentStatus;
+  visibility: HRDocumentVisibility;
+  current_version_id: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+  archived_by: string | null;
+  // Joined client-side for convenience.
+  current_version?: HRDocumentVersion | null;
+}
+
+/** One uploaded file. Immutable; "replace" inserts a new row and
+ *  moves HRDocument.current_version_id. */
+export interface HRDocumentVersion {
+  id: string;
+  document_id: string;
+  version_no: number;
+  file_path: string;
+  file_name: string;
+  file_size: number;
+  file_type: string;
+  /** Populated by the extract-document-text edge function. */
+  extracted_text: string | null;
+  change_note: string | null;
+  uploaded_by: string | null;
+  uploaded_at: string;
+}
+
+/** Fields HR sets when creating / editing a document's metadata. */
+export interface HRDocumentDraft {
+  title: string;
+  description: string | null;
+  tags: string[];
+  folder_id: string | null;
+  visibility: HRDocumentVisibility;
+}
+
+/** A local file picked for upload (web File or RN document-picker asset). */
+export interface HRDocUploadFile {
+  uri: string;
+  name: string;
+  type: string;
+  size: number;
 }
