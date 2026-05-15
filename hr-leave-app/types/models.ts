@@ -65,6 +65,15 @@ export interface Profile {
    * registration form submission.
    */
   hr_original_values: Record<string, unknown> | null;
+  /**
+   * The time the employee actually submitted (or resubmitted) their
+   * registration form — stamped by the submit_my_registration RPC
+   * (migration 040). Distinct from created_at, which is profile/auth
+   * creation time. Null only for pre-040 rows that were never pending
+   * at backfill time. Use this for any "Submitted" label, with
+   * created_at as a last-resort fallback.
+   */
+  registration_submitted_at: string | null;
   created_at: string;
   updated_at: string;
   /**

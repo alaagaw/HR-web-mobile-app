@@ -565,7 +565,7 @@ function ActionRequiredCard({
                   </span>
                 </div>
                 <div style={{ fontSize: 13, color: tk.textMuted }}>
-                  Submitted {new Date(reg.created_at).toLocaleDateString()}
+                  Submitted {new Date(reg.registration_submitted_at ?? reg.created_at).toLocaleDateString()}
                   {reg.department && <> · {reg.department}</>}
                 </div>
               </div>

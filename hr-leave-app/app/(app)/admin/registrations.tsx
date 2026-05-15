@@ -79,9 +79,13 @@ export default function RegistrationsScreen() {
         ),
       },
       {
-        field: 'created_at',
+        field: 'registration_submitted_at',
         headerName: 'Submitted',
         width: 160,
+        // Fall back to created_at for any pre-040 row that was never
+        // backfilled (defensive — backfill covers all pending rows).
+        valueGetter: (_value: any, row: any) =>
+          row.registration_submitted_at ?? row.created_at,
         valueFormatter: (value: string) =>
           value ? new Date(value).toLocaleDateString() : '-',
       },
@@ -153,7 +157,7 @@ export default function RegistrationsScreen() {
             {item.registration_status === 'pending_approval' ? 'Pending Approval' : 'Pending Info'}
           </Badge>
           <Text className="text-xs text-text-muted dark:text-slate-400">
-            {new Date(item.created_at).toLocaleDateString()}
+            {new Date(item.registration_submitted_at ?? item.created_at).toLocaleDateString()}
           </Text>
         </View>
       </View>

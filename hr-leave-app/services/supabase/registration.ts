@@ -167,7 +167,10 @@ export const registrationService: RegistrationService = {
       .from('profiles')
       .select('*')
       .in('registration_status', ['pending_approval', 'pending_info'])
-      .order('created_at', { ascending: false });
+      // Most recently submitted first. Backfill (migration 040)
+      // guarantees registration_submitted_at is set for all pending
+      // rows, so nullsFirst:false is just defensive.
+      .order('registration_submitted_at', { ascending: false, nullsFirst: false });
 
     if (error) throw new Error(error.message);
 

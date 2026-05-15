@@ -696,7 +696,7 @@ export function ReviewRegistrationDialog({
               {renderEditableField('Phone', 'phone', { diff: editMode ? undefined : phoneDiff })}
               <MuiTextField
                 label="Submitted"
-                value={reg.created_at ? new Date(reg.created_at).toLocaleString() : ''}
+                value={(reg.registration_submitted_at ?? reg.created_at) ? new Date(reg.registration_submitted_at ?? reg.created_at).toLocaleString() : ''}
                 fullWidth size="small" disabled
               />
             </Box>
