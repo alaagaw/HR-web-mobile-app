@@ -227,15 +227,16 @@ export const hrPoliciesService: HRPoliciesService = {
       .single();
     if (dErr) throw new Error(dErr.message);
 
-    // 6. Kick off text extraction. Best effort — a failure here just
-    //    means the file isn't content-searchable yet; the upload stands.
-    try {
-      await supabase.functions.invoke('extract-document-text', {
-        body: { version_id: version.id },
+    // 6. Kick off text extraction — FIRE AND FORGET. Indexing is best
+    //    effort and can be slow (edge cold start + parser load). The
+    //    file + version + pointer are already committed, so the upload
+    //    must NOT wait on it; the doc is usable immediately and just
+    //    becomes content-searchable a few seconds later.
+    void supabase.functions
+      .invoke('extract-document-text', { body: { version_id: version.id } })
+      .catch(() => {
+        /* non-fatal: document stands; only its content search lags */
       });
-    } catch {
-      /* non-fatal */
-    }
 
     const [withVersion] = await attachCurrentVersions([updated as HRDocument]);
     return withVersion;

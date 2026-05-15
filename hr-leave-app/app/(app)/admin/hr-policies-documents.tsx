@@ -604,6 +604,7 @@ export default function HRPoliciesDocumentsScreen() {
       </div>
 
       <View style={{ flex: 1, flexDirection: 'row' }}>
+        <MuiThemeProvider isDark={isDark}>
         {/* Left: search + tree */}
         <View style={{ width: 300, borderRightWidth: 1, borderRightColor: isDark ? DT.border : '#E2E8F0', padding: 16 }}>
           <input
@@ -621,14 +622,12 @@ export default function HRPoliciesDocumentsScreen() {
               {searchResults.length} result(s) — clear search to browse folders
             </div>
           )}
-          <MuiThemeProvider isDark={isDark}>
-            <RichTreeView
-              items={tree}
-              selectedItems={selectedNode}
-              onSelectedItemsChange={(_e: any, id: string | null) => { if (id) { setSearch(''); setSelectedNode(id); } }}
-              defaultExpandedItems={[NODE_ALL]}
-            />
-          </MuiThemeProvider>
+          <RichTreeView
+            items={tree}
+            selectedItems={selectedNode}
+            onSelectedItemsChange={(_e: any, id: string | null) => { if (id) { setSearch(''); setSelectedNode(id); } }}
+            defaultExpandedItems={[NODE_ALL]}
+          />
           {isHR && !selectedNode.startsWith('__') && (
             <button onClick={handleDeleteFolder} style={{ ...btnStyle(isDark, 'ghost'), marginTop: 14, width: '100%' }}>
               Delete selected folder
@@ -748,6 +747,7 @@ export default function HRPoliciesDocumentsScreen() {
             </View>
           )}
         </View>
+        </MuiThemeProvider>
       </View>
 
       {/* Dialogs + snackbar */}
