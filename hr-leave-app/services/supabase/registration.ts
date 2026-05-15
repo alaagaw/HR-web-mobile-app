@@ -204,14 +204,41 @@ export const registrationService: RegistrationService = {
 
     if (profileError) throw new Error(profileError.message);
 
-    // 2. Update emp_code in employee_documents
-    await supabase
+    // 2. Update emp_code in employee_documents.
+    //    emp_code is NOT NULL UNIQUE. Pre-check for a collision with a
+    //    DIFFERENT employee so HR gets a clear message instead of a raw
+    //    "duplicate key value violates unique constraint" (or, worse, a
+    //    silently swallowed update — this error used to be unchecked).
+    if (data.emp_code) {
+      const { data: clash } = await supabase
+        .from('employee_documents')
+        .select('employee_id')
+        .eq('emp_code', data.emp_code)
+        .neq('employee_id', userId)
+        .maybeSingle();
+      if (clash) {
+        throw new Error(
+          `Employee code "${data.emp_code}" is already assigned to another employee. ` +
+            `Use a different code, or fix the duplicate via Manage Employees → Remap Employee Codes.`
+        );
+      }
+    }
+
+    const { error: empCodeError } = await supabase
       .from('employee_documents')
       .update({
         emp_code: data.emp_code,
         updated_at: new Date().toISOString(),
       })
       .eq('employee_id', userId);
+
+    if (empCodeError) {
+      throw new Error(
+        empCodeError.code === '23505'
+          ? `Employee code "${data.emp_code}" is already in use. Choose a different code.`
+          : `Failed to set employee code: ${empCodeError.message}`
+      );
+    }
 
     // 3. Create default leave balances
     const { error: rpcError } = await supabase.rpc(

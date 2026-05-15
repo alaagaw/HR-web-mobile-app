@@ -37,6 +37,7 @@ interface CreateEmployeePayload {
   full_name: string;
   emp_code?: string | null;       // optional — auto-generated if blank
   phone?: string | null;          // optional — employee fills during registration
+  nationality: string;            // required — HR enters at creation
   role: string;
   department: string;
   supervisor_id: string;
@@ -48,7 +49,7 @@ interface CreateEmployeePayload {
 }
 
 const REQUIRED_FIELDS: (keyof CreateEmployeePayload)[] = [
-  'email', 'full_name', 'role', 'department',
+  'email', 'full_name', 'nationality', 'role', 'department',
   'supervisor_id', 'manager_id', 'job_title', 'start_date', 'invited_by',
 ];
 
@@ -150,9 +151,11 @@ serve(async (req: Request) => {
       start_date: payload.start_date,
       workday_hours: workdayHours,
       emp_code: empCode,
+      // HR-entered at creation. Snapshot the real value so the HR review
+      // diff highlights it if the employee changes it during registration.
+      nationality: payload.nationality.trim(),
       // Personal fields HR didn't touch — capture as null so the diff
       // logic later knows those were employee-supplied.
-      nationality: null,
       birth_date: null,
       id_type: null,
       national_id_number: null,
@@ -170,6 +173,7 @@ serve(async (req: Request) => {
       .update({
         full_name: payload.full_name.trim(),
         phone: payload.phone?.trim() || null,
+        nationality: payload.nationality.trim(),
         role: payload.role,
         department: payload.department.trim(),
         supervisor_id: payload.supervisor_id,

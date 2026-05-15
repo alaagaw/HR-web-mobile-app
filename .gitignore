@@ -7,3 +7,16 @@ nul
 # Environment files
 .env
 .env.local
+
+# Employee data exports / rosters — contain PII and salary data, never commit
+*.xlsx
+*.xlsm
+~$*
+employees_missing_nationality.csv
+
+# Bare Supabase CLI link dir at repo root (machine-local link state)
+/supabase/
+
+# Local working scratch + pasted transcripts
+.nationality-fix/
+last chat.md

@@ -503,6 +503,9 @@ export interface CreateEmployeeData {
    * HR no longer required to know it at creation time.
    */
   phone?: string;
+  /** Required. HR enters it at creation; the employee can confirm/correct
+   *  it during the registration form (pre-filled from this value). */
+  nationality: string;
   role: Role;
   department: string;
   supervisor_id: string;

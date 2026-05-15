@@ -21,7 +21,13 @@ const fs = require('fs');
 const EXCEL_PATH = path.resolve(__dirname, '../../Active Residents2_10_2026.xlsx');
 const OUTPUT_PATH = path.resolve(__dirname, '../supabase/seed_employee_documents.sql');
 const DEFAULT_PASSWORD = 'Welcome@123'; // change as needed
-const DEFAULT_DEPARTMENT = 'Operations';
+// Must be the canonical (UPPERCASE) form: profiles.department has a
+// strict FK -> lookup_departments(name) with a CHECK (name = upper(name)).
+// 'Operations' (TitleCase) is NOT a lookup row and would FK-violate the
+// whole seed transaction. Migration 036's BEFORE trigger now also
+// canonicalises + auto-registers this, but keep the source value correct
+// so the generated SQL is self-evidently valid and trigger-independent.
+const DEFAULT_DEPARTMENT = 'OPERATIONS';
 const DEFAULT_ROLE = 'employee';
 const EMAIL_DOMAIN = 'company.com';
 

@@ -81,6 +81,7 @@ interface EditDialogState {
   email: string;
   emp_code: string;
   phone: string;
+  nationality: string;
   job_title: string;
   start_date: string;
   role: Role;
@@ -147,6 +148,7 @@ const INITIAL_DIALOG: EditDialogState = {
   email: '',
   emp_code: '',
   phone: '',
+  nationality: '',
   job_title: '',
   start_date: '',
   role: Role.Employee,
@@ -200,6 +202,7 @@ interface InviteDialogState {
   full_name: string;
   emp_code: string;
   phone: string;
+  nationality: string;
   role: Role;
   department: string;
   supervisor_id: string | null;
@@ -221,6 +224,7 @@ const INITIAL_INVITE: InviteDialogState = {
   full_name: '',
   emp_code: '',
   phone: '',
+  nationality: '',
   role: Role.Employee,
   department: '',
   supervisor_id: null,
@@ -238,14 +242,14 @@ const INITIAL_INVITE: InviteDialogState = {
 
 // Form fields that survive close-without-cancel; re-applied on next open.
 const INVITE_DRAFT_KEYS: (keyof InviteDialogState)[] = [
-  'email', 'full_name', 'emp_code', 'phone', 'role', 'department',
+  'email', 'full_name', 'emp_code', 'phone', 'nationality', 'role', 'department',
   'supervisor_id', 'manager_id', 'job_title', 'start_date',
   'workday_hours', 'annual_leave_entitlement_days',
   'send_invite_now', 'show_all_supervisors', 'show_all_managers',
 ];
 
 const EDIT_DRAFT_KEYS: (keyof EditDialogState)[] = [
-  'full_name', 'email', 'emp_code', 'phone', 'job_title', 'start_date',
+  'full_name', 'email', 'emp_code', 'phone', 'nationality', 'job_title', 'start_date',
   'role', 'department', 'supervisor_id', 'manager_id', 'workday_hours',
   'annual_leave_entitlement_days',
   'is_active', 'show_all_supervisors', 'show_all_managers',
@@ -594,6 +598,7 @@ function EditEmployeeDialog({
     state.email.trim().length > 0 &&
     state.full_name.trim().length > 0 &&
     state.emp_code.trim().length > 0 &&
+    state.nationality.trim().length > 0 &&
     state.department.trim().length > 0 &&
     state.job_title.trim().length > 0 &&
     state.start_date.trim().length > 0 &&
@@ -660,6 +665,18 @@ function EditEmployeeDialog({
             onChange={(e: any) => onChange('phone', e.target.value)}
             fullWidth size="small"
             placeholder="e.g. +966 50 123 4567"
+          />
+        </div>
+
+        {/* Nationality — required. The employee can confirm/correct it
+            during their registration form (pre-filled from this value). */}
+        <div style={{ display: 'flex', gap: 12 }}>
+          <MuiTextField
+            label="Nationality"
+            value={state.nationality}
+            onChange={(e: any) => onChange('nationality', e.target.value)}
+            fullWidth size="small" required
+            placeholder="e.g. Saudi, Egyptian, Indian"
           />
         </div>
 
@@ -1188,6 +1205,7 @@ function InviteEmployeeDialog({
   const isValid =
     state.email.trim().length > 0 &&
     state.full_name.trim().length > 0 &&
+    state.nationality.trim().length > 0 &&
     state.department.trim().length > 0 &&
     state.job_title.trim().length > 0 &&
     state.start_date.trim().length > 0 &&
@@ -1248,6 +1266,18 @@ function InviteEmployeeDialog({
             onChange={(e: any) => onChange('phone', e.target.value)}
             fullWidth size="small"
             placeholder="Employee fills this in"
+          />
+        </div>
+
+        {/* Nationality — required. Pre-fills the employee's registration
+            form; they can confirm/correct it there. */}
+        <div style={{ display: 'flex', gap: 12 }}>
+          <MuiTextField
+            label="Nationality"
+            value={state.nationality}
+            onChange={(e: any) => onChange('nationality', e.target.value)}
+            fullWidth size="small" required
+            placeholder="e.g. Saudi, Egyptian, Indian"
           />
         </div>
 
@@ -1992,6 +2022,7 @@ export default function EmployeesScreen() {
       email: emp.email,
       emp_code: '',
       phone: emp.phone || '',
+      nationality: emp.nationality || '',
       job_title: emp.job_title || '',
       start_date: emp.start_date || '',
       role: emp.role,
@@ -2213,6 +2244,7 @@ export default function EmployeesScreen() {
       await userService.updateProfile(employeeId, {
         full_name: dialog.full_name.trim(),
         phone: dialog.phone.trim() || null,
+        nationality: dialog.nationality.trim() || null,
         job_title: canonicalJobTitle || null,
         start_date: dialog.start_date || null,
         department: canonicalDept || null,
@@ -2388,6 +2420,7 @@ export default function EmployeesScreen() {
           emp_code: invite.emp_code.trim() || undefined,
           // Optional: phone → employee fills it in during their registration form
           phone: invite.phone.trim() || undefined,
+          nationality: invite.nationality.trim(),
           role: invite.role,
           department: canonicalDept,
           supervisor_id: invite.supervisor_id!,
