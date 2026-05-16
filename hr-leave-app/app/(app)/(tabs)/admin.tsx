@@ -17,6 +17,7 @@ import {
   UserCheck,
   DollarSign,
   Calculator,
+  Activity,
 } from 'lucide-react-native';
 import { Card } from '@/components/ui/card';
 
@@ -113,6 +114,13 @@ const ADMIN_GROUPS: AdminGroup[] = [
         icon: BookOpen,
         iconColor: '#F59E0B',
         path: '/(app)/admin/balance-ledger',
+      },
+      {
+        title: 'User Activity',
+        description: 'See who is actually using the system and who is not. Search by name or emp code; sorted by last active.',
+        icon: Activity,
+        iconColor: '#14B8A6',
+        path: '/(app)/admin/user-activity',
       },
     ],
   },

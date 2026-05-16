@@ -82,6 +82,14 @@ export interface Profile {
    * warning clock counts from here. Null = HR never sent one.
    */
   form_request_sent_at: string | null;
+  /**
+   * Heartbeat: last time this user had a live authenticated session
+   * (app open / token refresh), written by the touch_last_seen RPC
+   * (migration 044). The trustworthy "actively uses the app" signal —
+   * unlike auth.users.last_sign_in_at, it survives persistent sessions.
+   * Surfaced on profiles via select('*'); null until the first heartbeat.
+   */
+  last_seen_at?: string | null;
   created_at: string;
   updated_at: string;
   /**

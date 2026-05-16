@@ -18,6 +18,31 @@ const INACTIVE_MESSAGE =
   'Your account is inactive. Please contact HR to re-activate it before signing in.';
 
 /**
+ * Fire-and-forget "I'm here" heartbeat → profiles.last_seen_at = now()
+ * (RPC touch_last_seen, migration 044). This is the signal the HR User
+ * Activity report trusts, because auth.users.last_sign_in_at only moves
+ * on an explicit credential entry — never on a background token refresh
+ * — so under persistent sessions it badly understates real usage.
+ *
+ * Throttled in-memory so the INITIAL_SESSION + SIGNED_IN double-fire on
+ * a fresh login (and any rapid listener churn) collapses to one write.
+ * Never awaited and never throws: a failed heartbeat must not touch the
+ * auth flow.
+ */
+let lastSeenTouchAt = 0;
+const LAST_SEEN_THROTTLE_MS = 60_000;
+
+function touchLastSeen(): void {
+  const now = Date.now();
+  if (now - lastSeenTouchAt < LAST_SEEN_THROTTLE_MS) return;
+  lastSeenTouchAt = now;
+  supabase.rpc('touch_last_seen').then(
+    () => {},
+    () => {}
+  );
+}
+
+/**
  * Sign-in side gate: registration_status doesn't matter (pending_info,
  * info_rejected, etc. can all log in and finish their onboarding), but
  * a HARD `is_active = false` flag blocks login until HR re-activates
@@ -43,6 +68,11 @@ export const authService: AuthService = {
     // login — pending_info, info_rejected, etc. all proceed and finish
     // onboarding from inside the app.
     await blockIfInactive(profile);
+
+    // Stamp activity immediately on explicit sign-in so the very first
+    // login lands without waiting for the listener (throttle dedupes the
+    // SIGNED_IN event that follows).
+    touchLastSeen();
 
     // Auto-transition: email verified (they signed in) but status is still email_unverified
     if (profile.registration_status === RegistrationStatus.EmailUnverified) {
@@ -183,6 +213,10 @@ export const authService: AuthService = {
             callback(null);
             return;
           }
+          // Live session confirmed (INITIAL_SESSION on app open, SIGNED_IN,
+          // or the ~hourly TOKEN_REFRESHED while the app stays open) →
+          // heartbeat. Throttled, fire-and-forget.
+          touchLastSeen();
           callback(profile);
         } catch {
           callback(null);

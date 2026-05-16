@@ -1,5 +1,5 @@
 import { supabase } from './client';
-import type { UserService, RemapEmpCodeInput, RemapEmpCodeResult } from '../types';
+import type { UserService, RemapEmpCodeInput, RemapEmpCodeResult, UserActivityRow } from '../types';
 import type { Profile, EmployeeFilters } from '@/types/models';
 
 export const userService: UserService = {
@@ -66,6 +66,15 @@ export const userService: UserService = {
       ...p,
       emp_code: codeByEmployeeId.get(p.id) ?? null,
     })) as Profile[];
+  },
+
+  async getUserActivity() {
+    // get_user_activity (migration 044) is SECURITY DEFINER and
+    // HR-gated: it reads auth.users.last_sign_in_at (not exposed to the
+    // client otherwise) and joins emp_code, raising for non-HR callers.
+    const { data, error } = await supabase.rpc('get_user_activity');
+    if (error) throw new Error(error.message);
+    return (data ?? []) as UserActivityRow[];
   },
 
   async updateEmployeeOrg(employeeId, supervisorId, managerId) {

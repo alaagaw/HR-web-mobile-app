@@ -123,11 +123,38 @@ export interface RemapEmpCodeResult {
   error?: string;
 }
 
+/**
+ * One row of the HR "User Activity" report (RPC get_user_activity,
+ * migration 044). `last_seen_at` is our own heartbeat — the trustworthy
+ * "actually used the app" signal. `last_sign_in_at` comes straight from
+ * auth.users and is NULL only when the person has never logged in at
+ * all (useful for spotting accounts that were created but never used).
+ */
+export interface UserActivityRow {
+  id: string;
+  full_name: string;
+  email: string | null;
+  emp_code: string | null;
+  role: string;
+  department: string | null;
+  is_active: boolean;
+  registration_status: string;
+  account_created_at: string;
+  last_seen_at: string | null;
+  last_sign_in_at: string | null;
+}
+
 export interface UserService {
   getProfile(userId: string): Promise<Profile>;
   updateProfile(userId: string, data: Partial<Profile>): Promise<Profile>;
   getEmployees(filters?: EmployeeFilters): Promise<Profile[]>;
   updateEmployeeOrg(employeeId: string, supervisorId: string, managerId: string): Promise<void>;
+  /**
+   * HR-only. Every profile with its last-active heartbeat and last
+   * explicit sign-in, for the User Activity admin screen. Throws
+   * "Only HR can view user activity" for non-HR callers.
+   */
+  getUserActivity(): Promise<UserActivityRow[]>;
   /**
    * Bulk rename emp_codes. One row per (old, new) pair. Validates and
    * applies each rename in sequence; writes one profile_audit_log row
