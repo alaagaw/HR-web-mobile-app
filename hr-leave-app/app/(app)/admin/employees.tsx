@@ -300,6 +300,19 @@ function getStatusDisplay(row: Profile): { label: string; bg: string; fg: string
   }
 }
 
+// Cheap content fingerprint. Used so a refetch that returns the SAME
+// data (e.g. the tab-refocus refresh, when nothing changed in 30 min)
+// keeps the previous array reference — otherwise the memoized rows
+// recompute and MUI DataGrid snaps the user back to page 1.
+function employeesSignature(rows: Profile[]): string {
+  return rows
+    .map(
+      (r) =>
+        `${r.id}:${r.updated_at}:${r.emp_code ?? ''}:${r.registration_status}:${r.is_active}`,
+    )
+    .join('|');
+}
+
 function WebEmployeesTable({
   data,
   isDark,
@@ -2014,7 +2027,13 @@ export default function EmployeesScreen() {
         // Omit is_active when including inactive → returns the full set.
         is_active: includeInactive ? undefined : true,
       })
-      .then(setEmployees)
+      .then((rows) =>
+        // Preserve the previous reference when the data is unchanged so
+        // a tab-refocus refetch doesn't reset the DataGrid page.
+        setEmployees((prev) =>
+          employeesSignature(prev) === employeesSignature(rows) ? prev : rows,
+        ),
+      )
       .finally(() => setLoading(false));
   }, [search, includeInactive]);
 
