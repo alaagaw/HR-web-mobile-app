@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, FlatList, Platform, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -99,28 +99,35 @@ function WebHistoryTable({
   );
   const [sortModel, setSortModel] = useViewState<any[]>('admin/request-history.sort', []);
 
-  const filteredData = data.filter((row) => {
-    const caseNum = row.case_number.toLowerCase();
-    const emp = `${row.employee?.full_name || ''} ${row.employee?.department || ''}`.toLowerCase();
-    const type = getLeaveTypeLabel(row.leave_type).toLowerCase();
-    const dates = formatDateRange(row.start_date, row.end_date).toLowerCase();
-    const hours = formatHours(row.requested_hours).toLowerCase();
-    const status = getStatusLabel(row.status).toLowerCase();
-    const resolved = row.resolved_at
-      ? new Date(row.resolved_at).toLocaleString('en-US', {
-          month: 'short', day: 'numeric', year: 'numeric',
-        }).toLowerCase()
-      : '';
+  // Memoized so the DataGrid `rows` reference stays stable across the
+  // re-render a pagination/sort click triggers — otherwise MUI's
+  // "rows changed → reset to page 0" fires and paging never sticks.
+  const filteredData = useMemo(
+    () =>
+      data.filter((row) => {
+        const caseNum = row.case_number.toLowerCase();
+        const emp = `${row.employee?.full_name || ''} ${row.employee?.department || ''}`.toLowerCase();
+        const type = getLeaveTypeLabel(row.leave_type).toLowerCase();
+        const dates = formatDateRange(row.start_date, row.end_date).toLowerCase();
+        const hours = formatHours(row.requested_hours).toLowerCase();
+        const status = getStatusLabel(row.status).toLowerCase();
+        const resolved = row.resolved_at
+          ? new Date(row.resolved_at).toLocaleString('en-US', {
+              month: 'short', day: 'numeric', year: 'numeric',
+            }).toLowerCase()
+          : '';
 
-    if (filters.caseNumber && !caseNum.includes(filters.caseNumber.toLowerCase())) return false;
-    if (filters.employee && !emp.includes(filters.employee.toLowerCase())) return false;
-    if (filters.type && !type.includes(filters.type.toLowerCase())) return false;
-    if (filters.dates && !dates.includes(filters.dates.toLowerCase())) return false;
-    if (filters.hours && !hours.includes(filters.hours.toLowerCase())) return false;
-    if (filters.status && !status.includes(filters.status.toLowerCase())) return false;
-    if (filters.resolvedOn && !resolved.includes(filters.resolvedOn.toLowerCase())) return false;
-    return true;
-  });
+        if (filters.caseNumber && !caseNum.includes(filters.caseNumber.toLowerCase())) return false;
+        if (filters.employee && !emp.includes(filters.employee.toLowerCase())) return false;
+        if (filters.type && !type.includes(filters.type.toLowerCase())) return false;
+        if (filters.dates && !dates.includes(filters.dates.toLowerCase())) return false;
+        if (filters.hours && !hours.includes(filters.hours.toLowerCase())) return false;
+        if (filters.status && !status.includes(filters.status.toLowerCase())) return false;
+        if (filters.resolvedOn && !resolved.includes(filters.resolvedOn.toLowerCase())) return false;
+        return true;
+      }),
+    [data, filters]
+  );
 
   const inputStyle: React.CSSProperties = {
     width: '100%',

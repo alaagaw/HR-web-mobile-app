@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, FlatList, Platform, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -226,23 +226,30 @@ function WebRenewalHistoryTable({
   );
   const [sortModel, setSortModel] = useViewState<any[]>('admin/renewal-history.sort', []);
 
-  const filteredData = data.filter((row) => {
-    const taskNum = (row.task?.task_number || '').toLowerCase();
-    const emp = `${row.task?.employee?.full_name || ''} ${row.task?.employee?.department || ''}`.toLowerCase();
-    const docType = (DOC_TYPE_LABELS[row.task?.document_type || ''] || row.task?.document_type || '').toLowerCase();
-    const statusText = isRowConfirmed(row) ? 'confirmed' : 'pending';
-    const meta = row.metadata as any;
-    const curExpiry = (meta?.old_expiry || row.task?.expiry_date || '').toLowerCase();
-    const nExpiry = (meta?.new_expiry || '').toLowerCase();
+  // Memoized so the DataGrid `rows` reference stays stable across the
+  // re-render a pagination/sort click triggers — otherwise MUI's
+  // "rows changed → reset to page 0" fires and paging never sticks.
+  const filteredData = useMemo(
+    () =>
+      data.filter((row) => {
+        const taskNum = (row.task?.task_number || '').toLowerCase();
+        const emp = `${row.task?.employee?.full_name || ''} ${row.task?.employee?.department || ''}`.toLowerCase();
+        const docType = (DOC_TYPE_LABELS[row.task?.document_type || ''] || row.task?.document_type || '').toLowerCase();
+        const statusText = isRowConfirmed(row) ? 'confirmed' : 'pending';
+        const meta = row.metadata as any;
+        const curExpiry = (meta?.old_expiry || row.task?.expiry_date || '').toLowerCase();
+        const nExpiry = (meta?.new_expiry || '').toLowerCase();
 
-    if (filters.taskNumber && !taskNum.includes(filters.taskNumber.toLowerCase())) return false;
-    if (filters.employee && !emp.includes(filters.employee.toLowerCase())) return false;
-    if (filters.docType && !docType.includes(filters.docType.toLowerCase())) return false;
-    if (filters.status && !statusText.includes(filters.status.toLowerCase())) return false;
-    if (filters.oldExpiry && !curExpiry.includes(filters.oldExpiry.toLowerCase())) return false;
-    if (filters.newExpiry && !nExpiry.includes(filters.newExpiry.toLowerCase())) return false;
-    return true;
-  });
+        if (filters.taskNumber && !taskNum.includes(filters.taskNumber.toLowerCase())) return false;
+        if (filters.employee && !emp.includes(filters.employee.toLowerCase())) return false;
+        if (filters.docType && !docType.includes(filters.docType.toLowerCase())) return false;
+        if (filters.status && !statusText.includes(filters.status.toLowerCase())) return false;
+        if (filters.oldExpiry && !curExpiry.includes(filters.oldExpiry.toLowerCase())) return false;
+        if (filters.newExpiry && !nExpiry.includes(filters.newExpiry.toLowerCase())) return false;
+        return true;
+      }),
+    [data, filters]
+  );
 
   const inputStyle: React.CSSProperties = {
     width: '100%',

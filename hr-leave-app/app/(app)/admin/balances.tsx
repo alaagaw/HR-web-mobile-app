@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { View, Text, FlatList, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -99,20 +99,27 @@ function WebBalancesTable({
   );
   const [sortModel, setSortModel] = useViewState<any[]>('admin/balances.sort', []);
 
-  const filteredData = data.filter((row) => {
-    const wd = row.workday_hours || DEFAULT_WORKDAY_HOURS;
-    const emp = `${row.full_name} ${row.department || ''}`.toLowerCase();
-    const role = getRoleLabel(row.role).toLowerCase();
-    const balHours = row.ptoBalance?.balance_hours ?? 0;
-    const usedHours = row.ptoBalance?.used_hours ?? 0;
-    const balText = `${formatHours(balHours)} ${formatDaysHours(balHours, wd)}`.toLowerCase();
-    const usedText = `${formatHours(usedHours)} ${formatDaysHours(usedHours, wd)}`.toLowerCase();
-    if (filters.employee && !emp.includes(filters.employee.toLowerCase())) return false;
-    if (filters.role && !role.includes(filters.role.toLowerCase())) return false;
-    if (filters.balance && !balText.includes(filters.balance.toLowerCase())) return false;
-    if (filters.used && !usedText.includes(filters.used.toLowerCase())) return false;
-    return true;
-  });
+  // Memoized so the DataGrid `rows` reference stays stable across the
+  // re-render a pagination/sort click triggers — otherwise MUI's
+  // "rows changed → reset to page 0" fires and paging never sticks.
+  const filteredData = useMemo(
+    () =>
+      data.filter((row) => {
+        const wd = row.workday_hours || DEFAULT_WORKDAY_HOURS;
+        const emp = `${row.full_name} ${row.department || ''}`.toLowerCase();
+        const role = getRoleLabel(row.role).toLowerCase();
+        const balHours = row.ptoBalance?.balance_hours ?? 0;
+        const usedHours = row.ptoBalance?.used_hours ?? 0;
+        const balText = `${formatHours(balHours)} ${formatDaysHours(balHours, wd)}`.toLowerCase();
+        const usedText = `${formatHours(usedHours)} ${formatDaysHours(usedHours, wd)}`.toLowerCase();
+        if (filters.employee && !emp.includes(filters.employee.toLowerCase())) return false;
+        if (filters.role && !role.includes(filters.role.toLowerCase())) return false;
+        if (filters.balance && !balText.includes(filters.balance.toLowerCase())) return false;
+        if (filters.used && !usedText.includes(filters.used.toLowerCase())) return false;
+        return true;
+      }),
+    [data, filters]
+  );
 
   const inputStyle: React.CSSProperties = {
     width: '100%',

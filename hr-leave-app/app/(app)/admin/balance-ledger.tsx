@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { View, Text, FlatList, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -70,22 +70,29 @@ function WebLedgerTable({
   );
   const [sortModel, setSortModel] = useViewState<any[]>('admin/balance-ledger.sort', []);
 
-  const filteredData = data.filter((row) => {
-    const emp = `${row.employee_name} ${row.employee_department || ''}`.toLowerCase();
-    const type = row.leave_type.toLowerCase();
-    const changeText = `${row.change_hours > 0 ? '+' : ''}${formatHours(row.change_hours)}`.toLowerCase();
-    const reasonText = getReasonDisplay(row.reason).label.toLowerCase();
-    const performerText = (row.performer_name || 'System').toLowerCase();
-    const dateText = formatDate(row.created_at).toLowerCase();
+  // Memoized so the DataGrid `rows` reference stays stable across the
+  // re-render a pagination/sort click triggers — otherwise MUI's
+  // "rows changed → reset to page 0" fires and paging never sticks.
+  const filteredData = useMemo(
+    () =>
+      data.filter((row) => {
+        const emp = `${row.employee_name} ${row.employee_department || ''}`.toLowerCase();
+        const type = row.leave_type.toLowerCase();
+        const changeText = `${row.change_hours > 0 ? '+' : ''}${formatHours(row.change_hours)}`.toLowerCase();
+        const reasonText = getReasonDisplay(row.reason).label.toLowerCase();
+        const performerText = (row.performer_name || 'System').toLowerCase();
+        const dateText = formatDate(row.created_at).toLowerCase();
 
-    if (filters.employee && !emp.includes(filters.employee.toLowerCase())) return false;
-    if (filters.type && !type.includes(filters.type.toLowerCase())) return false;
-    if (filters.change && !changeText.includes(filters.change.toLowerCase())) return false;
-    if (filters.reason && !reasonText.includes(filters.reason.toLowerCase())) return false;
-    if (filters.performedBy && !performerText.includes(filters.performedBy.toLowerCase())) return false;
-    if (filters.date && !dateText.includes(filters.date.toLowerCase())) return false;
-    return true;
-  });
+        if (filters.employee && !emp.includes(filters.employee.toLowerCase())) return false;
+        if (filters.type && !type.includes(filters.type.toLowerCase())) return false;
+        if (filters.change && !changeText.includes(filters.change.toLowerCase())) return false;
+        if (filters.reason && !reasonText.includes(filters.reason.toLowerCase())) return false;
+        if (filters.performedBy && !performerText.includes(filters.performedBy.toLowerCase())) return false;
+        if (filters.date && !dateText.includes(filters.date.toLowerCase())) return false;
+        return true;
+      }),
+    [data, filters]
+  );
 
   const inputStyle: React.CSSProperties = {
     width: '100%',

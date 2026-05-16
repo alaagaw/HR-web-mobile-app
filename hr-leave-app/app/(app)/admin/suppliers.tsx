@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, FlatList, TextInput, Platform, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -136,21 +136,28 @@ function WebSuppliersTable({
   );
   const [sortModel, setSortModel] = useViewState<any[]>('admin/suppliers.sort', []);
 
-  const filteredData = data.filter((row) => {
-    const name = (row.name || '').toLowerCase();
-    const code = (row.code || '').toLowerCase();
-    const contact = (row.contact_person || '').toLowerCase();
-    const phone = (row.phone || '').toLowerCase();
-    const email = (row.email || '').toLowerCase();
-    const status = row.is_active ? 'active' : 'inactive';
-    if (filters.name && !name.includes(filters.name.toLowerCase())) return false;
-    if (filters.code && !code.includes(filters.code.toLowerCase())) return false;
-    if (filters.contact_person && !contact.includes(filters.contact_person.toLowerCase())) return false;
-    if (filters.phone && !phone.includes(filters.phone.toLowerCase())) return false;
-    if (filters.email && !email.includes(filters.email.toLowerCase())) return false;
-    if (filters.status && !status.includes(filters.status.toLowerCase())) return false;
-    return true;
-  });
+  // Memoized so the DataGrid `rows` reference stays stable across the
+  // re-render a pagination/sort click triggers — otherwise MUI's
+  // "rows changed → reset to page 0" fires and paging never sticks.
+  const filteredData = useMemo(
+    () =>
+      data.filter((row) => {
+        const name = (row.name || '').toLowerCase();
+        const code = (row.code || '').toLowerCase();
+        const contact = (row.contact_person || '').toLowerCase();
+        const phone = (row.phone || '').toLowerCase();
+        const email = (row.email || '').toLowerCase();
+        const status = row.is_active ? 'active' : 'inactive';
+        if (filters.name && !name.includes(filters.name.toLowerCase())) return false;
+        if (filters.code && !code.includes(filters.code.toLowerCase())) return false;
+        if (filters.contact_person && !contact.includes(filters.contact_person.toLowerCase())) return false;
+        if (filters.phone && !phone.includes(filters.phone.toLowerCase())) return false;
+        if (filters.email && !email.includes(filters.email.toLowerCase())) return false;
+        if (filters.status && !status.includes(filters.status.toLowerCase())) return false;
+        return true;
+      }),
+    [data, filters]
+  );
 
   const inputStyle: React.CSSProperties = {
     width: '100%',

@@ -908,7 +908,10 @@ function WebExpiryTable({
     [data]
   );
 
-  const filteredData = sortedData.filter((row) => {
+  // Memoized so the DataGrid `rows` reference stays stable across the
+  // re-render a pagination/sort click triggers — otherwise MUI's
+  // "rows changed → reset to page 0" fires and paging never sticks.
+  const filteredData = useMemo(() => sortedData.filter((row) => {
     const empCode = (row.emp_code || '').toLowerCase();
     const name = (row.employee?.full_name || '').toLowerCase();
     const dept = (row.employee?.department || '').toLowerCase();
@@ -969,7 +972,7 @@ function WebExpiryTable({
       if (!status.includes(filters.taskStatus.toLowerCase())) return false;
     }
     return true;
-  });
+  }), [sortedData, globalSearch, filters]);
 
   const inputStyle: React.CSSProperties = {
     width: '100%',
