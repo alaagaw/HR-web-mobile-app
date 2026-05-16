@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, FlatList, TextInput, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -332,23 +332,31 @@ function WebEmployeesTable({
   const [sortModel, setSortModel] = useViewState<any[]>('admin/employees.sort', []);
   const [menuAnchor, setMenuAnchor] = useState<{ el: HTMLElement; row: Profile } | null>(null);
 
-  const filteredData = data.filter((row) => {
-    const empCode = (row.emp_code || '').toLowerCase();
-    const name = row.full_name.toLowerCase();
-    const email = row.email.toLowerCase();
-    const dept = (row.department || '').toLowerCase();
-    const role = getRoleLabel(row.role).toLowerCase();
-    const phone = (row.phone || '').toLowerCase();
-    const status = getStatusDisplay(row).label.toLowerCase();
-    if (filters.empCode && !empCode.includes(filters.empCode.toLowerCase())) return false;
-    if (filters.name && !name.includes(filters.name.toLowerCase())) return false;
-    if (filters.email && !email.includes(filters.email.toLowerCase())) return false;
-    if (filters.department && !dept.includes(filters.department.toLowerCase())) return false;
-    if (filters.role && !role.includes(filters.role.toLowerCase())) return false;
-    if (filters.phone && !phone.includes(filters.phone.toLowerCase())) return false;
-    if (filters.status && !status.includes(filters.status.toLowerCase())) return false;
-    return true;
-  });
+  // Memoized so the `rows` prop keeps a stable reference across the
+  // re-render that a pagination/sort click triggers. Without this, a
+  // fresh array every render makes MUI X DataGrid fire its
+  // "rows changed → reset to page 0" safeguard, so paging never sticks.
+  const filteredData = useMemo(
+    () =>
+      data.filter((row) => {
+        const empCode = (row.emp_code || '').toLowerCase();
+        const name = row.full_name.toLowerCase();
+        const email = row.email.toLowerCase();
+        const dept = (row.department || '').toLowerCase();
+        const role = getRoleLabel(row.role).toLowerCase();
+        const phone = (row.phone || '').toLowerCase();
+        const status = getStatusDisplay(row).label.toLowerCase();
+        if (filters.empCode && !empCode.includes(filters.empCode.toLowerCase())) return false;
+        if (filters.name && !name.includes(filters.name.toLowerCase())) return false;
+        if (filters.email && !email.includes(filters.email.toLowerCase())) return false;
+        if (filters.department && !dept.includes(filters.department.toLowerCase())) return false;
+        if (filters.role && !role.includes(filters.role.toLowerCase())) return false;
+        if (filters.phone && !phone.includes(filters.phone.toLowerCase())) return false;
+        if (filters.status && !status.includes(filters.status.toLowerCase())) return false;
+        return true;
+      }),
+    [data, filters]
+  );
 
   const inputStyle: React.CSSProperties = {
     width: '100%',

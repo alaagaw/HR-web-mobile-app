@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { View, Text, FlatList, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -30,6 +30,21 @@ if (isWeb) {
   MuiButton = require('@mui/material/Button').default;
   ReviewRegistrationDialog = require('@/components/dialogs/review-registration-dialog').ReviewRegistrationDialog;
 }
+
+// emp_code lives in employee_documents (carried forward from HR
+// pre-creation). The PENDING-* placeholder only appears for a pure
+// self-registration with no HR-precreated row — treat it as "no code"
+// so the column stays meaningful.
+const getEmpCode = (row: any): string => {
+  const c = String(row.employee_documents?.emp_code ?? '');
+  return c && !c.startsWith('PENDING-') ? c : '';
+};
+const statusLabel = (s: string) =>
+  s === 'pending_approval' ? 'Pending Approval' : 'Pending Info';
+const submittedStr = (row: any) => {
+  const v = row.registration_submitted_at ?? row.created_at;
+  return v ? new Date(v).toLocaleDateString() : '';
+};
 
 export default function RegistrationsScreen() {
   const router = useRouter();
@@ -67,37 +82,31 @@ export default function RegistrationsScreen() {
 
   const { invalidate } = useAutoRefresh(() => { fetchData(); }, []);
 
+  // Memoized so the `rows` prop keeps a stable reference across the
+  // re-render a pagination/sort click triggers. A fresh array every
+  // render makes MUI X DataGrid fire its "rows changed → reset to
+  // page 0" safeguard, so paging would never advance.
+  const filteredData = useMemo(
+    () =>
+      registrations.filter((row: any) => {
+        const empCode = getEmpCode(row).toLowerCase();
+        const name = (row.full_name || '').toLowerCase();
+        const email = (row.email || '').toLowerCase();
+        const status = statusLabel(row.registration_status).toLowerCase();
+        const submitted = submittedStr(row).toLowerCase();
+        if (filters.empCode && !empCode.includes(filters.empCode.toLowerCase())) return false;
+        if (filters.name && !name.includes(filters.name.toLowerCase())) return false;
+        if (filters.email && !email.includes(filters.email.toLowerCase())) return false;
+        if (filters.status && !status.includes(filters.status.toLowerCase())) return false;
+        if (filters.submitted && !submitted.includes(filters.submitted.toLowerCase())) return false;
+        return true;
+      }),
+    [registrations, filters]
+  );
+
   // ── Web Layout ──────────────────────────────────────────────
 
   if (isWeb) {
-    // emp_code lives in employee_documents (carried forward from HR
-    // pre-creation). The PENDING-* placeholder only appears for a pure
-    // self-registration with no HR-precreated row — treat it as "no code"
-    // so the column stays meaningful.
-    const getEmpCode = (row: any): string => {
-      const c = String(row.employee_documents?.emp_code ?? '');
-      return c && !c.startsWith('PENDING-') ? c : '';
-    };
-    const statusLabel = (s: string) =>
-      s === 'pending_approval' ? 'Pending Approval' : 'Pending Info';
-    const submittedStr = (row: any) => {
-      const v = row.registration_submitted_at ?? row.created_at;
-      return v ? new Date(v).toLocaleDateString() : '';
-    };
-
-    const filteredData = registrations.filter((row: any) => {
-      const empCode = getEmpCode(row).toLowerCase();
-      const name = (row.full_name || '').toLowerCase();
-      const email = (row.email || '').toLowerCase();
-      const status = statusLabel(row.registration_status).toLowerCase();
-      const submitted = submittedStr(row).toLowerCase();
-      if (filters.empCode && !empCode.includes(filters.empCode.toLowerCase())) return false;
-      if (filters.name && !name.includes(filters.name.toLowerCase())) return false;
-      if (filters.email && !email.includes(filters.email.toLowerCase())) return false;
-      if (filters.status && !status.includes(filters.status.toLowerCase())) return false;
-      if (filters.submitted && !submitted.includes(filters.submitted.toLowerCase())) return false;
-      return true;
-    });
 
     const inputStyle = {
       width: '100%',
