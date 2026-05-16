@@ -316,6 +316,7 @@ function WebEmployeesTable({
   onSendInvite: (id: string) => void;
 }) {
   const [filters, setFilters] = useViewState('admin/employees.columnFilters', {
+    empCode: '',
     name: '',
     email: '',
     department: '',
@@ -332,12 +333,14 @@ function WebEmployeesTable({
   const [menuAnchor, setMenuAnchor] = useState<{ el: HTMLElement; row: Profile } | null>(null);
 
   const filteredData = data.filter((row) => {
+    const empCode = (row.emp_code || '').toLowerCase();
     const name = row.full_name.toLowerCase();
     const email = row.email.toLowerCase();
     const dept = (row.department || '').toLowerCase();
     const role = getRoleLabel(row.role).toLowerCase();
     const phone = (row.phone || '').toLowerCase();
     const status = getStatusDisplay(row).label.toLowerCase();
+    if (filters.empCode && !empCode.includes(filters.empCode.toLowerCase())) return false;
     if (filters.name && !name.includes(filters.name.toLowerCase())) return false;
     if (filters.email && !email.includes(filters.email.toLowerCase())) return false;
     if (filters.department && !dept.includes(filters.department.toLowerCase())) return false;
@@ -372,6 +375,19 @@ function WebEmployeesTable({
   );
 
   const columns = [
+    {
+      field: 'emp_code',
+      headerName: 'Emp Code',
+      flex: 0.7,
+      minWidth: 110,
+      renderHeader: renderHeader('Emp Code', 'empCode'),
+      valueGetter: (_value: any, row: Profile) => row.emp_code || '',
+      renderCell: (params: any) => (
+        <span style={{ fontSize: 13, color: isDark ? '#94A3B8' : '#475569' }}>
+          {params.row.emp_code || '—'}
+        </span>
+      ),
+    },
     {
       field: 'full_name',
       headerName: 'Employee',
