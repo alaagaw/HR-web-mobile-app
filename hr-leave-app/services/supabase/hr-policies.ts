@@ -66,20 +66,20 @@ export const hrPoliciesService: HRPoliciesService = {
     return (data ?? []) as HRDocumentFolder[];
   },
 
-  async createFolder(name, parentId, createdBy) {
+  async createFolder(name, parentId, visibility, createdBy) {
     const { data, error } = await supabase
       .from('hr_document_folders')
-      .insert({ name: name.trim(), parent_id: parentId, created_by: createdBy })
+      .insert({ name: name.trim(), parent_id: parentId, visibility, created_by: createdBy })
       .select()
       .single();
     if (error) throw new Error(error.message);
     return data as HRDocumentFolder;
   },
 
-  async renameFolder(folderId, name) {
+  async updateFolder(folderId, name, visibility) {
     const { data, error } = await supabase
       .from('hr_document_folders')
-      .update({ name: name.trim() })
+      .update({ name: name.trim(), visibility })
       .eq('id', folderId)
       .select()
       .single();

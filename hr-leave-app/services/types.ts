@@ -46,7 +46,7 @@ import type {
   HRDocumentDraft,
   HRDocUploadFile,
 } from '@/types/models';
-import type { ExcessDetermination, RegistrationStatus } from '@/types/enums';
+import type { ExcessDetermination, RegistrationStatus, HRDocumentVisibility } from '@/types/enums';
 
 // ============================================================
 // SERVICE INTERFACES — Define WHAT the app can do, not HOW
@@ -311,8 +311,8 @@ export interface TimesheetService {
 export interface HRPoliciesService {
   // Folders (the navigation tree)
   listFolders(): Promise<HRDocumentFolder[]>;
-  createFolder(name: string, parentId: string | null, createdBy: string): Promise<HRDocumentFolder>;
-  renameFolder(folderId: string, name: string): Promise<HRDocumentFolder>;
+  createFolder(name: string, parentId: string | null, visibility: HRDocumentVisibility, createdBy: string): Promise<HRDocumentFolder>;
+  updateFolder(folderId: string, name: string, visibility: HRDocumentVisibility): Promise<HRDocumentFolder>;
   deleteFolder(folderId: string): Promise<void>;
 
   // Documents

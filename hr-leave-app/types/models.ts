@@ -894,6 +894,8 @@ export interface HRDocumentFolder {
   parent_id: string | null;
   name: string;
   sort_order: number;
+  /** all = every employee sees it; hr_only = HR / HR Director only. */
+  visibility: HRDocumentVisibility;
   created_by: string | null;
   created_at: string;
   updated_at: string;

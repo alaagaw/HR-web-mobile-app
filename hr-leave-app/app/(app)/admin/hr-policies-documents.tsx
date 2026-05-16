@@ -107,7 +107,10 @@ function buildTree(folders: HRDocumentFolder[], isHR: boolean): TreeNode[] {
   }
   const toNode = (f: HRDocumentFolder): TreeNode => {
     const kids = (byParent.get(f.id) ?? []).map(toNode);
-    return { id: f.id, label: f.name, children: kids.length ? kids : undefined };
+    // Non-HR users never receive hr_only folders (RLS), so this marker
+    // only ever shows for HR — a cue that the folder is restricted.
+    const label = f.visibility === HRDocumentVisibility.HROnly ? `${f.name}  ·  HR only` : f.name;
+    return { id: f.id, label, children: kids.length ? kids : undefined };
   };
   const roots = (byParent.get(null) ?? []).map(toNode);
   const tree: TreeNode[] = [
@@ -354,6 +357,75 @@ function PreviewPane({ version, isDark }: { version: HRDocumentVersion | null; i
   );
 }
 
+// ── Folder create / edit dialog ──────────────────────────────
+interface FolderDialogState {
+  open: boolean;
+  mode: 'create' | 'edit';
+  folderId: string | null;
+  parentId: string | null;
+  name: string;
+  visibility: HRDocumentVisibility;
+  submitting: boolean;
+}
+
+const EMPTY_FOLDER_DIALOG: FolderDialogState = {
+  open: false,
+  mode: 'create',
+  folderId: null,
+  parentId: null,
+  name: '',
+  visibility: HRDocumentVisibility.All,
+  submitting: false,
+};
+
+function FolderDialog({
+  state,
+  onChange,
+  onClose,
+  onSubmit,
+}: {
+  state: FolderDialogState;
+  onChange: (patch: Partial<FolderDialogState>) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  if (!Dialog) return null;
+  const isValid = state.name.trim().length > 0;
+  return (
+    <Dialog open={state.open} onClose={onClose} maxWidth="xs" fullWidth
+      PaperProps={{ sx: { borderRadius: 3, backgroundImage: 'none' } }}>
+      <DialogTitle sx={{ pb: 1, pt: 3, px: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
+        <div style={{ fontSize: 18, fontWeight: 700 }}>
+          {state.mode === 'create' ? 'New Folder' : 'Edit Folder'}
+        </div>
+      </DialogTitle>
+      <DialogContent sx={{ pt: '24px !important', pb: 1, px: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <TextField label="Folder name" value={state.name} required size="small" fullWidth autoFocus
+          onChange={(e: any) => onChange({ name: e.target.value })} />
+        <TextField label="Visibility" value={state.visibility} size="small" fullWidth select
+          onChange={(e: any) => onChange({ visibility: e.target.value })}
+          helperText={
+            state.visibility === HRDocumentVisibility.All
+              ? 'Every signed-in employee can see this folder.'
+              : 'Only HR / HR Director can see this folder and everything inside it.'
+          }>
+          <MenuItem value={HRDocumentVisibility.All}>All employees</MenuItem>
+          <MenuItem value={HRDocumentVisibility.HROnly}>HR only</MenuItem>
+        </TextField>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+        <MuiButton onClick={onClose} disabled={state.submitting} sx={{ textTransform: 'none', fontWeight: 600 }}>
+          Cancel
+        </MuiButton>
+        <MuiButton variant="contained" onClick={onSubmit} disabled={!isValid || state.submitting}
+          sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, px: 3 }}>
+          {state.submitting ? 'Saving…' : state.mode === 'create' ? 'Create' : 'Save Changes'}
+        </MuiButton>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 // ── Main screen ──────────────────────────────────────────────
 export default function HRPoliciesDocumentsScreen() {
   const router = useRouter();
@@ -371,6 +443,7 @@ export default function HRPoliciesDocumentsScreen() {
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState<HRDocument[] | null>(null);
   const [dialog, setDialog] = useState<DocDialogState>(EMPTY_DIALOG);
+  const [folderDialog, setFolderDialog] = useState<FolderDialogState>(EMPTY_FOLDER_DIALOG);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false, message: '', severity: 'success',
   });
@@ -439,18 +512,42 @@ export default function HRPoliciesDocumentsScreen() {
   }, [documents, searchResults, selectedNode]);
 
   // ── Handlers ───────────────────────────────────────────────
-  const handleNewFolder = async () => {
-    const name = typeof window !== 'undefined' ? window.prompt('New folder name:') : null;
-    if (!name || !name.trim() || !user) return;
-    const parentId =
-      selectedNode === NODE_ALL || selectedNode === NODE_UNFILED || selectedNode === NODE_ARCHIVED
-        ? null
-        : selectedNode;
+  const handleNewFolder = () => {
+    const parentId = selectedNode.startsWith('__') ? null : selectedNode;
+    setFolderDialog({ ...EMPTY_FOLDER_DIALOG, open: true, mode: 'create', parentId });
+  };
+
+  const handleEditFolder = () => {
+    if (selectedNode.startsWith('__')) return;
+    const f = folders.find((x) => x.id === selectedNode);
+    if (!f) return;
+    setFolderDialog({
+      open: true, mode: 'edit', folderId: f.id, parentId: f.parent_id,
+      name: f.name, visibility: f.visibility, submitting: false,
+    });
+  };
+
+  const submitFolderDialog = async () => {
+    if (!user) return;
+    setFolderDialog((s) => ({ ...s, submitting: true }));
     try {
-      await hrPoliciesService.createFolder(name, parentId, user.id);
-      notify('Folder created');
-      refresh();
-    } catch (e: any) { notify(e?.message || 'Could not create folder', 'error'); }
+      if (folderDialog.mode === 'create') {
+        await hrPoliciesService.createFolder(
+          folderDialog.name, folderDialog.parentId, folderDialog.visibility, user.id,
+        );
+        notify('Folder created');
+      } else {
+        await hrPoliciesService.updateFolder(
+          folderDialog.folderId!, folderDialog.name, folderDialog.visibility,
+        );
+        notify('Folder updated');
+      }
+      setFolderDialog(EMPTY_FOLDER_DIALOG);
+      await refresh();
+    } catch (e: any) {
+      notify(e?.message || 'Folder save failed', 'error');
+      setFolderDialog((s) => ({ ...s, submitting: false }));
+    }
   };
 
   const handleDeleteFolder = async () => {
@@ -629,9 +726,14 @@ export default function HRPoliciesDocumentsScreen() {
             defaultExpandedItems={[NODE_ALL]}
           />
           {isHR && !selectedNode.startsWith('__') && (
-            <button onClick={handleDeleteFolder} style={{ ...btnStyle(isDark, 'ghost'), marginTop: 14, width: '100%' }}>
-              Delete selected folder
-            </button>
+            <>
+              <button onClick={handleEditFolder} style={{ ...btnStyle(isDark, 'ghost'), marginTop: 14, width: '100%' }}>
+                Edit selected folder
+              </button>
+              <button onClick={handleDeleteFolder} style={{ ...btnStyle(isDark, 'danger'), marginTop: 8, width: '100%' }}>
+                Delete selected folder
+              </button>
+            </>
           )}
         </View>
 
@@ -759,6 +861,12 @@ export default function HRPoliciesDocumentsScreen() {
           onChange={(patch) => setDialog((s) => ({ ...s, ...patch }))}
           onClose={() => !dialog.submitting && setDialog(EMPTY_DIALOG)}
           onSubmit={submitDialog}
+        />
+        <FolderDialog
+          state={folderDialog}
+          onChange={(patch) => setFolderDialog((s) => ({ ...s, ...patch }))}
+          onClose={() => !folderDialog.submitting && setFolderDialog(EMPTY_FOLDER_DIALOG)}
+          onSubmit={submitFolderDialog}
         />
         {Snackbar && (
           <Snackbar
