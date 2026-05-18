@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Banner } from '@/components/ui/banner';
 import { useAuth } from '@/hooks/use-auth';
 import { useAuthStore } from '@/stores/auth-store';
-import { registrationService, documentService, userService, lookupService } from '@/services';
+import { useColorScheme } from 'nativewind';
+import { registrationService, documentService, userService, lookupService, canonicaliseNationality } from '@/services';
 import { supabase } from '@/services/supabase/client';
 import {
   QUALIFICATION_OPTIONS,
@@ -54,10 +55,15 @@ export default function RegistrationFormScreen() {
   // employee may also type a new value — the submit RPC auto-registers
   // it (is_active=false) for HR spelling review.
   const [specOptions, setSpecOptions] = useState<string[]>([]);
+  const [natOptions, setNatOptions] = useState<string[]>([]);
   useEffect(() => {
     lookupService
       .getSpecializations()
       .then((rows) => setSpecOptions(rows.map((r) => r.name)))
+      .catch(() => {});
+    lookupService
+      .getNationalities()
+      .then((rows) => setNatOptions(rows.map((r) => r.name)))
       .catch(() => {});
   }, []);
 
@@ -300,11 +306,26 @@ export default function RegistrationFormScreen() {
       // they chose passport as their primary ID).
       const blank = (s?: string | null) => (s && s.trim().length > 0 ? s.trim() : null);
 
+      // Nationality is FK'd to lookup_nationalities. Canonicalise +
+      // ensure the row exists (authenticated insert is allowed for
+      // self-registration) so a typed value doesn't break the FK —
+      // same pattern as the HR Edit Employee form. Specialization is
+      // handled inside the submit RPC (auto-registered is_active=false
+      // for HR review), so it needs no client-side pre-registration.
+      const canonicalNat = canonicaliseNationality(data.nationality);
+      if (canonicalNat) {
+        try {
+          await lookupService.addNationality(canonicalNat, user.id);
+        } catch {
+          /* idempotent upsert; ignore races / already-exists */
+        }
+      }
+
       const updatedProfile = await registrationService.submitRegistration(user.id, {
         email: data.email.trim(),
         full_name: data.full_name.trim(),
         phone: data.phone.trim(),
-        nationality: data.nationality.trim(),
+        nationality: canonicalNat,
         national_address: data.national_address.trim(),
         qualification: data.qualification.trim(),
         specialization: data.specialization.trim(),
@@ -487,14 +508,15 @@ export default function RegistrationFormScreen() {
             control={control}
             name="nationality"
             render={({ field: { onChange, value } }) => (
-              <Input
+              <NativeAutocompleteField
                 label="Nationality"
                 required
-                placeholder="e.g. Saudi, Egyptian, Indian"
                 value={value}
-                onChangeText={onChange}
+                onChange={onChange}
+                options={natOptions}
+                placeholder="e.g. Saudi, Egyptian, Indian"
+                helper="Pick from the list or type your own."
                 error={errors.nationality?.message}
-                autoCapitalize="words"
               />
             )}
           />
@@ -983,10 +1005,11 @@ function NativeDateField({
   onChange: (v: string) => void;
   error?: string;
 }) {
+  const C = useFieldTheme();
   if (isWeb) {
     return (
       <View style={{ marginBottom: 16 }}>
-        <Text style={{ fontSize: 13, fontWeight: '600', marginBottom: 6, color: '#E2E8F0' }}>
+        <Text style={{ fontSize: 13, fontWeight: '600', marginBottom: 6, color: C.label }}>
           {label}
         </Text>
         <input
@@ -997,9 +1020,9 @@ function NativeDateField({
             width: '100%',
             padding: '10px 12px',
             borderRadius: 8,
-            border: `1px solid ${error ? '#EF4444' : '#334155'}`,
-            backgroundColor: '#1E293B',
-            color: '#E2E8F0',
+            border: `1px solid ${error ? '#EF4444' : C.defBorder}`,
+            backgroundColor: C.bg,
+            color: C.text,
             fontSize: 14,
             outline: 'none',
           }}
@@ -1024,12 +1047,26 @@ function NativeDateField({
   );
 }
 
+// Theme palette for the raw-HTML web fields so they match the
+// nativewind-themed <Input> (system / dark / light), instead of
+// hardcoded dark which made the dropdown options unreadable.
+function useFieldTheme() {
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  return isDark
+    ? { bg: '#1E293B', text: '#F1F5F9', label: '#E2E8F0', muted: '#94A3B8', defBorder: '#475569' }
+    : { bg: '#FFFFFF', text: '#0F172A', label: '#334155', muted: '#94A3B8', defBorder: '#CBD5E1' };
+}
+
 // Shared required border: red while empty, green once filled, red on
-// a submitted error (mirrors components/ui/input.tsx).
-function requiredBorder(required: boolean, hasValue: boolean, error?: string): string {
+// a submitted error (mirrors components/ui/input.tsx); otherwise the
+// themed default border.
+function requiredBorder(
+  required: boolean, hasValue: boolean, error: string | undefined, def: string,
+): string {
   if (error || (required && !hasValue)) return '#EF4444';
   if (required && hasValue) return '#16A34A';
-  return '#334155';
+  return def;
 }
 
 // Fixed-list dropdown — web <select>, native <Input> fallback.
@@ -1044,11 +1081,12 @@ function NativeSelectField({
   error?: string;
   required?: boolean;
 }) {
-  const border = requiredBorder(!!required, !!value, error);
+  const C = useFieldTheme();
+  const border = requiredBorder(!!required, !!value, error, C.defBorder);
   if (isWeb) {
     return (
       <View style={{ marginBottom: 16 }}>
-        <Text style={{ fontSize: 13, fontWeight: '600', marginBottom: 6, color: '#E2E8F0' }}>
+        <Text style={{ fontSize: 13, fontWeight: '600', marginBottom: 6, color: C.label }}>
           {label}{required && <Text style={{ color: '#EF4444' }}> *</Text>}
         </Text>
         <select
@@ -1056,13 +1094,15 @@ function NativeSelectField({
           onChange={(e: any) => onChange(e.target.value)}
           style={{
             width: '100%', padding: '10px 12px', borderRadius: 8,
-            border: `1px solid ${border}`, backgroundColor: '#1E293B',
-            color: value ? '#E2E8F0' : '#94A3B8', fontSize: 14, outline: 'none',
+            border: `1px solid ${border}`, backgroundColor: C.bg,
+            color: value ? C.text : C.muted, fontSize: 14, outline: 'none',
           }}
         >
-          <option value="" disabled>{placeholder || 'Select…'}</option>
+          <option value="" disabled style={{ color: C.muted, backgroundColor: C.bg }}>
+            {placeholder || 'Select…'}
+          </option>
           {options.map((o) => (
-            <option key={o} value={o} style={{ color: '#0F172A' }}>{o}</option>
+            <option key={o} value={o} style={{ color: C.text, backgroundColor: C.bg }}>{o}</option>
           ))}
         </select>
         {error && <Text style={{ fontSize: 12, color: '#EF4444', marginTop: 4 }}>{error}</Text>}
@@ -1088,12 +1128,13 @@ function NativeAutocompleteField({
   error?: string;
   required?: boolean;
 }) {
-  const border = requiredBorder(!!required, !!value, error);
+  const C = useFieldTheme();
+  const border = requiredBorder(!!required, !!value, error, C.defBorder);
   if (isWeb) {
     const listId = `dl-${label.replace(/\s+/g, '-').toLowerCase()}`;
     return (
       <View style={{ marginBottom: 16 }}>
-        <Text style={{ fontSize: 13, fontWeight: '600', marginBottom: 6, color: '#E2E8F0' }}>
+        <Text style={{ fontSize: 13, fontWeight: '600', marginBottom: 6, color: C.label }}>
           {label}{required && <Text style={{ color: '#EF4444' }}> *</Text>}
         </Text>
         <input
@@ -1103,8 +1144,8 @@ function NativeAutocompleteField({
           placeholder={placeholder}
           style={{
             width: '100%', padding: '10px 12px', borderRadius: 8,
-            border: `1px solid ${border}`, backgroundColor: '#1E293B',
-            color: '#E2E8F0', fontSize: 14, outline: 'none',
+            border: `1px solid ${border}`, backgroundColor: C.bg,
+            color: C.text, fontSize: 14, outline: 'none',
           }}
         />
         <datalist id={listId}>
@@ -1113,7 +1154,7 @@ function NativeAutocompleteField({
         {error
           ? <Text style={{ fontSize: 12, color: '#EF4444', marginTop: 4 }}>{error}</Text>
           : helper
-            ? <Text style={{ fontSize: 12, color: '#94A3B8', marginTop: 4 }}>{helper}</Text>
+            ? <Text style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{helper}</Text>
             : null}
       </View>
     );
