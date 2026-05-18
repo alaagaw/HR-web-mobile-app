@@ -815,7 +815,7 @@ export default function TasksScreen() {
               contentContainerStyle={{ paddingTop: 0, flexGrow: 1 }}
               renderItem={({ item }) => (
                 <Pressable
-                  onPress={() => router.push('/(app)/admin/project-hours-requests' as any)}
+                  onPress={() => router.push('/(app)/timesheet/project-hours-requests' as any)}
                   className="mb-3 p-4 rounded-xl border border-border dark:border-slate-700 bg-surface dark:bg-slate-800 active:opacity-80"
                 >
                   <View className="flex-row justify-between items-start">

@@ -20,13 +20,13 @@ const isWeb = Platform.OS === 'web';
 // inside the app shell (sidebar) and lives at /timesheet-management,
 // exactly like HR Admin.
 const ITEMS: AdminPage[] = [
-  { title: 'Projects', description: 'Manage projects, clients, and locations for timesheet tracking.', icon: FolderOpen, iconColor: '#0891B2', path: '/(app)/admin/projects' },
-  { title: 'Suppliers', description: 'Manage vendor/subcontractor companies that provide workers.', icon: Building2, iconColor: '#7C3AED', path: '/(app)/admin/suppliers' },
-  { title: 'Monthly Consolidated', description: 'View consolidated monthly hours with regular/overtime breakdown.', icon: ClipboardList, iconColor: '#059669', path: '/(app)/admin/timesheets' },
-  { title: 'Timesheet Assignments', description: 'Assign timesheet keepers to projects and sites.', icon: UserCheck, iconColor: '#D97706', path: '/(app)/admin/timesheet-assignments' },
-  { title: 'Hours Change Requests', description: 'Review and approve project regular-hours change requests.', icon: ClipboardList, iconColor: '#F59E0B', path: '/(app)/admin/project-hours-requests' },
-  { title: 'Month Closures', description: 'Close and reopen calendar months for payroll. Blocks retroactive change requests against closed months.', icon: ClipboardList, iconColor: '#22C55E', path: '/(app)/admin/month-closures' },
-  { title: 'Employee × Project Breakdown', description: "For a chosen month, see each employee's hours per project plus their total OT across all projects.", icon: ClipboardList, iconColor: '#3B82F6', path: '/(app)/admin/employee-project-breakdown' },
+  { title: 'Projects', description: 'Manage projects, clients, and locations for timesheet tracking.', icon: FolderOpen, iconColor: '#0891B2', path: '/(app)/timesheet/projects' },
+  { title: 'Suppliers', description: 'Manage vendor/subcontractor companies that provide workers.', icon: Building2, iconColor: '#7C3AED', path: '/(app)/timesheet/suppliers' },
+  { title: 'Monthly Consolidated', description: 'View consolidated monthly hours with regular/overtime breakdown.', icon: ClipboardList, iconColor: '#059669', path: '/(app)/timesheet/timesheets' },
+  { title: 'Timesheet Assignments', description: 'Assign timesheet keepers to projects and sites.', icon: UserCheck, iconColor: '#D97706', path: '/(app)/timesheet/timesheet-assignments' },
+  { title: 'Hours Change Requests', description: 'Review and approve project regular-hours change requests.', icon: ClipboardList, iconColor: '#F59E0B', path: '/(app)/timesheet/project-hours-requests' },
+  { title: 'Month Closures', description: 'Close and reopen calendar months for payroll. Blocks retroactive change requests against closed months.', icon: ClipboardList, iconColor: '#22C55E', path: '/(app)/timesheet/month-closures' },
+  { title: 'Employee × Project Breakdown', description: "For a chosen month, see each employee's hours per project plus their total OT across all projects.", icon: ClipboardList, iconColor: '#3B82F6', path: '/(app)/timesheet/employee-project-breakdown' },
 ];
 
 const SUBTITLE = 'Projects, suppliers, timesheets, and timesheet assignments';
