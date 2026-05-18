@@ -4,7 +4,13 @@
 > Add new sections at the bottom as we build more.
 
 **Last updated:** 2026-05-18
-**Latest commits covered:** Access Control initiative + Forms revamp + employment status — migrations **045–054 applied to prod**. See `docs/ACCESS_CONTROL_AND_RLS_HARDENING_05_18_2026.md` and `docs/FORMS_REVAMP_REQUIREMENTS_05_18_2026.md` for the full technical recaps.
+**Latest commits covered:** Access Control + superusers, RLS hardening,
+registration extra fields + Declaration, employment status, Timesheet
+Management as its own gate-able tab, GM = full Timesheet authority,
+universal red/green required-field visual — migrations **045–057 applied
+to prod**. Full technical recaps:
+`docs/ACCESS_CONTROL_AND_RLS_HARDENING_05_18_2026.md` and
+`docs/FORMS_REVAMP_REQUIREMENTS_05_18_2026.md`.
 
 ---
 
@@ -81,8 +87,9 @@ Tick the leftmost checkbox to select rows. With at least one row selected, four 
 ### Editing an employee
 
 Click any row → **Edit Employee** dialog opens. From there you can change:
-- Identity: Full Name, Email (auth-mirrored), Phone, Employee Code, Job Title, Start Date
+- Identity: Full Name, Email (auth-mirrored), Phone, Employee Code, Job Title, **Joining Date** (was "Start Date" — label only; DB column unchanged), **Nationality** (searchable dropdown from the canonical list; type a new one and it's accepted + auto-added)
 - Org: Role, Department, Supervisor, Manager, Workday Hours
+- Every mandatory field shows a **red border while empty, green once filled** (a ` *` on the label) — the same on every form (registration, Edit/New Employee, Projects/Suppliers/Compensation dialogs)
 - Status: a 6-state employment lifecycle dropdown (**only HR controls this — never auto-flipped**):
   - **Active** — the *only* status that permits sign-in.
   - **Inactive**, **Retired**, **Resigned**, **Fired**, **Suspended (Salary Hold)** — all block sign-in (mid-session too); the employee sees *"Your account is inactive…"*. They differ as descriptive/operational labels only.
@@ -90,7 +97,7 @@ Click any row → **Edit Employee** dialog opens. From there you can change:
   - Technically `profiles.employment_status` is the source of truth; the old `is_active` flag is now derived from it by a DB trigger (migration 054), so every existing login/auth check keeps working unchanged. The Employee Directory status chip shows the richer status.
 - Annual PTO Entitlement (days/year) — live preview of the monthly accrual it produces
 - Auto-warn opt-in (see [Uncompleted-form warning system](#9-uncompleted-form-warning-system))
-- Capability flags (General Manager / Operations Manager / Can approve project-hours / Can close month / **Access superuser** — see [Access Control & Superusers](#15-access-control--superusers))
+- Capability flags (Edit Employee → **Capabilities**): **General Manager** (= full see + approve authority over **all** Timesheet Management — Projects, Suppliers, Assignments, Monthly Consolidated, **Hours Change Requests**, **Month Closures**, Employee × Project), Operations Manager, Can approve project-hours, Can close month, **Access superuser** — see [Access Control & Superusers](#15-access-control--superusers)
 - ID document preview with rotate & save (see [Document upload & rotation](#6-document-upload--rotation))
 - Email action to fire after Save (see [HR Email Actions](#5-hr-email-actions))
 
@@ -131,13 +138,18 @@ When an employee submits the registration form, HR sees them in **Action Require
 Click **Review** → **Review Registration** dialog opens.
 
 ### What HR sees
-- Identity, contact, nationality, ID type, ID number, expiry — all read-only by default.
+- Identity, contact, nationality, **National Address**, **Qualification**, **Specialization**, ID type, ID number, expiry — read-only by default.
+- **Declaration** acceptance is shown read-only (green with the date + version if the employee accepted it; amber if missing). The employee cannot submit the registration form at all without ticking the mandatory declaration.
 - Inline preview of the uploaded ID document (image or PDF).
 - Yellow-tinted fields = employee changed a value HR originally pre-filled.
 
 ### Editing on the spot
 
-**Edit fields** button (top right) unlocks: Full Name, Email, Phone, Nationality, ID Type, ID Number, ID Expiry, plus the document slot. Email changes go through `update-employee-email` (auth-mirrored). Document replacement uploads to Storage.
+**Edit fields** button (top right) unlocks: Full Name, Email, Phone (labelled "Absher Mobile Number" on the employee's form), Nationality, **National Address**, **Qualification**, **Specialization**, ID Type, ID Number, ID Expiry, plus the document slot. Email changes go through `update-employee-email` (auth-mirrored). Document replacement uploads to Storage.
+
+### Specialization spell-check (employee-typed values)
+
+Specialization is a searchable dropdown the employee can also free-type. A new typed value is stored **pending** (hidden from the shared list) until HR endorses it. When HR **Approves** the registration, the specialization on record (after any HR correction in the dialog) is **activated** — from then on it appears in the Specialization autocomplete for everyone. So: employee types → HR fixes spelling if needed → Approve → it joins the canonical list.
 
 ### Confirming changes before approval
 
@@ -484,14 +496,40 @@ Resources are grouped into **Navbar** and **Pages**. For each one:
   - **Roles** (employee / supervisor / manager / hr / hr_director)
   - **Departments** (from the canonical department list)
   - **Job titles** (from the canonical designation list)
-- **How rules combine:** access is granted if **ANY rule** matches.
-  Within a rule, **every section you set must match** (AND). A section you
-  leave empty doesn't constrain. So:
+- **How rules combine:** access is granted if **ANY rule** matches
+  (rules are OR'd — there's an **"OR"** divider between them). Within a
+  rule, **every section you set must match** (AND); a section left empty
+  doesn't constrain. Each rule shows a **live plain-English summary** of
+  exactly who it grants (e.g. *"Grants access when role is HR or HR
+  Director AND department is OPERATIONS"*) so there's no guessing. So:
   - One rule with Roles=`manager` + Department=`OPERATIONS` =
-    "Operations managers only".
-  - Two rules — `{Roles: hr_director}` and `{Department: FINANCE}` =
-    "HR Directors **or** anyone in Finance".
+    "managers who are **also** in Operations" (AND).
+  - **To open something to a whole department regardless of role:** put
+    that department in its **own** rule with Roles left empty, and add a
+    *separate* rule for HR. (Combining Roles + Department in one rule is
+    AND, not "either".)
 - **Save** is per-resource; the navbar refreshes live after saving.
+
+### Timesheet Management (its own gate-able tab)
+
+**Timesheet Management** is a top-level sidebar tab (URL
+`/timesheet-management`; its pages live at `/timesheet/<page>`), no longer
+buried under HR Admin — so you can grant it independently. In Access
+Control it appears as a **single** "Timesheet Management" navbar entry,
+and that one policy governs the hub **and every page inside it**
+(Projects, Suppliers, Monthly Consolidated, Timesheet Assignments, Hours
+Change Requests, Month Closures, Employee × Project Breakdown) — grant it
+once and all of them open; no per-page setup.
+
+- *Seeing vs doing:* the Access Control rule decides who can **open**
+  Timesheet Management. **Approving** inside it (Month Closures close/
+  reopen, Hours Change Requests approve/reject, editing timesheets) is a
+  separate authority: the **General Manager** capability (Edit Employee →
+  Capabilities) grants full see + approve across *all* of Timesheet
+  Management. The two Operations Project Managers currently hold it.
+- Example you'll likely want: a rule with **Department = OPERATIONS** (its
+  own rule) so Operations staff can open it; plus the **General Manager**
+  capability on the specific people who should approve.
 
 ### The lockout floor (why HR can't trap itself)
 
@@ -548,7 +586,7 @@ Items deferred from today's work, listed in priority order so we don't forget:
 - **110 missing Excel employees bulk import.** From the 2026-05-11 reconciliation — `docs/EMPLOYEE_DATA_RECONCILIATION_05_11_2026.md`.
 - **Apex domain (polytech-hr.com without www) Vercel mapping.** DNS-side decision; both are already in the Supabase allow-list.
 - **HR-side mobile UX for the new dialogs.** Edit Employee, Review Registration, and the bulk dialogs are web-only today (MUI components, `if (isWeb)` paths). Mobile gets a simpler list-only view.
-- **Apply migration via `supabase db push`** — local migration history is out of sync with remote since we've been applying via `supabase db query --linked --file` (now through migration 051). Worth a `supabase migration repair --status applied` pass to align 045–051.
+- **Apply migration via `supabase db push`** — local migration history is out of sync with remote since we've been applying via `supabase db query --linked --file` (now through migration **057**). Worth a `supabase migration repair --status applied` pass to align 045–057.
 - **More Phase-2 RLS gates (optional).** Repeat the proven `fn_can_access` `AS RESTRICTIVE` pattern (see `docs/ACCESS_CONTROL_AND_RLS_HARDENING_05_18_2026.md` §5) on other tables. Defense-in-depth only — underlying data already has RLS. Must pass the page-vs-table granularity check per table.
 - **Gap #4 — audit-table write hardening (low severity).** `leave_ledger` INSERT and `leave_request_history` / `timesheet_history` SELECT+INSERT are still `USING(true)` (any signed-in user could forge/read audit rows). Integrity nicety, not a data exposure.
 
@@ -560,3 +598,6 @@ Items deferred from today's work, listed in priority order so we don't forget:
 - Edge functions are deployed with `verify_jwt:false` for the internal ones (`run-form-warnings`); JWT-required for HR-facing ones (`update-employee-email`, `request-profile-verification`).
 - The lazy fallback in `useBalance` is defence-in-depth — even if pg_cron is disabled, balances self-heal on first read each month.
 - **Access Control invariants** (full list in `docs/ACCESS_CONTROL_AND_RLS_HARDENING_05_18_2026.md` §6): a new guardable nav/page must be added to **both** `lib/access/resources.ts` and the migration-045 seed; any change to `lib/access/evaluate.ts` must be mirrored in the `fn_can_access` SQL function (migration 048) and its unit tests; the superuser bypass + the two-key HR lockout floor (`nav:admin`, `page:admin/access-control`) must stay identical in both the client and SQL layers. Sensitive `profiles` columns are reachable only via `get_profile_secure` / `list_employees_secure` — never raw `select('*')`.
+- **`list_employees_secure` re-sync (recurring gotcha):** that function returns `SETOF profiles` via an *explicit* column projection. **Any** migration that adds/removes a `profiles` column breaks it ("structure of query does not match function result type") — the same migration must `CREATE OR REPLACE` it with the new column appended (PII redacted). Precedent: 052→053, 054. `get_profile_secure` is safe (`SELECT *`).
+- **Timesheet Management auth model:** the `nav:timesheet-management` Access Control policy gates *page visibility* for the hub + all 7 sub-pages (their AccessGate uses that one key). *Doing/approving* inside it is the **`is_general_manager`** capability — migration 057 gives GM an HR-equivalent `*_gm_all` RLS policy on every Timesheet Management table; the Month Closures client gate also accepts GM. Adding a new Timesheet Management table ⇒ add a matching `_gm_all` policy.
+- The registration **Declaration** is enforced server-side in `submit_my_registration` (raises if not accepted); text/version live in `lib/constants.ts`. New typed Specializations are auto-registered `is_active=false` and activated by HR via `hr_activate_specialization` on registration Approve.
