@@ -1,3 +1,4 @@
+import { AccessGate } from '@/components/access/access-gate';
 import { useEffect, useMemo, useState } from 'react';
 import { View, Text, FlatList, Platform, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -390,6 +391,14 @@ function WebDateFilterBar({
 // --------------- Main Screen ---------------
 
 export default function RequestHistoryScreen() {
+  return (
+    <AccessGate resourceKey="page:admin/request-history">
+      <RequestHistoryScreenInner />
+    </AccessGate>
+  );
+}
+
+function RequestHistoryScreenInner() {
   const router = useRouter();
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();

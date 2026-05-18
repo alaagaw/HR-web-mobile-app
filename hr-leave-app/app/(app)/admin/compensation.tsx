@@ -1,3 +1,4 @@
+import { AccessGate } from '@/components/access/access-gate';
 /**
  * HR Admin → Compensation
  *
@@ -101,6 +102,14 @@ const INITIAL_HISTORY: HistoryDialogState = {
 };
 
 export default function CompensationScreen() {
+  return (
+    <AccessGate resourceKey="page:admin/compensation">
+      <CompensationScreenInner />
+    </AccessGate>
+  );
+}
+
+function CompensationScreenInner() {
   const router = useRouter();
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();

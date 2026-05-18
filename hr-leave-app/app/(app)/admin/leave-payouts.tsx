@@ -1,3 +1,4 @@
+import { AccessGate } from '@/components/access/access-gate';
 /**
  * HR Admin → Leave Payouts
  *
@@ -104,6 +105,14 @@ function monthLabel(year: number, month: number): string {
 }
 
 export default function LeavePayoutsScreen() {
+  return (
+    <AccessGate resourceKey="page:admin/leave-payouts">
+      <LeavePayoutsScreenInner />
+    </AccessGate>
+  );
+}
+
+function LeavePayoutsScreenInner() {
   const router = useRouter();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';

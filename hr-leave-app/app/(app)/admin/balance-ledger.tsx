@@ -1,3 +1,4 @@
+import { AccessGate } from '@/components/access/access-gate';
 import { useMemo, useState } from 'react';
 import { View, Text, FlatList, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -313,6 +314,14 @@ function WebLedgerTable({
 // --------------- Main Screen ---------------
 
 export default function BalanceLedgerScreen() {
+  return (
+    <AccessGate resourceKey="page:admin/balance-ledger">
+      <BalanceLedgerScreenInner />
+    </AccessGate>
+  );
+}
+
+function BalanceLedgerScreenInner() {
   const router = useRouter();
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();

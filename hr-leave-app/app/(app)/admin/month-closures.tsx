@@ -1,3 +1,4 @@
+import { AccessGate } from '@/components/access/access-gate';
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -51,6 +52,14 @@ interface MonthCell {
 }
 
 export default function MonthClosuresScreen() {
+  return (
+    <AccessGate resourceKey="page:admin/month-closures">
+      <MonthClosuresScreenInner />
+    </AccessGate>
+  );
+}
+
+function MonthClosuresScreenInner() {
   const router = useRouter();
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();

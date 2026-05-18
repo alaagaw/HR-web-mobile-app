@@ -1,3 +1,4 @@
+import { AccessGate } from '@/components/access/access-gate';
 import { useEffect, useMemo, useState } from 'react';
 import { View, Text, FlatList, Platform, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -743,6 +744,14 @@ function MobileHistoryCard({ entry }: { entry: HistoryRow }) {
 // ─── Main Screen ─────────────────────────────────────────────────────
 
 export default function RenewalHistoryScreen() {
+  return (
+    <AccessGate resourceKey="page:admin/renewal-history">
+      <RenewalHistoryScreenInner />
+    </AccessGate>
+  );
+}
+
+function RenewalHistoryScreenInner() {
   const router = useRouter();
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();

@@ -1,3 +1,4 @@
+import { AccessGate } from '@/components/access/access-gate';
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -58,6 +59,14 @@ function scopeLabel(s: ProjectHoursChangeScope): string {
 }
 
 export default function ProjectHoursRequestsScreen() {
+  return (
+    <AccessGate resourceKey="page:admin/project-hours-requests">
+      <ProjectHoursRequestsScreenInner />
+    </AccessGate>
+  );
+}
+
+function ProjectHoursRequestsScreenInner() {
   const router = useRouter();
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();

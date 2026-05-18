@@ -1,3 +1,4 @@
+import { AccessGate } from '@/components/access/access-gate';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, FlatList, TextInput, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -1994,6 +1995,14 @@ function EmpCodeRemapDialog({
 // --------------- Main Screen ---------------
 
 export default function EmployeesScreen() {
+  return (
+    <AccessGate resourceKey="page:admin/employees">
+      <EmployeesScreenInner />
+    </AccessGate>
+  );
+}
+
+function EmployeesScreenInner() {
   const router = useRouter();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';

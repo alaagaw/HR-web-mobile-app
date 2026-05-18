@@ -1,3 +1,4 @@
+import { AccessGate } from '@/components/access/access-gate';
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -31,6 +32,14 @@ if (isWeb) {
  * "total OT per employee across all projects" the report was asked for.
  */
 export default function EmployeeProjectBreakdownScreen() {
+  return (
+    <AccessGate resourceKey="page:admin/employee-project-breakdown">
+      <EmployeeProjectBreakdownScreenInner />
+    </AccessGate>
+  );
+}
+
+function EmployeeProjectBreakdownScreenInner() {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
 

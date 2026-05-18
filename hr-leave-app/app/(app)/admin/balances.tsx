@@ -1,3 +1,4 @@
+import { AccessGate } from '@/components/access/access-gate';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { View, Text, FlatList, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -479,6 +480,14 @@ function AdjustBalanceDialog({
 // --------------- Main Screen ---------------
 
 export default function BalancesScreen() {
+  return (
+    <AccessGate resourceKey="page:admin/balances">
+      <BalancesScreenInner />
+    </AccessGate>
+  );
+}
+
+function BalancesScreenInner() {
   const router = useRouter();
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();

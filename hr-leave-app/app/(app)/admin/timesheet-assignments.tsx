@@ -1,3 +1,4 @@
+import { AccessGate } from '@/components/access/access-gate';
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { View, Text, ScrollView, Platform, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -632,6 +633,14 @@ function MobileAssignmentCard({
 // ============================================================
 
 export default function TimesheetAssignmentsScreen() {
+  return (
+    <AccessGate resourceKey="page:admin/timesheet-assignments">
+      <TimesheetAssignmentsScreenInner />
+    </AccessGate>
+  );
+}
+
+function TimesheetAssignmentsScreenInner() {
   const router = useRouter();
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();

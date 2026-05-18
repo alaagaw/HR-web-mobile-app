@@ -1,3 +1,4 @@
+import { AccessGate } from '@/components/access/access-gate';
 import { useEffect, useMemo, useState } from 'react';
 import { View, Text, FlatList, TextInput, Platform, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -495,6 +496,14 @@ function SupplierDialog({
 // ============================================================
 
 export default function SuppliersScreen() {
+  return (
+    <AccessGate resourceKey="page:admin/suppliers">
+      <SuppliersScreenInner />
+    </AccessGate>
+  );
+}
+
+function SuppliersScreenInner() {
   const router = useRouter();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';

@@ -1,3 +1,4 @@
+import { AccessGate } from '@/components/access/access-gate';
 import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { View, Text, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -65,6 +66,14 @@ const DT = {
 // ============================================================
 
 export default function TimesheetsScreen() {
+  return (
+    <AccessGate resourceKey="page:admin/timesheets">
+      <TimesheetsScreenInner />
+    </AccessGate>
+  );
+}
+
+function TimesheetsScreenInner() {
   const router = useRouter();
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();

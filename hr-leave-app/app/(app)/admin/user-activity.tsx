@@ -1,3 +1,4 @@
+import { AccessGate } from '@/components/access/access-gate';
 import { useCallback, useMemo, useState } from 'react';
 import { View, Text, FlatList, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -44,6 +45,14 @@ const roleLabel = (r: string) =>
     : r.charAt(0).toUpperCase() + r.slice(1);
 
 export default function UserActivityScreen() {
+  return (
+    <AccessGate resourceKey="page:admin/user-activity">
+      <UserActivityScreenInner />
+    </AccessGate>
+  );
+}
+
+function UserActivityScreenInner() {
   const router = useRouter();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';

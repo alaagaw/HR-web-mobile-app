@@ -1,3 +1,4 @@
+import { AccessGate } from '@/components/access/access-gate';
 import { useCallback, useMemo, useState } from 'react';
 import { View, Text, FlatList, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -47,6 +48,14 @@ const submittedStr = (row: any) => {
 };
 
 export default function RegistrationsScreen() {
+  return (
+    <AccessGate resourceKey="page:admin/registrations">
+      <RegistrationsScreenInner />
+    </AccessGate>
+  );
+}
+
+function RegistrationsScreenInner() {
   const router = useRouter();
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();

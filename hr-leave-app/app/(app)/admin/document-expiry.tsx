@@ -1,3 +1,4 @@
+import { AccessGate } from '@/components/access/access-gate';
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { View, Text, ScrollView, Platform, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -1455,6 +1456,14 @@ function WebExpiryTable({
 // ============================================================
 
 export default function DocumentExpiryScreen() {
+  return (
+    <AccessGate resourceKey="page:admin/document-expiry">
+      <DocumentExpiryScreenInner />
+    </AccessGate>
+  );
+}
+
+function DocumentExpiryScreenInner() {
   const router = useRouter();
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();

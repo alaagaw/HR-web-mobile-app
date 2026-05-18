@@ -1,3 +1,4 @@
+import { AccessGate } from '@/components/access/access-gate';
 import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, ScrollView, Platform, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -711,6 +712,14 @@ function DeleteConfirmDialog({
 // ============================================================
 
 export default function ProjectsScreen() {
+  return (
+    <AccessGate resourceKey="page:admin/projects">
+      <ProjectsScreenInner />
+    </AccessGate>
+  );
+}
+
+function ProjectsScreenInner() {
   const router = useRouter();
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();
