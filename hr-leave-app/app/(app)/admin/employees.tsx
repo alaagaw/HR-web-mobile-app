@@ -24,6 +24,7 @@ import {
   canonicaliseNationality,
 } from '@/services';
 import { supabase } from '@/services/supabase/client';
+import { requiredSx } from '@/lib/required-field';
 import { useAuth } from '@/hooks/use-auth';
 import { getRoleLabel, getInitials } from '@/lib/utils';
 import { rotateImageBlob } from '@/lib/image-rotation';
@@ -682,12 +683,14 @@ function EditEmployeeDialog({
             label="Full Name"
             value={state.full_name}
             onChange={(e: any) => onChange('full_name', e.target.value)}
+            sx={requiredSx(state.full_name)}
             fullWidth size="small" required
           />
           <MuiTextField
             label="Email"
             value={state.email}
             onChange={(e: any) => onChange('email', e.target.value)}
+            sx={requiredSx(state.email)}
             fullWidth size="small" required type="email"
             helperText="Changing email re-points the auth account immediately."
           />
@@ -699,6 +702,7 @@ function EditEmployeeDialog({
             label="Employee Code"
             value={state.emp_code}
             onChange={(e: any) => onChange('emp_code', e.target.value)}
+            sx={requiredSx(state.emp_code)}
             fullWidth size="small" required placeholder="e.g. 70150"
             helperText="HR-editable. Database enforces uniqueness."
           />
@@ -744,6 +748,7 @@ function EditEmployeeDialog({
             label="Joining Date"
             value={state.start_date}
             onChange={(e: any) => onChange('start_date', e.target.value)}
+            sx={requiredSx(state.start_date)}
             fullWidth size="small" required type="date"
             InputLabelProps={{ shrink: true }}
           />
@@ -1299,12 +1304,14 @@ function InviteEmployeeDialog({
             label="Full Name"
             value={state.full_name}
             onChange={(e: any) => onChange('full_name', e.target.value)}
+            sx={requiredSx(state.full_name)}
             fullWidth size="small" required
           />
           <MuiTextField
             label="Email"
             value={state.email}
             onChange={(e: any) => onChange('email', e.target.value)}
+            sx={requiredSx(state.email)}
             fullWidth size="small" required type="email"
           />
         </div>
@@ -1361,6 +1368,7 @@ function InviteEmployeeDialog({
             label="Joining Date"
             value={state.start_date}
             onChange={(e: any) => onChange('start_date', e.target.value)}
+            sx={requiredSx(state.start_date)}
             fullWidth size="small" required type="date"
             InputLabelProps={{ shrink: true }}
           />

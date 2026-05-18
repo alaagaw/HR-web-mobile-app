@@ -587,6 +587,9 @@ export interface RegistrationFieldEdits {
   full_name?: string;
   phone?: string;
   nationality?: string;
+  national_address?: string;
+  qualification?: string;
+  specialization?: string;
   id_type?: IdType | '';
   national_id_number?: string;
   iqama_number?: string;
