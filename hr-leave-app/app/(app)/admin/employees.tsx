@@ -741,7 +741,7 @@ function EditEmployeeDialog({
             fullWidth size="small"
           />
           <MuiTextField
-            label="Start Date"
+            label="Joining Date"
             value={state.start_date}
             onChange={(e: any) => onChange('start_date', e.target.value)}
             fullWidth size="small" required type="date"
@@ -1358,7 +1358,7 @@ function InviteEmployeeDialog({
             fullWidth size="small"
           />
           <MuiTextField
-            label="Start Date"
+            label="Joining Date"
             value={state.start_date}
             onChange={(e: any) => onChange('start_date', e.target.value)}
             fullWidth size="small" required type="date"

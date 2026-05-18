@@ -323,7 +323,7 @@ export default function RegistrationFormScreen() {
     { label: 'Job Title',       value: user.job_title || '—' },
     { label: 'Department',      value: user.department || '—' },
     { label: 'Role',            value: getRoleLabel(user.role) },
-    { label: 'Start Date',      value: user.start_date || '—' },
+    { label: 'Joining Date',    value: user.start_date || '—' },
     { label: 'Workday Hours',   value: `${user.workday_hours ?? 8} hrs` },
     { label: 'Supervisor',      value: supervisorName },
     { label: 'Manager',         value: managerName },
@@ -409,6 +409,7 @@ export default function RegistrationFormScreen() {
             render={({ field: { onChange, value } }) => (
               <Input
                 label="Email Address"
+                required
                 placeholder="your.email@example.com"
                 value={value}
                 onChangeText={onChange}
@@ -425,6 +426,7 @@ export default function RegistrationFormScreen() {
             render={({ field: { onChange, value } }) => (
               <Input
                 label="Full Name"
+                required
                 placeholder="Enter your full name"
                 value={value}
                 onChangeText={onChange}
@@ -440,6 +442,7 @@ export default function RegistrationFormScreen() {
             render={({ field: { onChange, value } }) => (
               <Input
                 label="Phone Number"
+                required
                 placeholder="+966 5XX XXX XXXX"
                 value={value}
                 onChangeText={onChange}
@@ -455,6 +458,7 @@ export default function RegistrationFormScreen() {
             render={({ field: { onChange, value } }) => (
               <Input
                 label="Nationality"
+                required
                 placeholder="e.g. Saudi, Egyptian, Indian"
                 value={value}
                 onChangeText={onChange}
@@ -537,6 +541,7 @@ export default function RegistrationFormScreen() {
               render={({ field: { onChange, value } }) => (
                 <Input
                   label="National ID Number"
+                  required
                   placeholder="10-digit Saudi National ID"
                   value={value || ''}
                   onChangeText={onChange}
@@ -555,6 +560,7 @@ export default function RegistrationFormScreen() {
                 render={({ field: { onChange, value } }) => (
                   <Input
                     label="Iqama Number"
+                    required
                     placeholder="Enter your Iqama number"
                     value={value || ''}
                     onChangeText={onChange}
@@ -586,6 +592,7 @@ export default function RegistrationFormScreen() {
                 render={({ field: { onChange, value } }) => (
                   <Input
                     label="Passport Number"
+                    required
                     placeholder="Enter your passport number"
                     value={value || ''}
                     onChangeText={onChange}
