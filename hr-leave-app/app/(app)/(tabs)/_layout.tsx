@@ -13,6 +13,7 @@ import {
   Clock,
   ClipboardList,
   Library,
+  Briefcase,
 } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
 import { useAuth } from '@/hooks/use-auth';
@@ -38,6 +39,7 @@ const NAV_ITEMS = [
   { name: 'timeclock', title: 'Clock In/Out', Icon: Clock },
   { name: 'timesheet-entry', title: 'Timesheet', Icon: ClipboardList },
   { name: 'calendar', title: 'Calendar', Icon: CalendarDays },
+  { name: 'timesheet-management', title: 'Timesheet Management', Icon: Briefcase, route: '/(app)/admin/timesheet-management' },
   { name: 'notifications', title: 'Notifications', Icon: Bell, route: '/(app)/notifications' },
   { name: 'hr-policies-documents', title: 'HR Policies and Documents', Icon: Library, route: '/(app)/admin/hr-policies-documents' },
   { name: 'admin', title: 'HR Admin', Icon: Settings },

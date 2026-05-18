@@ -12,9 +12,6 @@ import {
   UserPlus,
   FileText,
   RefreshCw,
-  FolderOpen,
-  Building2,
-  UserCheck,
   DollarSign,
   Calculator,
   Activity,
@@ -28,7 +25,7 @@ const isWeb = Platform.OS === 'web';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
-interface AdminPage {
+export interface AdminPage {
   title: string;
   description: string;
   icon: any;
@@ -36,7 +33,7 @@ interface AdminPage {
   path: string;
 }
 
-interface AdminGroup {
+export interface AdminGroup {
   label: string;
   description: string;
   items: AdminPage[];
@@ -128,61 +125,6 @@ const ADMIN_GROUPS: AdminGroup[] = [
     ],
   },
   {
-    label: 'Timesheet Management',
-    description: 'Projects, suppliers, timesheets, and timesheet assignments',
-    items: [
-      {
-        title: 'Projects',
-        description: 'Manage projects, clients, and locations for timesheet tracking.',
-        icon: FolderOpen,
-        iconColor: '#0891B2',
-        path: '/(app)/admin/projects',
-      },
-      {
-        title: 'Suppliers',
-        description: 'Manage vendor/subcontractor companies that provide workers.',
-        icon: Building2,
-        iconColor: '#7C3AED',
-        path: '/(app)/admin/suppliers',
-      },
-      {
-        title: 'Monthly Consolidated',
-        description: 'View consolidated monthly hours with regular/overtime breakdown.',
-        icon: ClipboardList,
-        iconColor: '#059669',
-        path: '/(app)/admin/timesheets',
-      },
-      {
-        title: 'Timesheet Assignments',
-        description: 'Assign timesheet keepers to projects and sites.',
-        icon: UserCheck,
-        iconColor: '#D97706',
-        path: '/(app)/admin/timesheet-assignments',
-      },
-      {
-        title: 'Hours Change Requests',
-        description: 'Review and approve project regular-hours change requests.',
-        icon: ClipboardList,
-        iconColor: '#F59E0B',
-        path: '/(app)/admin/project-hours-requests',
-      },
-      {
-        title: 'Month Closures',
-        description: 'Close and reopen calendar months for payroll. Blocks retroactive change requests against closed months.',
-        icon: ClipboardList,
-        iconColor: '#22C55E',
-        path: '/(app)/admin/month-closures',
-      },
-      {
-        title: 'Employee × Project Breakdown',
-        description: 'For a chosen month, see each employee\'s hours per project plus their total OT across all projects.',
-        icon: ClipboardList,
-        iconColor: '#3B82F6',
-        path: '/(app)/admin/employee-project-breakdown',
-      },
-    ],
-  },
-  {
     label: 'System',
     description: 'Access control and configuration',
     items: [
@@ -266,7 +208,7 @@ function WebAdminCard({
   );
 }
 
-function WebGroupSection({
+export function WebGroupSection({
   group,
   isDark,
   onNavigate,

@@ -41,6 +41,7 @@ export const ACCESS_RESOURCES: AccessResource[] = [
   { key: 'nav:timeclock',             label: 'Clock In/Out',             category: 'nav', legacyDefault: ALL },
   { key: 'nav:timesheet-entry',       label: 'Timesheet',                category: 'nav', legacyDefault: ALL },
   { key: 'nav:calendar',              label: 'Calendar',                 category: 'nav', legacyDefault: ALL },
+  { key: 'nav:timesheet-management',  label: 'Timesheet Management',     category: 'nav', route: '/(app)/admin/timesheet-management', legacyDefault: isHR },
   { key: 'nav:notifications',         label: 'Notifications',            category: 'nav', legacyDefault: ALL },
   { key: 'nav:hr-policies-documents', label: 'HR Policies & Documents',  category: 'nav', legacyDefault: ALL },
   { key: 'nav:admin',                 label: 'HR Admin',                 category: 'nav', legacyDefault: isHR },
