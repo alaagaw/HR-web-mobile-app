@@ -3,8 +3,8 @@
 > Living document. Sections below describe features as they ship.
 > Add new sections at the bottom as we build more.
 
-**Last updated:** 2026-05-13
-**Latest commits covered:** through `979f54d` (filter refresh fix) + Forecast tab on Leave Payouts (this commit)
+**Last updated:** 2026-05-18
+**Latest commits covered:** through `3b3bae6` (Access Control initiative, superusers, RLS hardening) — migrations **045–051 applied to prod**. See `docs/ACCESS_CONTROL_AND_RLS_HARDENING_05_18_2026.md` for the full technical recap.
 
 ---
 
@@ -24,7 +24,8 @@
 12. [Leave Payouts calculator](#12-leave-payouts)
 13. [What runs automatically (cron schedules)](#13-automated-jobs)
 14. [Domain & email infrastructure](#14-domain--email)
-15. [Known follow-ups](#15-known-follow-ups)
+15. [Access Control & Superusers](#15-access-control--superusers)
+16. [Known follow-ups](#16-known-follow-ups)
 
 ---
 
@@ -85,7 +86,7 @@ Click any row → **Edit Employee** dialog opens. From there you can change:
 - Status: Active / Inactive (**only HR controls this — never auto-flipped**)
 - Annual PTO Entitlement (days/year) — live preview of the monthly accrual it produces
 - Auto-warn opt-in (see [Uncompleted-form warning system](#9-uncompleted-form-warning-system))
-- Capability flags (HR Director / Operations Manager / etc.)
+- Capability flags (General Manager / Operations Manager / Can approve project-hours / Can close month / **Access superuser** — see [Access Control & Superusers](#15-access-control--superusers))
 - ID document preview with rotate & save (see [Document upload & rotation](#6-document-upload--rotation))
 - Email action to fire after Save (see [HR Email Actions](#5-hr-email-actions))
 
@@ -458,7 +459,82 @@ Manual escape hatches for all of the above are present in the UI — see section
 
 ---
 
-## 15. Known follow-ups
+## 15. Access Control & Superusers
+
+**Path:** HR Admin → **System** → **Access Control** (`/admin/access-control`)
+
+HR decides who can see each **navbar item** and each **page** — by Role,
+Department, and/or Job Title, in any combination — without a code change.
+Rules are **attribute-based**: when you change an employee's
+role/department/job title in Edit Employee, their access updates
+automatically. Nothing is granted per-person.
+
+### Using the screen
+
+Resources are grouped into **Navbar** and **Pages**. For each one:
+
+- **"Visible to everyone" switch** — on ⇒ every signed-in employee can
+  reach it; rules below are ignored.
+- **Rules** (when not visible-to-everyone) — click **+ Add rule**, then
+  tick chips:
+  - **Roles** (employee / supervisor / manager / hr / hr_director)
+  - **Departments** (from the canonical department list)
+  - **Job titles** (from the canonical designation list)
+- **How rules combine:** access is granted if **ANY rule** matches.
+  Within a rule, **every section you set must match** (AND). A section you
+  leave empty doesn't constrain. So:
+  - One rule with Roles=`manager` + Department=`OPERATIONS` =
+    "Operations managers only".
+  - Two rules — `{Roles: hr_director}` and `{Department: FINANCE}` =
+    "HR Directors **or** anyone in Finance".
+- **Save** is per-resource; the navbar refreshes live after saving.
+
+### The lockout floor (why HR can't trap itself)
+
+HR / HR Director can **always** reach the **Access Control screen** and
+the **HR Admin** menu — and *only* those two. Everywhere else they follow
+the rules like everyone else. This means a mistaken policy (or even an
+empty one) can never permanently lock you out of fixing it.
+
+### Access superuser (Edit Employee → Capabilities)
+
+A per-employee checkbox. An **Access superuser bypasses ALL Access
+Control rules** — they see every nav item and page regardless of
+role/department/title. Grant sparingly. **Recommendation: the owner/main
+admin should be a superuser** so a restrictive rule never surprises them.
+(A restrictive rule can hide pages from regular HR — that's intentional;
+the superuser flag and the lockout floor are the safety nets.)
+
+### What this does *not* do
+
+This layer controls **navigation and page visibility**. The actual data
+is still protected independently by database row-level security. If a
+policy is misconfigured, the worst case for most pages is a hidden/blocked
+page — not a data leak.
+
+### Related database hardening (same release)
+
+Three pre-existing data-exposure holes were closed at the database level:
+
+- **Employee directory PII** — phone, nationality, start date,
+  registration note, and HR-original-values are no longer readable by
+  every signed-in account. HR and the employee themselves still see their
+  own/all data normally (Manage Employees, your own Profile, registrations
+  review, bulk import all work as before); other employees' picker/search
+  results simply omit those fields.
+- **Leave requests** — only the employee, the current approver, that
+  employee's supervisor/manager, and HR can modify a leave request
+  (previously any signed-in user could via the API).
+- **Leave attachments** — visible only to people who can see the parent
+  request.
+
+- **Salary (Compensation)** — now additionally gate-able from the Access
+  Control screen via the `Compensation` page entry, on top of the
+  existing "self + HR only" protection.
+
+---
+
+## 16. Known follow-ups
 
 Items deferred from today's work, listed in priority order so we don't forget:
 
@@ -468,7 +544,9 @@ Items deferred from today's work, listed in priority order so we don't forget:
 - **110 missing Excel employees bulk import.** From the 2026-05-11 reconciliation — `docs/EMPLOYEE_DATA_RECONCILIATION_05_11_2026.md`.
 - **Apex domain (polytech-hr.com without www) Vercel mapping.** DNS-side decision; both are already in the Supabase allow-list.
 - **HR-side mobile UX for the new dialogs.** Edit Employee, Review Registration, and the bulk dialogs are web-only today (MUI components, `if (isWeb)` paths). Mobile gets a simpler list-only view.
-- **Apply migration via `supabase db push`** — local migration history is out of sync with remote since we've been applying via `supabase db query --linked --file`. Worth a `supabase migration repair --status applied` pass to align.
+- **Apply migration via `supabase db push`** — local migration history is out of sync with remote since we've been applying via `supabase db query --linked --file` (now through migration 051). Worth a `supabase migration repair --status applied` pass to align 045–051.
+- **More Phase-2 RLS gates (optional).** Repeat the proven `fn_can_access` `AS RESTRICTIVE` pattern (see `docs/ACCESS_CONTROL_AND_RLS_HARDENING_05_18_2026.md` §5) on other tables. Defense-in-depth only — underlying data already has RLS. Must pass the page-vs-table granularity check per table.
+- **Gap #4 — audit-table write hardening (low severity).** `leave_ledger` INSERT and `leave_request_history` / `timesheet_history` SELECT+INSERT are still `USING(true)` (any signed-in user could forge/read audit rows). Integrity nicety, not a data exposure.
 
 ---
 
@@ -477,3 +555,4 @@ Items deferred from today's work, listed in priority order so we don't forget:
 - All migrations are idempotent (`CREATE IF NOT EXISTS`, `CREATE OR REPLACE FUNCTION`, drop-then-recreate for cron jobs). Safe to re-run.
 - Edge functions are deployed with `verify_jwt:false` for the internal ones (`run-form-warnings`); JWT-required for HR-facing ones (`update-employee-email`, `request-profile-verification`).
 - The lazy fallback in `useBalance` is defence-in-depth — even if pg_cron is disabled, balances self-heal on first read each month.
+- **Access Control invariants** (full list in `docs/ACCESS_CONTROL_AND_RLS_HARDENING_05_18_2026.md` §6): a new guardable nav/page must be added to **both** `lib/access/resources.ts` and the migration-045 seed; any change to `lib/access/evaluate.ts` must be mirrored in the `fn_can_access` SQL function (migration 048) and its unit tests; the superuser bypass + the two-key HR lockout floor (`nav:admin`, `page:admin/access-control`) must stay identical in both the client and SQL layers. Sensitive `profiles` columns are reachable only via `get_profile_secure` / `list_employees_secure` — never raw `select('*')`.
