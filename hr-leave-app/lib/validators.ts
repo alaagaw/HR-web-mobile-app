@@ -131,8 +131,16 @@ export const registrationFormSchema = z
     // Personal — employee owns these
     email: z.string().email('Please enter a valid email address'),
     full_name: z.string().min(2, 'Full name is required'),
-    phone: z.string().min(5, 'Phone number is required'),
+    phone: z.string().min(5, 'Absher mobile number is required'),
     nationality: z.string().min(2, 'Nationality is required'),
+    national_address: z.string().min(4, 'National Address is required'),
+    qualification: z.string().min(1, 'Qualification is required'),
+    specialization: z.string().min(1, 'Specialization is required'),
+    declaration_accepted: z
+      .boolean()
+      .refine((v) => v === true, {
+        message: 'You must accept the declaration to submit',
+      }),
 
     // Primary ID — the document the employee chose to upload
     id_type: z.enum(['national_id', 'iqama', 'passport'], {

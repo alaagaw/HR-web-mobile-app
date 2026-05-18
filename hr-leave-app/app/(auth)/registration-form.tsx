@@ -9,8 +9,12 @@ import { Button } from '@/components/ui/button';
 import { Banner } from '@/components/ui/banner';
 import { useAuth } from '@/hooks/use-auth';
 import { useAuthStore } from '@/stores/auth-store';
-import { registrationService, documentService, userService } from '@/services';
+import { registrationService, documentService, userService, lookupService } from '@/services';
 import { supabase } from '@/services/supabase/client';
+import {
+  QUALIFICATION_OPTIONS,
+  REGISTRATION_DECLARATION_TEXT,
+} from '@/lib/constants';
 import { registrationFormSchema, type RegistrationFormSchemaData } from '@/lib/validators';
 import { getRoleLabel, formatHours } from '@/lib/utils';
 import type { Profile, EmployeeDocument } from '@/types/models';
@@ -46,6 +50,16 @@ export default function RegistrationFormScreen() {
   // user clicks Save rotation — see handleSaveRotation.
   const [docRotation, setDocRotation] = useState<number>(0);
   const [rotatingSaving, setRotatingSaving] = useState(false);
+  // Specialization autocomplete options (active lookup rows). The
+  // employee may also type a new value — the submit RPC auto-registers
+  // it (is_active=false) for HR spelling review.
+  const [specOptions, setSpecOptions] = useState<string[]>([]);
+  useEffect(() => {
+    lookupService
+      .getSpecializations()
+      .then((rows) => setSpecOptions(rows.map((r) => r.name)))
+      .catch(() => {});
+  }, []);
 
   const {
     control,
@@ -62,6 +76,10 @@ export default function RegistrationFormScreen() {
       full_name: '',
       phone: '',
       nationality: '',
+      national_address: '',
+      qualification: '',
+      specialization: '',
+      declaration_accepted: false,
       id_type: 'iqama',
       id_document_url: '',
       national_id_number: '',
@@ -111,6 +129,11 @@ export default function RegistrationFormScreen() {
           full_name: user.full_name || '',
           phone: user.phone || '',
           nationality: user.nationality || '',
+          national_address: user.national_address || '',
+          qualification: user.qualification || '',
+          specialization: user.specialization || '',
+          // Always re-accept the declaration each submit/resubmit.
+          declaration_accepted: false,
           id_type: (docRow?.id_type as any) || 'iqama',
           id_document_url: docRow?.id_document_url || '',
           national_id_number: docRow?.national_id_number || '',
@@ -245,6 +268,10 @@ export default function RegistrationFormScreen() {
       'full_name',
       'phone',
       'nationality',
+      'national_address',
+      'qualification',
+      'specialization',
+      'declaration_accepted',
       'id_type',
       'national_id_number',
       'iqama_number',
@@ -278,6 +305,10 @@ export default function RegistrationFormScreen() {
         full_name: data.full_name.trim(),
         phone: data.phone.trim(),
         nationality: data.nationality.trim(),
+        national_address: data.national_address.trim(),
+        qualification: data.qualification.trim(),
+        specialization: data.specialization.trim(),
+        declaration_accepted: data.declaration_accepted === true,
         id_type: data.id_type,
         id_document_url: data.id_document_url,
         national_id_number: blank(data.national_id_number),
@@ -441,7 +472,7 @@ export default function RegistrationFormScreen() {
             name="phone"
             render={({ field: { onChange, value } }) => (
               <Input
-                label="Phone Number"
+                label="Absher Mobile Number"
                 required
                 placeholder="+966 5XX XXX XXXX"
                 value={value}
@@ -464,6 +495,56 @@ export default function RegistrationFormScreen() {
                 onChangeText={onChange}
                 error={errors.nationality?.message}
                 autoCapitalize="words"
+              />
+            )}
+          />
+
+          <Controller
+            control={control}
+            name="national_address"
+            render={({ field: { onChange, value } }) => (
+              <Input
+                label="National Address"
+                required
+                placeholder="Saudi Short Address (SPL), e.g. RRRD2929"
+                helper="Your National Short Address from the Saudi Post (SPL) — splonline.com.sa / Absher."
+                value={value}
+                onChangeText={onChange}
+                error={errors.national_address?.message}
+                autoCapitalize="characters"
+              />
+            )}
+          />
+
+          <Controller
+            control={control}
+            name="qualification"
+            render={({ field: { onChange, value } }) => (
+              <NativeSelectField
+                label="Qualification"
+                required
+                value={value}
+                onChange={onChange}
+                options={QUALIFICATION_OPTIONS as unknown as string[]}
+                placeholder="Select your highest qualification"
+                error={errors.qualification?.message}
+              />
+            )}
+          />
+
+          <Controller
+            control={control}
+            name="specialization"
+            render={({ field: { onChange, value } }) => (
+              <NativeAutocompleteField
+                label="Specialization"
+                required
+                value={value}
+                onChange={onChange}
+                options={specOptions}
+                placeholder="Search or type your specialization"
+                helper="Pick from the list or type your own — HR will confirm the spelling."
+                error={errors.specialization?.message}
               />
             )}
           />
@@ -796,6 +877,67 @@ export default function RegistrationFormScreen() {
             )}
           />
 
+          {/* ─── Declaration (mandatory, R2e) ─── */}
+          <Controller
+            control={control}
+            name="declaration_accepted"
+            render={({ field: { onChange, value } }) => (
+              <View
+                style={{
+                  marginTop: 24,
+                  borderWidth: 2,
+                  borderColor: errors.declaration_accepted ? '#EF4444' : '#EAB308',
+                  backgroundColor: 'rgba(234,179,8,0.12)',
+                  borderRadius: 12,
+                  padding: 16,
+                }}
+              >
+                <Text style={{ fontSize: 16, fontWeight: '800', color: '#B45309', marginBottom: 8 }}>
+                  Declaration
+                </Text>
+                <Text style={{ fontSize: 15, lineHeight: 22, color: isWeb ? '#FDE68A' : '#92400E', fontWeight: '600' }}>
+                  {REGISTRATION_DECLARATION_TEXT}
+                </Text>
+                <Text style={{ fontSize: 13, color: isWeb ? '#FCD34D' : '#B45309', marginTop: 8 }}>
+                  Date:{' '}
+                  {(() => {
+                    const d = new Date();
+                    const p = (n: number) => String(n).padStart(2, '0');
+                    return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
+                  })()}
+                </Text>
+                <Pressable
+                  onPress={() => onChange(!value)}
+                  style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 14 }}
+                >
+                  <View
+                    style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: 6,
+                      borderWidth: 2,
+                      borderColor: value ? '#16A34A' : '#B45309',
+                      backgroundColor: value ? '#16A34A' : 'transparent',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginTop: 1,
+                    }}
+                  >
+                    {value && <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '900' }}>✓</Text>}
+                  </View>
+                  <Text style={{ flex: 1, fontSize: 14, fontWeight: '700', color: isWeb ? '#FDE68A' : '#92400E' }}>
+                    I have read and accept the declaration above. *
+                  </Text>
+                </Pressable>
+                {errors.declaration_accepted && (
+                  <Text style={{ fontSize: 12, color: '#EF4444', marginTop: 8 }}>
+                    {errors.declaration_accepted.message as string}
+                  </Text>
+                )}
+              </View>
+            )}
+          />
+
           <View className="mt-6 mb-4">
             <Button onPress={handleSubmit(onSubmit, onError)} loading={loading} fullWidth>
               Submit for HR Approval
@@ -879,5 +1021,105 @@ function NativeDateField({
       onChangeText={onChange}
       error={error}
     />
+  );
+}
+
+// Shared required border: red while empty, green once filled, red on
+// a submitted error (mirrors components/ui/input.tsx).
+function requiredBorder(required: boolean, hasValue: boolean, error?: string): string {
+  if (error || (required && !hasValue)) return '#EF4444';
+  if (required && hasValue) return '#16A34A';
+  return '#334155';
+}
+
+// Fixed-list dropdown — web <select>, native <Input> fallback.
+function NativeSelectField({
+  label, value, onChange, options, placeholder, error, required,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  placeholder?: string;
+  error?: string;
+  required?: boolean;
+}) {
+  const border = requiredBorder(!!required, !!value, error);
+  if (isWeb) {
+    return (
+      <View style={{ marginBottom: 16 }}>
+        <Text style={{ fontSize: 13, fontWeight: '600', marginBottom: 6, color: '#E2E8F0' }}>
+          {label}{required && <Text style={{ color: '#EF4444' }}> *</Text>}
+        </Text>
+        <select
+          value={value || ''}
+          onChange={(e: any) => onChange(e.target.value)}
+          style={{
+            width: '100%', padding: '10px 12px', borderRadius: 8,
+            border: `1px solid ${border}`, backgroundColor: '#1E293B',
+            color: value ? '#E2E8F0' : '#94A3B8', fontSize: 14, outline: 'none',
+          }}
+        >
+          <option value="" disabled>{placeholder || 'Select…'}</option>
+          {options.map((o) => (
+            <option key={o} value={o} style={{ color: '#0F172A' }}>{o}</option>
+          ))}
+        </select>
+        {error && <Text style={{ fontSize: 12, color: '#EF4444', marginTop: 4 }}>{error}</Text>}
+      </View>
+    );
+  }
+  return (
+    <Input label={label} required={required} placeholder={placeholder}
+      value={value || ''} onChangeText={onChange} error={error} />
+  );
+}
+
+// Searchable + free-text — web <input list> + <datalist>, native Input.
+function NativeAutocompleteField({
+  label, value, onChange, options, placeholder, helper, error, required,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  placeholder?: string;
+  helper?: string;
+  error?: string;
+  required?: boolean;
+}) {
+  const border = requiredBorder(!!required, !!value, error);
+  if (isWeb) {
+    const listId = `dl-${label.replace(/\s+/g, '-').toLowerCase()}`;
+    return (
+      <View style={{ marginBottom: 16 }}>
+        <Text style={{ fontSize: 13, fontWeight: '600', marginBottom: 6, color: '#E2E8F0' }}>
+          {label}{required && <Text style={{ color: '#EF4444' }}> *</Text>}
+        </Text>
+        <input
+          list={listId}
+          value={value || ''}
+          onChange={(e: any) => onChange(e.target.value)}
+          placeholder={placeholder}
+          style={{
+            width: '100%', padding: '10px 12px', borderRadius: 8,
+            border: `1px solid ${border}`, backgroundColor: '#1E293B',
+            color: '#E2E8F0', fontSize: 14, outline: 'none',
+          }}
+        />
+        <datalist id={listId}>
+          {options.map((o) => <option key={o} value={o} />)}
+        </datalist>
+        {error
+          ? <Text style={{ fontSize: 12, color: '#EF4444', marginTop: 4 }}>{error}</Text>
+          : helper
+            ? <Text style={{ fontSize: 12, color: '#94A3B8', marginTop: 4 }}>{helper}</Text>
+            : null}
+      </View>
+    );
+  }
+  return (
+    <Input label={label} required={required} placeholder={placeholder} helper={helper}
+      value={value || ''} onChangeText={onChange} error={error} />
   );
 }

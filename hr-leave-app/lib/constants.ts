@@ -5,6 +5,31 @@
 export const MAX_EMERGENCIES_PER_MONTH = 3;
 export const EMERGENCY_WINDOW_DAYS = 30;
 
+// Registration declaration (R2e). `version` is stored on the profile
+// (declaration_version) alongside declaration_accepted_at so we can
+// prove which wording the employee accepted if the text ever changes.
+// Fixed qualification ladder (R2c). Stored as free text on
+// profiles.qualification; this list drives the picker.
+export const QUALIFICATION_OPTIONS = [
+  'None',
+  'Elementary',
+  'Intermediate',
+  'High School',
+  'Diploma',
+  "Bachelor's",
+  "Master's",
+  'Doctorate / PhD',
+  'Professional Training / Certificate',
+] as const;
+
+export const REGISTRATION_DECLARATION_VERSION = 'v1-2026-05-18';
+export const REGISTRATION_DECLARATION_TEXT =
+  'I, hereby confirm that all the information in this form is true and ' +
+  'correct. I also understand that the information collected in this ' +
+  'form will be used for creation of Qiwa contract, and by accepting/' +
+  'submitting this form, I confirm that the information can be used for ' +
+  'this purpose.';
+
 export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 export const MAX_ATTACHMENTS_PER_REQUEST = 5;
 export const ALLOWED_FILE_TYPES = [

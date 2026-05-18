@@ -40,9 +40,15 @@ export function canonicaliseDesignation(raw: string): string {
   return raw.trim().replace(/\s+/g, ' ');
 }
 
+// Specialization: free-form like designation — trim + collapse only.
+// HR curates spelling / activates (new values land is_active=false).
+export function canonicaliseSpecialization(raw: string): string {
+  return raw.trim().replace(/\s+/g, ' ');
+}
+
 // ── Read ────────────────────────────────────────────────────────
 
-async function getActive(table: 'lookup_departments' | 'lookup_nationalities' | 'lookup_designations'): Promise<LookupItem[]> {
+async function getActive(table: 'lookup_departments' | 'lookup_nationalities' | 'lookup_designations' | 'lookup_specializations'): Promise<LookupItem[]> {
   const { data, error } = await supabase
     .from(table)
     .select('*')
@@ -55,7 +61,7 @@ async function getActive(table: 'lookup_departments' | 'lookup_nationalities' | 
 // ── Write ───────────────────────────────────────────────────────
 
 async function addItem(
-  table: 'lookup_departments' | 'lookup_nationalities' | 'lookup_designations',
+  table: 'lookup_departments' | 'lookup_nationalities' | 'lookup_designations' | 'lookup_specializations',
   name: string,
   createdBy: string | null,
 ): Promise<LookupItem> {
@@ -77,6 +83,7 @@ export const lookupService = {
   getDepartments: () => getActive('lookup_departments'),
   getNationalities: () => getActive('lookup_nationalities'),
   getDesignations: () => getActive('lookup_designations'),
+  getSpecializations: () => getActive('lookup_specializations'),
 
   addDepartment: (raw: string, createdBy: string | null) =>
     addItem('lookup_departments', canonicaliseDepartment(raw), createdBy),
@@ -84,4 +91,6 @@ export const lookupService = {
     addItem('lookup_nationalities', canonicaliseNationality(raw), createdBy),
   addDesignation: (raw: string, createdBy: string | null) =>
     addItem('lookup_designations', canonicaliseDesignation(raw), createdBy),
+  addSpecialization: (raw: string, createdBy: string | null) =>
+    addItem('lookup_specializations', canonicaliseSpecialization(raw), createdBy),
 };

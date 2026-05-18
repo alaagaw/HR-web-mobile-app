@@ -40,6 +40,15 @@ export interface Profile {
   job_title: string | null;
   start_date: string | null;
   nationality: string | null;
+  /** Saudi SPL National Short Address (e.g. RRRD2929). Migration 052. */
+  national_address: string | null;
+  /** Highest qualification (fixed client list). Migration 052. */
+  qualification: string | null;
+  /** Free-form, FK → lookup_specializations(name). Migration 052. */
+  specialization: string | null;
+  /** When the employee accepted the registration declaration. Migration 052. */
+  declaration_accepted_at: string | null;
+  declaration_version: string | null;
   workday_hours: number;
   /**
    * Annual PTO entitlement in days. Drives the monthly accrual
@@ -408,6 +417,11 @@ export interface RegistrationFormData {
   full_name: string;
   phone: string;
   nationality: string;
+  national_address: string;
+  qualification: string;
+  specialization: string;
+  /** Must be true — the mandatory registration declaration (R2e). */
+  declaration_accepted: boolean;
 
   // Primary identification
   id_type: IdType;

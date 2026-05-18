@@ -1,4 +1,5 @@
 import { supabase } from './client';
+import { REGISTRATION_DECLARATION_VERSION } from '@/lib/constants';
 import type { RegistrationService } from '../types';
 import type {
   Profile,
@@ -50,6 +51,11 @@ export const registrationService: RegistrationService = {
         p_full_name: data.full_name,
         p_phone: data.phone,
         p_nationality: data.nationality ?? '',
+        p_national_address: data.national_address ?? null,
+        p_qualification: data.qualification ?? null,
+        p_specialization: data.specialization ?? null,
+        p_declaration_accepted: data.declaration_accepted === true,
+        p_declaration_version: REGISTRATION_DECLARATION_VERSION,
       }
     );
 
