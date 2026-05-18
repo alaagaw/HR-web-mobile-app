@@ -1,4 +1,5 @@
 import { AccessGate } from '@/components/access/access-gate';
+import { requiredSx } from '@/lib/required-field';
 import { useEffect, useMemo, useState } from 'react';
 import { View, Text, FlatList, TextInput, Platform, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -412,6 +413,7 @@ function SupplierDialog({
             size="small"
             required
             error={isDuplicate}
+            sx={requiredSx(state.name, isDuplicate)}
             helperText={isDuplicate ? 'A supplier with this name already exists' : undefined}
           />
           <TextField

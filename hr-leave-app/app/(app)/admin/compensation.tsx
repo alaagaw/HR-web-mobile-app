@@ -1,4 +1,5 @@
 import { AccessGate } from '@/components/access/access-gate';
+import { requiredSx } from '@/lib/required-field';
 /**
  * HR Admin → Compensation
  *
@@ -508,6 +509,7 @@ function CompensationScreenInner() {
                     onChange={(e: any) => setAddDialog((s) => ({ ...s, effective_from: e.target.value }))}
                     fullWidth size="small"
                     InputLabelProps={{ shrink: true }}
+                    sx={requiredSx(addDialog.effective_from)}
                   />
                   <div style={{ display: 'flex', gap: 12 }}>
                     <MuiTextField label="Basic Salary" type="number" value={addDialog.basic_salary}
@@ -578,6 +580,7 @@ function CompensationScreenInner() {
                     fullWidth size="small"
                     InputLabelProps={{ shrink: true }}
                     helperText="Applies to every inserted row in this batch."
+                    sx={requiredSx(importEffectiveFrom)}
                   />
                   <div style={{ fontSize: 12, opacity: 0.7 }}>
                     Tip: If a row already exists with this date for some employee, that row will fail with a duplicate-key error in the result banner — pick a different date or fix by hand.

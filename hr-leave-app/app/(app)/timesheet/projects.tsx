@@ -1,4 +1,5 @@
 import { AccessGate } from '@/components/access/access-gate';
+import { requiredSx } from '@/lib/required-field';
 import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, ScrollView, Platform, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -491,6 +492,7 @@ function ProjectDialog({
             fullWidth
             size="small"
             required
+            sx={requiredSx(state.project_number)}
           />
           <TextField
             label="Name"
@@ -499,6 +501,7 @@ function ProjectDialog({
             fullWidth
             size="small"
             required
+            sx={requiredSx(state.name)}
           />
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
