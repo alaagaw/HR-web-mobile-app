@@ -754,7 +754,7 @@ function EditEmployeeDialog({
             onChange={(_: any, val: string | null) => onChange('nationality', val || '')}
             onInputChange={(_: any, val: string) => onChange('nationality', val)}
             renderInput={(params: any) => (
-              <MuiTextField {...params} label="Nationality" size="small" required placeholder="Search or type..." />
+              <MuiTextField {...params} label="Nationality" size="small" required placeholder="Search or type..." sx={requiredSx(state.nationality)} />
             )}
             fullWidth size="small"
           />
@@ -769,7 +769,7 @@ function EditEmployeeDialog({
             onChange={(_: any, val: string | null) => onChange('job_title', val || '')}
             onInputChange={(_: any, val: string) => onChange('job_title', val)}
             renderInput={(params: any) => (
-              <MuiTextField {...params} label="Job Title" size="small" required placeholder="Search or type..." />
+              <MuiTextField {...params} label="Job Title" size="small" required placeholder="Search or type..." sx={requiredSx(state.job_title)} />
             )}
             fullWidth size="small"
           />
@@ -792,7 +792,7 @@ function EditEmployeeDialog({
             getOptionLabel={(opt: any) => opt.label}
             isOptionEqualToValue={(opt: any, val: any) => opt.value === val.value}
             renderInput={(params: any) => (
-              <MuiTextField {...params} label="Role" size="small" required />
+              <MuiTextField {...params} label="Role" size="small" required sx={requiredSx(state.role)} />
             )}
             fullWidth size="small" disableClearable
           />
@@ -917,7 +917,7 @@ function EditEmployeeDialog({
           onChange={(_: any, val: string | null) => onChange('department', val || '')}
           onInputChange={(_: any, val: string) => onChange('department', val)}
           renderInput={(params: any) => (
-            <MuiTextField {...params} label="Department" size="small" required placeholder="Search or type..." />
+            <MuiTextField {...params} label="Department" size="small" required placeholder="Search or type..." sx={requiredSx(state.department)} />
           )}
           fullWidth size="small"
         />
@@ -931,7 +931,7 @@ function EditEmployeeDialog({
             getOptionLabel={(opt: Profile) => `${opt.full_name} (${getRoleLabel(opt.role)})`}
             isOptionEqualToValue={(opt: Profile, val: Profile) => opt.id === val.id}
             renderInput={(params: any) => (
-              <MuiTextField {...params} label="Supervisor / Reports To" size="small" required placeholder="Search by name, email, or department..." />
+              <MuiTextField {...params} label="Supervisor / Reports To" size="small" required placeholder="Search by name, email, or department..." sx={requiredSx(state.supervisor_id)} />
             )}
             fullWidth size="small"
           />
@@ -957,7 +957,7 @@ function EditEmployeeDialog({
             getOptionLabel={(opt: Profile) => `${opt.full_name} (${getRoleLabel(opt.role)})`}
             isOptionEqualToValue={(opt: Profile, val: Profile) => opt.id === val.id}
             renderInput={(params: any) => (
-              <MuiTextField {...params} label="Manager" size="small" required placeholder="Search by name, email, or department..." />
+              <MuiTextField {...params} label="Manager" size="small" required placeholder="Search by name, email, or department..." sx={requiredSx(state.manager_id)} />
             )}
             fullWidth size="small"
           />
@@ -1385,7 +1385,7 @@ function InviteEmployeeDialog({
             onChange={(_: any, val: string | null) => onChange('nationality', val || '')}
             onInputChange={(_: any, val: string) => onChange('nationality', val)}
             renderInput={(params: any) => (
-              <MuiTextField {...params} label="Nationality" size="small" required placeholder="Search or type..." />
+              <MuiTextField {...params} label="Nationality" size="small" required placeholder="Search or type..." sx={requiredSx(state.nationality)} />
             )}
             fullWidth size="small"
           />
@@ -1400,7 +1400,7 @@ function InviteEmployeeDialog({
             onChange={(_: any, val: string | null) => onChange('job_title', val || '')}
             onInputChange={(_: any, val: string) => onChange('job_title', val)}
             renderInput={(params: any) => (
-              <MuiTextField {...params} label="Job Title" size="small" required placeholder="Search or type..." />
+              <MuiTextField {...params} label="Job Title" size="small" required placeholder="Search or type..." sx={requiredSx(state.job_title)} />
             )}
             fullWidth size="small"
           />
@@ -1423,7 +1423,7 @@ function InviteEmployeeDialog({
             getOptionLabel={(opt: any) => opt.label}
             isOptionEqualToValue={(opt: any, val: any) => opt.value === val.value}
             renderInput={(params: any) => (
-              <MuiTextField {...params} label="Role" size="small" required />
+              <MuiTextField {...params} label="Role" size="small" required sx={requiredSx(state.role)} />
             )}
             fullWidth size="small" disableClearable
           />
@@ -1471,7 +1471,7 @@ function InviteEmployeeDialog({
           onChange={(_: any, val: string | null) => onChange('department', val || '')}
           onInputChange={(_: any, val: string) => onChange('department', val)}
           renderInput={(params: any) => (
-            <MuiTextField {...params} label="Department" size="small" required placeholder="Search or type..." />
+            <MuiTextField {...params} label="Department" size="small" required placeholder="Search or type..." sx={requiredSx(state.department)} />
           )}
           fullWidth size="small"
         />
@@ -1485,7 +1485,7 @@ function InviteEmployeeDialog({
             getOptionLabel={(opt: Profile) => `${opt.full_name} (${getRoleLabel(opt.role)})`}
             isOptionEqualToValue={(opt: Profile, val: Profile) => opt.id === val.id}
             renderInput={(params: any) => (
-              <MuiTextField {...params} label="Supervisor / Reports To" size="small" required placeholder="Search by name, email, or department..." />
+              <MuiTextField {...params} label="Supervisor / Reports To" size="small" required placeholder="Search by name, email, or department..." sx={requiredSx(state.supervisor_id)} />
             )}
             fullWidth size="small"
           />
@@ -1511,7 +1511,7 @@ function InviteEmployeeDialog({
             getOptionLabel={(opt: Profile) => `${opt.full_name} (${getRoleLabel(opt.role)})`}
             isOptionEqualToValue={(opt: Profile, val: Profile) => opt.id === val.id}
             renderInput={(params: any) => (
-              <MuiTextField {...params} label="Manager" size="small" required placeholder="Search by name, email, or department..." />
+              <MuiTextField {...params} label="Manager" size="small" required placeholder="Search by name, email, or department..." sx={requiredSx(state.manager_id)} />
             )}
             fullWidth size="small"
           />
