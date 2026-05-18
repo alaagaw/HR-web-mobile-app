@@ -67,7 +67,7 @@ const DT = {
 
 export default function TimesheetsScreen() {
   return (
-    <AccessGate resourceKey="page:admin/timesheets">
+    <AccessGate resourceKey="nav:timesheet-management">
       <TimesheetsScreenInner />
     </AccessGate>
   );

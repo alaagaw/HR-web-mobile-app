@@ -60,7 +60,7 @@ function scopeLabel(s: ProjectHoursChangeScope): string {
 
 export default function ProjectHoursRequestsScreen() {
   return (
-    <AccessGate resourceKey="page:admin/project-hours-requests">
+    <AccessGate resourceKey="nav:timesheet-management">
       <ProjectHoursRequestsScreenInner />
     </AccessGate>
   );

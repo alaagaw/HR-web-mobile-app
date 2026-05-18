@@ -53,7 +53,7 @@ interface MonthCell {
 
 export default function MonthClosuresScreen() {
   return (
-    <AccessGate resourceKey="page:admin/month-closures">
+    <AccessGate resourceKey="nav:timesheet-management">
       <MonthClosuresScreenInner />
     </AccessGate>
   );

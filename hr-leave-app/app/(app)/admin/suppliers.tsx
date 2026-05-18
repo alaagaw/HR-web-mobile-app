@@ -497,7 +497,7 @@ function SupplierDialog({
 
 export default function SuppliersScreen() {
   return (
-    <AccessGate resourceKey="page:admin/suppliers">
+    <AccessGate resourceKey="nav:timesheet-management">
       <SuppliersScreenInner />
     </AccessGate>
   );

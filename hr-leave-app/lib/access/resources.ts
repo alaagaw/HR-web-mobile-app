@@ -58,13 +58,10 @@ export const ACCESS_RESOURCES: AccessResource[] = [
   { key: 'page:admin/renewal-history',            label: 'Document Renewal History',     category: 'page', route: '/(app)/admin/renewal-history',            legacyDefault: isHR },
   { key: 'page:admin/balance-ledger',             label: 'Balance Ledger',               category: 'page', route: '/(app)/admin/balance-ledger',             legacyDefault: isHR },
   { key: 'page:admin/user-activity',              label: 'User Activity',                category: 'page', route: '/(app)/admin/user-activity',              legacyDefault: isHR },
-  { key: 'page:admin/projects',                   label: 'Projects',                     category: 'page', route: '/(app)/admin/projects',                   legacyDefault: isHR },
-  { key: 'page:admin/suppliers',                  label: 'Suppliers',                    category: 'page', route: '/(app)/admin/suppliers',                  legacyDefault: isHR },
-  { key: 'page:admin/timesheets',                 label: 'Monthly Consolidated',         category: 'page', route: '/(app)/admin/timesheets',                 legacyDefault: isHR },
-  { key: 'page:admin/timesheet-assignments',      label: 'Timesheet Assignments',        category: 'page', route: '/(app)/admin/timesheet-assignments',      legacyDefault: isHR },
-  { key: 'page:admin/project-hours-requests',     label: 'Hours Change Requests',        category: 'page', route: '/(app)/admin/project-hours-requests',     legacyDefault: isHR },
-  { key: 'page:admin/month-closures',             label: 'Month Closures',               category: 'page', route: '/(app)/admin/month-closures',             legacyDefault: isHR },
-  { key: 'page:admin/employee-project-breakdown', label: 'Employee × Project Breakdown', category: 'page', route: '/(app)/admin/employee-project-breakdown', legacyDefault: isHR },
+  // The 7 Timesheet Management sub-pages are NOT separate resources:
+  // they're governed by the single `nav:timesheet-management` policy
+  // (their AccessGate uses that key), so granting Timesheet Management
+  // opens the hub AND every page inside it.
   { key: 'page:admin/access-control',             label: 'Access Control',               category: 'page', route: '/(app)/admin/access-control',             legacyDefault: isHR },
 ];
 

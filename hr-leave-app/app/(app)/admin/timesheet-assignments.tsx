@@ -634,7 +634,7 @@ function MobileAssignmentCard({
 
 export default function TimesheetAssignmentsScreen() {
   return (
-    <AccessGate resourceKey="page:admin/timesheet-assignments">
+    <AccessGate resourceKey="nav:timesheet-management">
       <TimesheetAssignmentsScreenInner />
     </AccessGate>
   );

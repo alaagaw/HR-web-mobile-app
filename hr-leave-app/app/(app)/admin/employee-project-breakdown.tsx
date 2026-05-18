@@ -33,7 +33,7 @@ if (isWeb) {
  */
 export default function EmployeeProjectBreakdownScreen() {
   return (
-    <AccessGate resourceKey="page:admin/employee-project-breakdown">
+    <AccessGate resourceKey="nav:timesheet-management">
       <EmployeeProjectBreakdownScreenInner />
     </AccessGate>
   );

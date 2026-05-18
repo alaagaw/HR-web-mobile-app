@@ -713,7 +713,7 @@ function DeleteConfirmDialog({
 
 export default function ProjectsScreen() {
   return (
-    <AccessGate resourceKey="page:admin/projects">
+    <AccessGate resourceKey="nav:timesheet-management">
       <ProjectsScreenInner />
     </AccessGate>
   );
