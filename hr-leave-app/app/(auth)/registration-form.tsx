@@ -16,6 +16,7 @@ import {
   QUALIFICATION_OPTIONS,
   REGISTRATION_DECLARATION_TEXT,
 } from '@/lib/constants';
+import { ThemedAutocompleteField } from '@/components/web/themed-autocomplete-field';
 import { registrationFormSchema, type RegistrationFormSchemaData } from '@/lib/validators';
 import { getRoleLabel, formatHours } from '@/lib/utils';
 import type { Profile, EmployeeDocument } from '@/types/models';
@@ -508,13 +509,14 @@ export default function RegistrationFormScreen() {
             control={control}
             name="nationality"
             render={({ field: { onChange, value } }) => (
-              <NativeAutocompleteField
+              <ThemedAutocompleteField
                 label="Nationality"
                 required
+                freeSolo
                 value={value}
                 onChange={onChange}
                 options={natOptions}
-                placeholder="e.g. Saudi, Egyptian, Indian"
+                placeholder="Search or type…"
                 helper="Pick from the list or type your own."
                 error={errors.nationality?.message}
               />
@@ -542,9 +544,10 @@ export default function RegistrationFormScreen() {
             control={control}
             name="qualification"
             render={({ field: { onChange, value } }) => (
-              <NativeSelectField
+              <ThemedAutocompleteField
                 label="Qualification"
                 required
+                freeSolo={false}
                 value={value}
                 onChange={onChange}
                 options={QUALIFICATION_OPTIONS as unknown as string[]}
@@ -558,9 +561,10 @@ export default function RegistrationFormScreen() {
             control={control}
             name="specialization"
             render={({ field: { onChange, value } }) => (
-              <NativeAutocompleteField
+              <ThemedAutocompleteField
                 label="Specialization"
                 required
+                freeSolo
                 value={value}
                 onChange={onChange}
                 options={specOptions}
@@ -1056,111 +1060,4 @@ function useFieldTheme() {
   return isDark
     ? { bg: '#1E293B', text: '#F1F5F9', label: '#E2E8F0', muted: '#94A3B8', defBorder: '#475569' }
     : { bg: '#FFFFFF', text: '#0F172A', label: '#334155', muted: '#94A3B8', defBorder: '#CBD5E1' };
-}
-
-// Shared required border: red while empty, green once filled, red on
-// a submitted error (mirrors components/ui/input.tsx); otherwise the
-// themed default border.
-function requiredBorder(
-  required: boolean, hasValue: boolean, error: string | undefined, def: string,
-): string {
-  if (error || (required && !hasValue)) return '#EF4444';
-  if (required && hasValue) return '#16A34A';
-  return def;
-}
-
-// Fixed-list dropdown — web <select>, native <Input> fallback.
-function NativeSelectField({
-  label, value, onChange, options, placeholder, error, required,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: string[];
-  placeholder?: string;
-  error?: string;
-  required?: boolean;
-}) {
-  const C = useFieldTheme();
-  const border = requiredBorder(!!required, !!value, error, C.defBorder);
-  if (isWeb) {
-    return (
-      <View style={{ marginBottom: 16 }}>
-        <Text style={{ fontSize: 13, fontWeight: '600', marginBottom: 6, color: C.label }}>
-          {label}{required && <Text style={{ color: '#EF4444' }}> *</Text>}
-        </Text>
-        <select
-          value={value || ''}
-          onChange={(e: any) => onChange(e.target.value)}
-          style={{
-            width: '100%', padding: '10px 12px', borderRadius: 8,
-            border: `1px solid ${border}`, backgroundColor: C.bg,
-            color: value ? C.text : C.muted, fontSize: 14, outline: 'none',
-          }}
-        >
-          <option value="" disabled style={{ color: C.muted, backgroundColor: C.bg }}>
-            {placeholder || 'Select…'}
-          </option>
-          {options.map((o) => (
-            <option key={o} value={o} style={{ color: C.text, backgroundColor: C.bg }}>{o}</option>
-          ))}
-        </select>
-        {error && <Text style={{ fontSize: 12, color: '#EF4444', marginTop: 4 }}>{error}</Text>}
-      </View>
-    );
-  }
-  return (
-    <Input label={label} required={required} placeholder={placeholder}
-      value={value || ''} onChangeText={onChange} error={error} />
-  );
-}
-
-// Searchable + free-text — web <input list> + <datalist>, native Input.
-function NativeAutocompleteField({
-  label, value, onChange, options, placeholder, helper, error, required,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: string[];
-  placeholder?: string;
-  helper?: string;
-  error?: string;
-  required?: boolean;
-}) {
-  const C = useFieldTheme();
-  const border = requiredBorder(!!required, !!value, error, C.defBorder);
-  if (isWeb) {
-    const listId = `dl-${label.replace(/\s+/g, '-').toLowerCase()}`;
-    return (
-      <View style={{ marginBottom: 16 }}>
-        <Text style={{ fontSize: 13, fontWeight: '600', marginBottom: 6, color: C.label }}>
-          {label}{required && <Text style={{ color: '#EF4444' }}> *</Text>}
-        </Text>
-        <input
-          list={listId}
-          value={value || ''}
-          onChange={(e: any) => onChange(e.target.value)}
-          placeholder={placeholder}
-          style={{
-            width: '100%', padding: '10px 12px', borderRadius: 8,
-            border: `1px solid ${border}`, backgroundColor: C.bg,
-            color: C.text, fontSize: 14, outline: 'none',
-          }}
-        />
-        <datalist id={listId}>
-          {options.map((o) => <option key={o} value={o} />)}
-        </datalist>
-        {error
-          ? <Text style={{ fontSize: 12, color: '#EF4444', marginTop: 4 }}>{error}</Text>
-          : helper
-            ? <Text style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{helper}</Text>
-            : null}
-      </View>
-    );
-  }
-  return (
-    <Input label={label} required={required} placeholder={placeholder} helper={helper}
-      value={value || ''} onChangeText={onChange} error={error} />
-  );
 }
