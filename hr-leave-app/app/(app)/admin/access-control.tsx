@@ -192,7 +192,9 @@ function ResourceCard({
         <View style={{ marginTop: 12, gap: 12 }}>
           <Text style={{ fontSize: 11, color: isDark ? '#64748B' : '#94A3B8' }}>
             Access is granted if ANY rule matches. Within a rule, every set
-            section must match (AND). HR & HR Director always have access.
+            section must match (AND). Access superusers bypass all rules;
+            HR/HR Director can always reach this screen but otherwise follow
+            the rules below.
           </Text>
 
           {draft.rules.length === 0 && (
@@ -332,9 +334,12 @@ function AccessControlInner() {
         <Text style={{ fontSize: 13, color: isDark ? '#94A3B8' : '#64748B', marginBottom: 20 }}>
           Decide who sees each navbar item and page by Role, Department, and Job
           Title. Rules are attribute-based — changing an employee's
-          role/department/title re-grants access automatically. HR & HR Director
-          always have access (failsafe). This controls navigation & page
-          visibility; data security stays enforced by the database.
+          role/department/title re-grants access automatically. Set an
+          employee as an Access superuser (Edit Employee → Capabilities) to
+          bypass all rules. HR/HR Director can always reach this Access
+          Control screen so policies can't be locked out, but otherwise
+          follow the rules. This controls navigation & page visibility;
+          data security stays enforced by the database.
         </Text>
 
         {loading ? (

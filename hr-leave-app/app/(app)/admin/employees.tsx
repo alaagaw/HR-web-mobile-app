@@ -138,6 +138,7 @@ interface EditDialogState {
   is_operations_manager: boolean;
   can_approve_project_hours_changes: boolean;
   can_close_month: boolean;
+  is_superuser: boolean;
   submitting: boolean;
   error: string;
 }
@@ -183,6 +184,7 @@ const INITIAL_DIALOG: EditDialogState = {
   is_operations_manager: false,
   can_approve_project_hours_changes: false,
   can_close_month: false,
+  is_superuser: false,
   submitting: false,
   error: '',
 };
@@ -258,7 +260,7 @@ const EDIT_DRAFT_KEYS: (keyof EditDialogState)[] = [
   'comp_basic_salary', 'comp_hra', 'comp_transportation', 'comp_other_allowances',
   'comp_effective_from', 'comp_notes',
   'is_general_manager', 'is_operations_manager',
-  'can_approve_project_hours_changes', 'can_close_month',
+  'can_approve_project_hours_changes', 'can_close_month', 'is_superuser',
 ];
 
 // --------------- Web Components ---------------
@@ -1169,6 +1171,16 @@ function EditEmployeeDialog({
               />
             }
             label={<span style={{ fontSize: 13 }}><strong>Can close month.</strong> <span style={{ opacity: 0.7 }}>Locks payroll-relevant changes for the month.</span></span>}
+            sx={{ ml: 0, display: 'flex' }}
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={state.is_superuser}
+                onChange={(e: any) => onChange('is_superuser', e.target.checked)}
+              />
+            }
+            label={<span style={{ fontSize: 13 }}><strong>Access superuser.</strong> <span style={{ opacity: 0.7 }}>Bypasses ALL Access Control rules — sees every nav item & page regardless of role/department/title. Grant sparingly.</span></span>}
             sx={{ ml: 0, display: 'flex' }}
           />
         </div>
@@ -2163,6 +2175,7 @@ function EmployeesScreenInner() {
             can_approve_project_hours_changes:
               draftFields.can_approve_project_hours_changes ?? caps.can_approve_project_hours_changes,
             can_close_month: draftFields.can_close_month ?? caps.can_close_month,
+            is_superuser: draftFields.is_superuser ?? caps.is_superuser,
           };
         });
       }
@@ -2356,6 +2369,7 @@ function EmployeesScreenInner() {
         is_operations_manager: dialog.is_operations_manager,
         can_approve_project_hours_changes: dialog.can_approve_project_hours_changes,
         can_close_month: dialog.can_close_month,
+        is_superuser: dialog.is_superuser,
       });
 
       // 4. Email action dispatch. Mutually exclusive (radio).

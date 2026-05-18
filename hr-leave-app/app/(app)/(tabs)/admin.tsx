@@ -21,6 +21,8 @@ import {
   Lock,
 } from 'lucide-react-native';
 import { Card } from '@/components/ui/card';
+import { useAccess } from '@/hooks/use-access';
+import { ACCESS_RESOURCE_BY_KEY } from '@/lib/access/resources';
 
 const isWeb = Platform.OS === 'web';
 
@@ -316,7 +318,19 @@ export default function AdminScreen() {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
 
+  const { canAccess } = useAccess();
   const handleNavigate = (path: string) => router.push(path as any);
+
+  // Hide cards the signed-in user can't open, so the landing page
+  // reflects access (and a denied user doesn't see a dead card).
+  // Unregistered paths are shown as-is (not gated).
+  const visibleGroups = ADMIN_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((page) => {
+      const key = page.path.replace('/(app)/admin/', 'page:admin/');
+      return !(key in ACCESS_RESOURCE_BY_KEY) || canAccess(key);
+    }),
+  })).filter((group) => group.items.length > 0);
 
   // ─── Web Layout ──────────────────────────────────────────────────
 
@@ -359,7 +373,7 @@ export default function AdminScreen() {
           </div>
 
           {/* Admin groups */}
-          {ADMIN_GROUPS.map((group) => (
+          {visibleGroups.map((group) => (
             <WebGroupSection
               key={group.label}
               group={group}
@@ -383,7 +397,7 @@ export default function AdminScreen() {
         Manage employees, balances, and organizational data
       </Text>
 
-      {ADMIN_GROUPS.map((group) => (
+      {visibleGroups.map((group) => (
         <View key={group.label} style={{ marginBottom: 20 }}>
           {/* Group header */}
           <Text className="text-sm font-bold text-text-primary dark:text-slate-200 mb-0.5">

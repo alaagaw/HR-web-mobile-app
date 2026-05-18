@@ -35,7 +35,8 @@ export const profileCapabilitiesService = {
       'is_general_manager' |
       'is_operations_manager' |
       'can_approve_project_hours_changes' |
-      'can_close_month'
+      'can_close_month' |
+      'is_superuser'
     >>,
   ): Promise<ProfileCapabilities> {
     const { data, error } = await supabase
@@ -47,6 +48,7 @@ export const profileCapabilitiesService = {
           is_operations_manager: flags.is_operations_manager ?? false,
           can_approve_project_hours_changes: flags.can_approve_project_hours_changes ?? false,
           can_close_month: flags.can_close_month ?? false,
+          is_superuser: flags.is_superuser ?? false,
         },
         { onConflict: 'profile_id' },
       )

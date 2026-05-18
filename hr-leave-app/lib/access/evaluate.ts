@@ -17,9 +17,30 @@ export interface AccessSubject {
   job_title?: string | null;
 }
 
-/** HR / HR_Director are an unconditional failsafe everywhere. */
-export function isAccessFailsafe(subject: AccessSubject | null | undefined): boolean {
-  return subject?.role === Role.HR || subject?.role === Role.HRDirector;
+/**
+ * Minimal hardcoded lockout floor: HR / HR_Director can ALWAYS
+ * reach the Access Control screen and the HR Admin menu — and
+ * nothing else. This is the only role-based bypass left; it
+ * exists solely so a bad policy or zero superusers can never
+ * permanently brick policy management. Every other resource
+ * obeys rules + the superuser flag, so a page CAN be restricted
+ * away from regular HR (that was the whole point of switching to
+ * an explicit superuser model — migration 047).
+ *
+ * Phase 2's fn_can_access() MUST mirror exactly this: superuser
+ * bypass + this two-key HR floor, nothing broader.
+ */
+const FAILSAFE_RESOURCE_KEYS = new Set<string>([
+  'nav:admin',
+  'page:admin/access-control',
+]);
+
+export function isAccessFailsafe(
+  subject: AccessSubject | null | undefined,
+  resourceKey: string | undefined,
+): boolean {
+  const hrLike = subject?.role === Role.HR || subject?.role === Role.HRDirector;
+  return hrLike && !!resourceKey && FAILSAFE_RESOURCE_KEYS.has(resourceKey);
 }
 
 /** Department is stored UPPERCASE (lookup_departments); role is an enum. */
@@ -54,13 +75,17 @@ export function ruleMatches(rule: AccessRule, subject: AccessSubject): boolean {
  *                      policy — pass the resource's registry default
  *                      so a not-yet-seeded resource keeps today's
  *                      behavior instead of vanishing/leaking.
+ * @param opts          resourceKey (for the HR lockout floor) and
+ *                      isSuperuser (HR-assigned, bypasses everything).
  */
 export function evaluateAccess(
   policy: AccessPolicy | undefined,
   subject: AccessSubject | null | undefined,
   legacyDefault: boolean,
+  opts?: { resourceKey?: string; isSuperuser?: boolean },
 ): boolean {
-  if (isAccessFailsafe(subject)) return true;
+  if (opts?.isSuperuser) return true;
+  if (isAccessFailsafe(subject, opts?.resourceKey)) return true;
   if (!subject) return false;
   if (!policy || policy.enabled === false) return legacyDefault;
   if (policy.visible_to_all) return true;

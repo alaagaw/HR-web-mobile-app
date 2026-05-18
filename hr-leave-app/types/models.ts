@@ -812,6 +812,8 @@ export interface ProfileCapabilities {
   is_operations_manager: boolean;
   can_approve_project_hours_changes: boolean;
   can_close_month: boolean;
+  /** Bypasses ALL access_policies rules everywhere (migration 047). */
+  is_superuser: boolean;
   created_at: string;
   updated_at: string;
 }
