@@ -21,6 +21,7 @@ import {
   compensationService,
   canonicaliseDepartment,
   canonicaliseDesignation,
+  canonicaliseNationality,
 } from '@/services';
 import { supabase } from '@/services/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
@@ -604,6 +605,7 @@ function EditEmployeeDialog({
   employees,
   departments,
   designations,
+  nationalities,
 }: {
   state: EditDialogState;
   onClose: () => void;
@@ -613,6 +615,7 @@ function EditEmployeeDialog({
   employees: Profile[];
   departments: string[];
   designations: string[];
+  nationalities: string[];
 }) {
   const emp = state.employee;
   if (!emp) return null;
@@ -711,12 +714,16 @@ function EditEmployeeDialog({
         {/* Nationality — required. The employee can confirm/correct it
             during their registration form (pre-filled from this value). */}
         <div style={{ display: 'flex', gap: 12 }}>
-          <MuiTextField
-            label="Nationality"
-            value={state.nationality}
-            onChange={(e: any) => onChange('nationality', e.target.value)}
-            fullWidth size="small" required
-            placeholder="e.g. Saudi, Egyptian, Indian"
+          <Autocomplete
+            freeSolo forcePopupIcon
+            options={nationalities}
+            value={state.nationality || null}
+            onChange={(_: any, val: string | null) => onChange('nationality', val || '')}
+            onInputChange={(_: any, val: string) => onChange('nationality', val)}
+            renderInput={(params: any) => (
+              <MuiTextField {...params} label="Nationality" size="small" required placeholder="Search or type..." />
+            )}
+            fullWidth size="small"
           />
         </div>
 
@@ -1224,6 +1231,7 @@ function InviteEmployeeDialog({
   employees,
   departments,
   designations,
+  nationalities,
 }: {
   state: InviteDialogState;
   onClose: () => void;
@@ -1233,6 +1241,7 @@ function InviteEmployeeDialog({
   employees: Profile[];
   departments: string[];
   designations: string[];
+  nationalities: string[];
 }) {
   const activeEmployees = employees.filter((e) => e.is_active);
 
@@ -1322,12 +1331,16 @@ function InviteEmployeeDialog({
         {/* Nationality — required. Pre-fills the employee's registration
             form; they can confirm/correct it there. */}
         <div style={{ display: 'flex', gap: 12 }}>
-          <MuiTextField
-            label="Nationality"
-            value={state.nationality}
-            onChange={(e: any) => onChange('nationality', e.target.value)}
-            fullWidth size="small" required
-            placeholder="e.g. Saudi, Egyptian, Indian"
+          <Autocomplete
+            freeSolo forcePopupIcon
+            options={nationalities}
+            value={state.nationality || null}
+            onChange={(_: any, val: string | null) => onChange('nationality', val || '')}
+            onInputChange={(_: any, val: string) => onChange('nationality', val)}
+            renderInput={(params: any) => (
+              <MuiTextField {...params} label="Nationality" size="small" required placeholder="Search or type..." />
+            )}
+            fullWidth size="small"
           />
         </div>
 
@@ -2066,9 +2079,11 @@ function EmployeesScreenInner() {
   // save (handleSubmitInvite / handleSubmitEdit reload via invalidate).
   const [lookupDepartments, setLookupDepartments] = useState<string[]>([]);
   const [lookupDesignations, setLookupDesignations] = useState<string[]>([]);
+  const [lookupNationalities, setLookupNationalities] = useState<string[]>([]);
   const loadLookups = useCallback(() => {
     lookupService.getDepartments().then((r) => setLookupDepartments(r.map((x) => x.name))).catch(() => {});
     lookupService.getDesignations().then((r) => setLookupDesignations(r.map((x) => x.name))).catch(() => {});
+    lookupService.getNationalities().then((r) => setLookupNationalities(r.map((x) => x.name))).catch(() => {});
   }, []);
   useEffect(() => { loadLookups(); }, [loadLookups]);
 
@@ -2273,6 +2288,9 @@ function EmployeesScreenInner() {
     const canonicalJobTitle = dialog.job_title.trim()
       ? canonicaliseDesignation(dialog.job_title)
       : '';
+    const canonicalNationality = dialog.nationality.trim()
+      ? canonicaliseNationality(dialog.nationality)
+      : '';
 
     try {
       if (canonicalDept) {
@@ -2280,6 +2298,9 @@ function EmployeesScreenInner() {
       }
       if (canonicalJobTitle) {
         await lookupService.addDesignation(canonicalJobTitle, dialog.employee.id);
+      }
+      if (canonicalNationality) {
+        await lookupService.addNationality(canonicalNationality, dialog.employee.id);
       }
 
       // 1. If the email changed, route through the admin Edge Function so
@@ -2309,7 +2330,7 @@ function EmployeesScreenInner() {
       await userService.updateProfile(employeeId, {
         full_name: dialog.full_name.trim(),
         phone: dialog.phone.trim() || null,
-        nationality: dialog.nationality.trim() || null,
+        nationality: canonicalNationality || null,
         job_title: canonicalJobTitle || null,
         start_date: dialog.start_date || null,
         department: canonicalDept || null,
@@ -2469,6 +2490,7 @@ function EmployeesScreenInner() {
     // (migration 023), so the lookup rows must exist first.
     const canonicalDept = invite.department.trim() ? canonicaliseDepartment(invite.department) : '';
     const canonicalJobTitle = invite.job_title.trim() ? canonicaliseDesignation(invite.job_title) : '';
+    const canonicalNationality = invite.nationality.trim() ? canonicaliseNationality(invite.nationality) : '';
 
     try {
       if (canonicalDept) {
@@ -2476,6 +2498,9 @@ function EmployeesScreenInner() {
       }
       if (canonicalJobTitle) {
         await lookupService.addDesignation(canonicalJobTitle, user?.id ?? null);
+      }
+      if (canonicalNationality) {
+        await lookupService.addNationality(canonicalNationality, user?.id ?? null);
       }
 
       const newProfile = await registrationService.createEmployee(
@@ -2486,7 +2511,7 @@ function EmployeesScreenInner() {
           emp_code: invite.emp_code.trim() || undefined,
           // Optional: phone → employee fills it in during their registration form
           phone: invite.phone.trim() || undefined,
-          nationality: invite.nationality.trim(),
+          nationality: canonicalNationality,
           role: invite.role,
           department: canonicalDept,
           supervisor_id: invite.supervisor_id!,
@@ -2956,6 +2981,7 @@ function EmployeesScreenInner() {
                   employees={employees}
                   departments={lookupDepartments}
                   designations={lookupDesignations}
+                  nationalities={lookupNationalities}
                 />
                 <InviteEmployeeDialog
                   state={invite}
@@ -2966,6 +2992,7 @@ function EmployeesScreenInner() {
                   employees={employees}
                   departments={lookupDepartments}
                   designations={lookupDesignations}
+                  nationalities={lookupNationalities}
                 />
                 <ResendEmailDialog
                   open={resendDialog.open}
