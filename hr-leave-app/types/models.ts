@@ -64,7 +64,10 @@ export interface Profile {
    * for special cases. See migration 031.
    */
   warn_on_uncompleted_form: boolean;
+  /** Derived from employment_status by a DB trigger (migration 054). */
   is_active: boolean;
+  /** active | inactive | retired | resigned | fired | on_hold (054). */
+  employment_status: string;
   registration_status: RegistrationStatus;
   must_change_password: boolean;
   invited_by: string | null;

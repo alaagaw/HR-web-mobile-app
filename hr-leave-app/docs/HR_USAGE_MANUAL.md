@@ -4,7 +4,7 @@
 > Add new sections at the bottom as we build more.
 
 **Last updated:** 2026-05-18
-**Latest commits covered:** through `3b3bae6` (Access Control initiative, superusers, RLS hardening) — migrations **045–051 applied to prod**. See `docs/ACCESS_CONTROL_AND_RLS_HARDENING_05_18_2026.md` for the full technical recap.
+**Latest commits covered:** Access Control initiative + Forms revamp + employment status — migrations **045–054 applied to prod**. See `docs/ACCESS_CONTROL_AND_RLS_HARDENING_05_18_2026.md` and `docs/FORMS_REVAMP_REQUIREMENTS_05_18_2026.md` for the full technical recaps.
 
 ---
 
@@ -83,7 +83,11 @@ Tick the leftmost checkbox to select rows. With at least one row selected, four 
 Click any row → **Edit Employee** dialog opens. From there you can change:
 - Identity: Full Name, Email (auth-mirrored), Phone, Employee Code, Job Title, Start Date
 - Org: Role, Department, Supervisor, Manager, Workday Hours
-- Status: Active / Inactive (**only HR controls this — never auto-flipped**)
+- Status: a 6-state employment lifecycle dropdown (**only HR controls this — never auto-flipped**):
+  - **Active** — the *only* status that permits sign-in.
+  - **Inactive**, **Retired**, **Resigned**, **Fired**, **Suspended (Salary Hold)** — all block sign-in (mid-session too); the employee sees *"Your account is inactive…"*. They differ as descriptive/operational labels only.
+  - **Suspended (Salary Hold)** = temporarily frozen: access blocked and payroll instructed to withhold pay, pending an HR decision. Reversible (set back to **Active**). Distinct from the terminal Retired/Resigned/Fired.
+  - Technically `profiles.employment_status` is the source of truth; the old `is_active` flag is now derived from it by a DB trigger (migration 054), so every existing login/auth check keeps working unchanged. The Employee Directory status chip shows the richer status.
 - Annual PTO Entitlement (days/year) — live preview of the monthly accrual it produces
 - Auto-warn opt-in (see [Uncompleted-form warning system](#9-uncompleted-form-warning-system))
 - Capability flags (General Manager / Operations Manager / Can approve project-hours / Can close month / **Access superuser** — see [Access Control & Superusers](#15-access-control--superusers))

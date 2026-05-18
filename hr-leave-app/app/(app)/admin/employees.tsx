@@ -110,6 +110,7 @@ interface EditDialogState {
   comp_loaded_transportation: string;
   comp_loaded_other_allowances: string;
   is_active: boolean;
+  employment_status: string;
   show_all_supervisors: boolean;
   show_all_managers: boolean;
   /**
@@ -173,6 +174,7 @@ const INITIAL_DIALOG: EditDialogState = {
   comp_loaded_transportation: '',
   comp_loaded_other_allowances: '',
   is_active: true,
+  employment_status: 'active',
   show_all_supervisors: false,
   show_all_managers: false,
   email_action: 'none',
@@ -257,7 +259,7 @@ const EDIT_DRAFT_KEYS: (keyof EditDialogState)[] = [
   'full_name', 'email', 'emp_code', 'phone', 'nationality', 'job_title', 'start_date',
   'role', 'department', 'supervisor_id', 'manager_id', 'workday_hours',
   'annual_leave_entitlement_days',
-  'is_active', 'show_all_supervisors', 'show_all_managers',
+  'is_active', 'employment_status', 'show_all_supervisors', 'show_all_managers',
   'email_action', 'email_action_comment', 'warn_on_uncompleted_form',
   'comp_basic_salary', 'comp_hra', 'comp_transportation', 'comp_other_allowances',
   'comp_effective_from', 'comp_notes',
@@ -276,6 +278,27 @@ const STATUS_LABEL: Record<string, string> = {
   rejected: 'Rejected',
 };
 
+// HR-settable employment lifecycle (migration 054). Only 'active'
+// permits sign-in; every other value blocks login (is_active is a
+// DB-derived mirror). 'on_hold' = suspended + salary withheld,
+// reversible; retired/resigned/fired are the terminal variants.
+const EMPLOYMENT_STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: 'active',   label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+  { value: 'retired',  label: 'Retired' },
+  { value: 'resigned', label: 'Resigned' },
+  { value: 'fired',    label: 'Fired' },
+  { value: 'on_hold',  label: 'Suspended (Salary Hold)' },
+];
+
+const EMPLOYMENT_STATUS_DISPLAY: Record<string, { label: string; bg: string; fg: string }> = {
+  inactive: { label: 'Inactive', bg: 'rgba(148,163,184,0.18)', fg: '#64748B' },
+  retired:  { label: 'Retired',  bg: 'rgba(99,102,241,0.18)',  fg: '#6366F1' },
+  resigned: { label: 'Resigned', bg: 'rgba(217,119,6,0.18)',   fg: '#D97706' },
+  fired:    { label: 'Fired',    bg: 'rgba(239,68,68,0.18)',   fg: '#DC2626' },
+  on_hold:  { label: 'Suspended (Salary Hold)', bg: 'rgba(234,179,8,0.20)', fg: '#B45309' },
+};
+
 /**
  * One row in the resend-email dialog. Email starts as the current value
  * and gets marked emailDirty when HR types into it, so we know to push
@@ -292,6 +315,12 @@ interface ResendRow {
 }
 
 function getStatusDisplay(row: Profile): { label: string; bg: string; fg: string } {
+  // A non-active employment status wins over the registration
+  // lifecycle (it's the HR-controlled descriptor + the sign-in gate).
+  const es = row.employment_status;
+  if (es && es !== 'active' && EMPLOYMENT_STATUS_DISPLAY[es]) {
+    return EMPLOYMENT_STATUS_DISPLAY[es];
+  }
   if (!row.is_active) return { label: 'Inactive', bg: 'rgba(148,163,184,0.18)', fg: '#64748B' };
   switch (row.registration_status) {
     case 'not_invited':       return { label: 'Not Invited',      bg: 'rgba(245,158,11,0.18)', fg: '#D97706' };
@@ -945,15 +974,26 @@ function EditEmployeeDialog({
           />
         </div>
 
-        {/* Status (extra over the New form) */}
+        {/* Status (extra over the New form). Only "Active" permits
+            sign-in — every other value blocks login (is_active is a
+            DB-derived mirror, migration 054). */}
         <MuiTextField
           label="Status"
-          value={state.is_active ? 'active' : 'inactive'}
-          onChange={(e: any) => onChange('is_active', e.target.value === 'active')}
+          value={state.employment_status || (state.is_active ? 'active' : 'inactive')}
+          onChange={(e: any) => {
+            const v = e.target.value as string;
+            onChange('employment_status', v);
+            // Keep the in-dialog is_active mirror in sync for the
+            // bits of this dialog that still read it (email-action
+            // gating etc.). The DB trigger is authoritative on save.
+            onChange('is_active', v === 'active');
+          }}
           fullWidth size="small" select
+          sx={requiredSx(state.employment_status || (state.is_active ? 'active' : 'inactive'))}
         >
-          <MenuItem value="active">Active</MenuItem>
-          <MenuItem value="inactive">Inactive</MenuItem>
+          {EMPLOYMENT_STATUS_OPTIONS.map((o) => (
+            <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
+          ))}
         </MuiTextField>
 
         {/* ID document on file — preview + rotate-and-save. Mirrors the
@@ -2120,6 +2160,7 @@ function EmployeesScreenInner() {
       annual_leave_entitlement_days: emp.annual_leave_entitlement_days != null ? String(emp.annual_leave_entitlement_days) : '21',
       warn_on_uncompleted_form: emp.warn_on_uncompleted_form !== false,
       is_active: emp.is_active,
+      employment_status: emp.employment_status || (emp.is_active ? 'active' : 'inactive'),
       ...draftFields,
     });
 
@@ -2348,7 +2389,9 @@ function EmployeesScreenInner() {
         workday_hours: parseFloat(dialog.workday_hours) || 8,
         annual_leave_entitlement_days: parseFloat(dialog.annual_leave_entitlement_days) || 21,
         warn_on_uncompleted_form: dialog.warn_on_uncompleted_form,
-        is_active: dialog.is_active,
+        // employment_status is the source of truth; the DB trigger
+        // (migration 054) derives is_active from it on write.
+        employment_status: dialog.employment_status,
       } as any);
 
       // Compensation: insert a new effective-dated row only if any of
