@@ -19,6 +19,25 @@ const ROLE_OPTIONS: { value: string; label: string }[] = [
   { value: Role.HRDirector, label: 'HR Director' },
 ];
 
+const ROLE_LABEL: Record<string, string> = Object.fromEntries(
+  ROLE_OPTIONS.map((r) => [r.value, r.label]),
+);
+
+// Plain-language description of exactly who a rule grants, so the
+// AND-within-a-rule vs OR-across-rules behaviour is unambiguous.
+function summarizeRule(rule: AccessRule): string {
+  const parts: string[] = [];
+  if (rule.roles?.length)
+    parts.push(`role is ${rule.roles.map((r) => ROLE_LABEL[r] ?? r).join(' or ')}`);
+  if (rule.departments?.length)
+    parts.push(`department is ${rule.departments.join(' or ')}`);
+  if (rule.job_titles?.length)
+    parts.push(`job title is ${rule.job_titles.join(' or ')}`);
+  if (parts.length === 0)
+    return 'Empty — pick at least one chip. A fully empty rule is ignored on save.';
+  return `Grants access when ${parts.join('  AND  ')}.`;
+}
+
 interface Draft {
   visible_to_all: boolean;
   rules: AccessRule[];
@@ -190,11 +209,16 @@ function ResourceCard({
 
       {!draft.visible_to_all && (
         <View style={{ marginTop: 12, gap: 12 }}>
-          <Text style={{ fontSize: 11, color: isDark ? '#64748B' : '#94A3B8' }}>
-            Access is granted if ANY rule matches. Within a rule, every set
-            section must match (AND). Access superusers bypass all rules;
-            HR/HR Director can always reach this screen but otherwise follow
-            the rules below.
+          <Text style={{ fontSize: 11, color: isDark ? '#94A3B8' : '#64748B', lineHeight: 16 }}>
+            A person gets access if <Text style={{ fontWeight: '800' }}>ANY rule</Text> matches
+            (rules are OR). Inside <Text style={{ fontWeight: '800' }}>one rule</Text>, every
+            section you fill must match (AND) — e.g. Role=Manager + Dept=OPERATIONS means
+            "managers who are also in Operations".
+            {'\n'}👉 To open this to a <Text style={{ fontWeight: '800' }}>whole department regardless of role</Text>,
+            put that department in its <Text style={{ fontWeight: '800' }}>own rule</Text> with
+            Roles left empty. Add a separate rule for HR.
+            {'\n'}Access superusers bypass all rules; HR/HR Director can always reach
+            the Access Control screen itself but otherwise follow these rules.
           </Text>
 
           {draft.rules.length === 0 && (
@@ -204,16 +228,23 @@ function ResourceCard({
           )}
 
           {draft.rules.map((rule, idx) => (
-            <View
-              key={idx}
-              style={{
-                borderWidth: 1,
-                borderColor: isDark ? '#334155' : '#E2E8F0',
-                borderRadius: 10,
-                padding: 12,
-                gap: 10,
-              }}
-            >
+            <React.Fragment key={idx}>
+              {idx > 0 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginVertical: 2 }}>
+                  <View style={{ flex: 1, height: 1, backgroundColor: isDark ? '#334155' : '#E2E8F0' }} />
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: isDark ? '#94A3B8' : '#64748B' }}>OR</Text>
+                  <View style={{ flex: 1, height: 1, backgroundColor: isDark ? '#334155' : '#E2E8F0' }} />
+                </View>
+              )}
+              <View
+                style={{
+                  borderWidth: 1,
+                  borderColor: isDark ? '#334155' : '#E2E8F0',
+                  borderRadius: 10,
+                  padding: 12,
+                  gap: 10,
+                }}
+              >
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Text style={{ fontSize: 12, fontWeight: '700', color: isDark ? '#CBD5E1' : '#475569' }}>
                   Rule {idx + 1}
@@ -225,6 +256,22 @@ function ResourceCard({
                 >
                   <Text style={{ fontSize: 12, color: '#EF4444', fontWeight: '600' }}>Remove</Text>
                 </Pressable>
+              </View>
+
+              <View
+                style={{
+                  backgroundColor: isDark ? 'rgba(37,99,235,0.12)' : '#EFF6FF',
+                  borderRadius: 8,
+                  paddingVertical: 6,
+                  paddingHorizontal: 10,
+                }}
+              >
+                <Text style={{ fontSize: 12, color: isDark ? '#93C5FD' : '#1D4ED8', fontWeight: '600' }}>
+                  {summarizeRule(rule)}
+                </Text>
+                <Text style={{ fontSize: 10, color: isDark ? '#64748B' : '#94A3B8', marginTop: 2 }}>
+                  All sections you fill below must match (AND). Leave a section empty to not constrain on it.
+                </Text>
               </View>
 
               <Text style={{ fontSize: 11, fontWeight: '600', color: isDark ? '#94A3B8' : '#64748B' }}>
@@ -259,14 +306,17 @@ function ResourceCard({
                 onToggle={(v) => setRule(idx, { job_titles: toggleIn(rule.job_titles, v) })}
                 emptyHint="No job titles in lookup."
               />
-            </View>
+              </View>
+            </React.Fragment>
           ))}
 
           <Pressable
             onPress={() => setDraft((d) => ({ ...d, rules: [...d.rules, {}] }))}
-            style={{ alignSelf: 'flex-start' }}
+            style={{ alignSelf: 'flex-start', marginTop: 4 }}
           >
-            <Text style={{ fontSize: 13, color: '#2563EB', fontWeight: '600' }}>+ Add rule</Text>
+            <Text style={{ fontSize: 13, color: '#2563EB', fontWeight: '700' }}>
+              + Add another rule (OR — a separate alternative)
+            </Text>
           </Pressable>
         </View>
       )}
