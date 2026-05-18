@@ -962,3 +962,32 @@ export interface HRDocUploadFile {
   type: string;
   size: number;
 }
+
+// ============================================================
+// ACCESS POLICIES (HR-configurable nav/page gate — migration 045)
+// ============================================================
+
+/**
+ * One condition group. Access is granted if ANY rule passes
+ * (OR). Within a rule, every NON-EMPTY dimension must match
+ * (AND); within a dimension the user's value must be in the
+ * list (IN). An empty/absent array means "don't constrain on
+ * that dimension".
+ */
+export interface AccessRule {
+  roles?: string[];
+  departments?: string[];
+  job_titles?: string[];
+}
+
+export interface AccessPolicy {
+  resource_key: string;
+  label: string;
+  category: 'nav' | 'page';
+  visible_to_all: boolean;
+  rules: AccessRule[];
+  enabled: boolean;
+  updated_by: string | null;
+  updated_at: string;
+  created_at: string;
+}

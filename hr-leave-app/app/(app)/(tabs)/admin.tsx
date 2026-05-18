@@ -18,6 +18,7 @@ import {
   DollarSign,
   Calculator,
   Activity,
+  Lock,
 } from 'lucide-react-native';
 import { Card } from '@/components/ui/card';
 
@@ -176,6 +177,19 @@ const ADMIN_GROUPS: AdminGroup[] = [
         icon: ClipboardList,
         iconColor: '#3B82F6',
         path: '/(app)/admin/employee-project-breakdown',
+      },
+    ],
+  },
+  {
+    label: 'System',
+    description: 'Access control and configuration',
+    items: [
+      {
+        title: 'Access Control',
+        description: 'Decide who sees each navbar item and page by role, department, and job title. Attribute-based — updates automatically when an employee changes.',
+        icon: Lock,
+        iconColor: '#6366F1',
+        path: '/(app)/admin/access-control',
       },
     ],
   },

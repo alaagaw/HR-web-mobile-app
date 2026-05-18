@@ -17,7 +17,7 @@ import {
 import { useColorScheme } from 'nativewind';
 import { useAuth } from '@/hooks/use-auth';
 import { useBalance } from '@/hooks/use-balance';
-import { Role } from '@/types/enums';
+import { useAccess } from '@/hooks/use-access';
 import { NotificationBell } from '@/components/layout/notification-bell';
 import { useNotificationStore } from '@/stores/notification-store';
 import { useTaskStore } from '@/stores/task-store';
@@ -26,21 +26,25 @@ import { formatHours } from '@/lib/utils';
 
 const isWeb = Platform.OS === 'web';
 
+// Visibility is governed by access_policies (key `nav:<name>`),
+// resolved via useAccess(). See lib/access/resources.ts for the
+// registry + legacyDefault that reproduces the old hardcoded
+// approver/HR gating until HR edits a policy.
 const NAV_ITEMS = [
-  { name: 'dashboard', title: 'Dashboard', Icon: LayoutDashboard, approverOnly: false, hrOnly: false },
-  { name: 'requests', title: 'My Requests', Icon: FileText, approverOnly: false, hrOnly: false },
-  { name: 'tasks', title: 'Tasks', Icon: CheckSquare, approverOnly: true, hrOnly: false },
-  { name: 'team', title: 'Team', Icon: Users, approverOnly: true, hrOnly: false },
-  { name: 'timeclock', title: 'Clock In/Out', Icon: Clock, approverOnly: false, hrOnly: false },
-  { name: 'timesheet-entry', title: 'Timesheet', Icon: ClipboardList, approverOnly: false, hrOnly: false },
-  { name: 'calendar', title: 'Calendar', Icon: CalendarDays, approverOnly: false, hrOnly: false },
-  { name: 'notifications', title: 'Notifications', Icon: Bell, approverOnly: false, hrOnly: false, route: '/(app)/notifications' },
-  { name: 'hr-policies-documents', title: 'HR Policies and Documents', Icon: Library, approverOnly: false, hrOnly: false, route: '/(app)/admin/hr-policies-documents' },
-  { name: 'admin', title: 'HR Admin', Icon: Settings, approverOnly: false, hrOnly: true },
-  { name: 'profile', title: 'Profile', Icon: User, approverOnly: false, hrOnly: false },
+  { name: 'dashboard', title: 'Dashboard', Icon: LayoutDashboard },
+  { name: 'requests', title: 'My Requests', Icon: FileText },
+  { name: 'tasks', title: 'Tasks', Icon: CheckSquare },
+  { name: 'team', title: 'Team', Icon: Users },
+  { name: 'timeclock', title: 'Clock In/Out', Icon: Clock },
+  { name: 'timesheet-entry', title: 'Timesheet', Icon: ClipboardList },
+  { name: 'calendar', title: 'Calendar', Icon: CalendarDays },
+  { name: 'notifications', title: 'Notifications', Icon: Bell, route: '/(app)/notifications' },
+  { name: 'hr-policies-documents', title: 'HR Policies and Documents', Icon: Library, route: '/(app)/admin/hr-policies-documents' },
+  { name: 'admin', title: 'HR Admin', Icon: Settings },
+  { name: 'profile', title: 'Profile', Icon: User },
 ] as const;
 
-function WebSidebar({ user, isApprover, isHR, isDark, pendingCount, unreadCount }: { user: any; isApprover: boolean; isHR: boolean; isDark: boolean; pendingCount: number; unreadCount: number }) {
+function WebSidebar({ user, canAccess, isDark, pendingCount, unreadCount }: { user: any; canAccess: (key: string) => boolean; isDark: boolean; pendingCount: number; unreadCount: number }) {
   const router = useRouter();
   const pathname = usePathname();
   const { balances, fetchBalance } = useBalance();
@@ -53,9 +57,7 @@ function WebSidebar({ user, isApprover, isHR, isDark, pendingCount, unreadCount 
 
   const activeTab = NAV_ITEMS.find((item) => pathname.includes(`/${item.name}`))?.name ?? 'dashboard';
 
-  const visibleItems = NAV_ITEMS.filter(
-    (item) => (!item.approverOnly || isApprover) && (!item.hrOnly || isHR)
-  );
+  const visibleItems = NAV_ITEMS.filter((item) => canAccess(`nav:${item.name}`));
 
   return (
     <View
@@ -204,7 +206,6 @@ function WebSidebar({ user, isApprover, isHR, isDark, pendingCount, unreadCount 
 export default function TabLayout() {
   const router = useRouter();
   const { user } = useAuth();
-  const role = user?.role;
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
   const setUnreadCount = useNotificationStore((s) => s.setUnreadCount);
@@ -220,13 +221,11 @@ export default function TabLayout() {
     }
   }, [user?.id]);
 
-  const isApprover =
-    role === Role.Supervisor ||
-    role === Role.Manager ||
-    role === Role.HR ||
-    role === Role.HRDirector;
-
-  const isHR = role === Role.HR || role === Role.HRDirector;
+  // Nav visibility is now policy-driven (HR-configurable). Until
+  // policies load, canAccess falls back to each item's registry
+  // legacyDefault, which reproduces the previous hardcoded
+  // approver/HR behavior — so there is no regression or flash.
+  const { canAccess } = useAccess();
 
   const tabs = (
     <Tabs
@@ -283,9 +282,9 @@ export default function TabLayout() {
         options={{
           title: 'Tasks',
           tabBarIcon: ({ color, size }) => <CheckSquare size={size} color={color} />,
-          tabBarBadge: isApprover && pendingCount > 0 ? pendingCount : undefined,
+          tabBarBadge: canAccess('nav:tasks') && pendingCount > 0 ? pendingCount : undefined,
           tabBarBadgeStyle: { backgroundColor: '#DC2626', fontSize: 10, fontWeight: '700' },
-          href: isApprover ? undefined : null,
+          href: canAccess('nav:tasks') ? undefined : null,
         }}
       />
       <Tabs.Screen
@@ -293,7 +292,7 @@ export default function TabLayout() {
         options={{
           title: 'Team',
           tabBarIcon: ({ color, size }) => <Users size={size} color={color} />,
-          href: isApprover ? undefined : null,
+          href: canAccess('nav:team') ? undefined : null,
         }}
       />
       <Tabs.Screen
@@ -324,7 +323,7 @@ export default function TabLayout() {
         options={{
           title: 'HR Admin',
           tabBarIcon: ({ color, size }) => <Settings size={size} color={color} />,
-          href: isHR ? undefined : null,
+          href: canAccess('nav:admin') ? undefined : null,
         }}
       />
       <Tabs.Screen
@@ -340,7 +339,7 @@ export default function TabLayout() {
   if (isWeb) {
     return (
       <View style={{ flexDirection: 'row', flex: 1 }}>
-        <WebSidebar user={user} isApprover={isApprover} isHR={isHR} isDark={isDark} pendingCount={pendingCount} unreadCount={unreadCount} />
+        <WebSidebar user={user} canAccess={canAccess} isDark={isDark} pendingCount={pendingCount} unreadCount={unreadCount} />
         <View style={{ flex: 1 }}>{tabs}</View>
       </View>
     );
