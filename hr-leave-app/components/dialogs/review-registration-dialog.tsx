@@ -43,7 +43,7 @@ import Box from '@mui/material/Box';
 import MuiAlert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
 
-import { registrationService, userService } from '@/services';
+import { registrationService, userService, lookupService } from '@/services';
 import { supabase } from '@/services/supabase/client';
 import { Role } from '@/types/enums';
 import { getRoleLabel } from '@/lib/utils';
@@ -108,6 +108,9 @@ interface EditValues {
   email: string;
   phone: string;
   nationality: string;
+  national_address: string;
+  qualification: string;
+  specialization: string;
   id_type: IdType | '';
   national_id_number: string;
   iqama_number: string;
@@ -135,6 +138,9 @@ const EMPTY_EDIT: EditValues = {
   email: '',
   phone: '',
   nationality: '',
+  national_address: '',
+  qualification: '',
+  specialization: '',
   id_type: '',
   national_id_number: '',
   iqama_number: '',
@@ -198,6 +204,9 @@ export function ReviewRegistrationDialog({
       email:              reg.email || '',
       phone:              reg.phone || '',
       nationality:        reg.nationality || '',
+      national_address:   reg.national_address || '',
+      qualification:      reg.qualification || '',
+      specialization:     reg.specialization || '',
       id_type:            (reg.employee_documents?.id_type as IdType | undefined) || '',
       national_id_number: reg.employee_documents?.national_id_number || '',
       iqama_number:       reg.employee_documents?.iqama_number || '',
@@ -322,6 +331,9 @@ export function ReviewRegistrationDialog({
       email:              reg.email || '',
       phone:              reg.phone || '',
       nationality:        reg.nationality || '',
+      national_address:   reg.national_address || '',
+      qualification:      reg.qualification || '',
+      specialization:     reg.specialization || '',
       id_type:            (reg.employee_documents?.id_type as IdType | undefined) || '',
       national_id_number: reg.employee_documents?.national_id_number || '',
       iqama_number:       reg.employee_documents?.iqama_number || '',
@@ -349,6 +361,9 @@ export function ReviewRegistrationDialog({
     push('Email',         reg.email,                      editValues.email);
     push('Phone',         reg.phone,                      editValues.phone);
     push('Nationality',   reg.nationality,                editValues.nationality);
+    push('National Address', reg.national_address,        editValues.national_address);
+    push('Qualification', reg.qualification,              editValues.qualification);
+    push('Specialization', reg.specialization,            editValues.specialization);
     push('ID Type',       prettyIdType(doc?.id_type),     prettyIdType(editValues.id_type || null));
     push('National ID #', doc?.national_id_number,        editValues.national_id_number);
     push('Iqama #',       doc?.iqama_number,              editValues.iqama_number);
@@ -412,6 +427,9 @@ export function ReviewRegistrationDialog({
     if (editValues.full_name !== (reg.full_name || ''))            edits.full_name = editValues.full_name;
     if (editValues.phone !== (reg.phone || ''))                    edits.phone = editValues.phone;
     if (editValues.nationality !== (reg.nationality || ''))        edits.nationality = editValues.nationality;
+    if (editValues.national_address !== (reg.national_address || '')) edits.national_address = editValues.national_address;
+    if (editValues.qualification !== (reg.qualification || ''))    edits.qualification = editValues.qualification;
+    if (editValues.specialization !== (reg.specialization || ''))  edits.specialization = editValues.specialization;
     if ((editValues.id_type || '') !== (doc?.id_type || ''))       edits.id_type = editValues.id_type;
     if (editValues.national_id_number !== (doc?.national_id_number || '')) edits.national_id_number = editValues.national_id_number;
     if (editValues.iqama_number !== (doc?.iqama_number || ''))     edits.iqama_number = editValues.iqama_number;
@@ -442,6 +460,17 @@ export function ReviewRegistrationDialog({
         },
         currentUserId,
       );
+      // HR approving the registration = endorsing the (possibly
+      // HR-corrected) specialization. Activate it so it joins the
+      // shared autocomplete list from now on. Non-fatal.
+      const finalSpec = (editValues.specialization || reg.specialization || '').trim();
+      if (finalSpec) {
+        try {
+          await lookupService.activateSpecialization(finalSpec);
+        } catch {
+          /* approval already succeeded; activation is best-effort */
+        }
+      }
       setSnack({ open: true, message: 'Registration approved.', severity: 'success' });
       onProcessed();
       onClose();
@@ -704,6 +733,32 @@ export function ReviewRegistrationDialog({
             {/* Personal info */}
             <SectionLabel>Personal Info (employee-supplied)</SectionLabel>
             {renderEditableField('Nationality', 'nationality')}
+            {renderEditableField('National Address', 'national_address')}
+            <Box sx={{ display: 'flex', gap: 1.5 }}>
+              {renderEditableField('Qualification', 'qualification')}
+              {renderEditableField('Specialization', 'specialization')}
+            </Box>
+            <Box
+              sx={{
+                px: 1.5,
+                py: 1,
+                mt: 0.5,
+                borderRadius: 1,
+                fontSize: 12,
+                border: '1px solid',
+                bgcolor: reg.declaration_accepted_at
+                  ? 'rgba(34,197,94,0.10)'
+                  : 'rgba(245,158,11,0.12)',
+                borderColor: reg.declaration_accepted_at ? 'success.main' : 'warning.main',
+                color: reg.declaration_accepted_at ? 'success.dark' : 'warning.dark',
+              }}
+            >
+              {reg.declaration_accepted_at
+                ? `Declaration accepted ${new Date(reg.declaration_accepted_at).toLocaleString()}${
+                    reg.declaration_version ? ` · ${reg.declaration_version}` : ''
+                  }`
+                : 'Declaration: not recorded for this submission.'}
+            </Box>
 
             {/* Primary identification */}
             <SectionLabel>Primary Identification</SectionLabel>

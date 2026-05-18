@@ -93,4 +93,13 @@ export const lookupService = {
     addItem('lookup_designations', canonicaliseDesignation(raw), createdBy),
   addSpecialization: (raw: string, createdBy: string | null) =>
     addItem('lookup_specializations', canonicaliseSpecialization(raw), createdBy),
+
+  // HR endorses an employee-typed specialization (set is_active=true
+  // so it joins the shared autocomplete). Migration 056; HR-only RLS.
+  async activateSpecialization(name: string): Promise<void> {
+    const { error } = await supabase.rpc('hr_activate_specialization', {
+      p_name: canonicaliseSpecialization(name),
+    });
+    if (error) throw new Error(error.message);
+  },
 };
