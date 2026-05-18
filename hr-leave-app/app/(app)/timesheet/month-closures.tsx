@@ -74,12 +74,14 @@ function MonthClosuresScreenInner() {
   const [submitting, setSubmitting] = useState(false);
   const [snack, setSnack] = useState<{ open: boolean; msg: string; sev: 'success' | 'error' }>({ open: false, msg: '', sev: 'success' });
 
-  // Permission gate. HR Director (role) or anyone with can_close_month flag.
+  // Permission gate. HR / HR Director (role), or anyone with the
+  // can_close_month OR is_general_manager capability (GM = full
+  // Timesheet Management authority — RLS month_closures_gm_all).
   useEffect(() => {
     if (!user) return;
     if (user.role === Role.HRDirector || user.role === Role.HR) { setCanClose(true); return; }
     profileCapabilitiesService.getForProfile(user.id)
-      .then((caps) => setCanClose(!!caps?.can_close_month))
+      .then((caps) => setCanClose(!!caps?.can_close_month || !!caps?.is_general_manager))
       .catch(() => setCanClose(false));
   }, [user?.id]);
 
