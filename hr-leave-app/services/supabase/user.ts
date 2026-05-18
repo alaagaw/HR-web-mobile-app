@@ -15,14 +15,24 @@ export const userService: UserService = {
   },
 
   async updateProfile(userId, updates) {
-    const { data, error } = await supabase
+    // Update WITHOUT a returning select(): a `select()` returns all
+    // columns and would hit the locked-down sensitive PII columns
+    // (gap #1) for the `authenticated` role. Re-read the fresh full
+    // row via the SECURITY DEFINER accessor instead — callers
+    // (self profile edit, HR employee edit) are exactly self/HR, so
+    // they get the complete row, behaviour-identical to before.
+    const { error } = await supabase
       .from('profiles')
       .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq('id', userId)
-      .select()
-      .single();
+      .eq('id', userId);
 
     if (error) throw new Error(error.message);
+
+    const { data, error: readErr } = await supabase
+      .rpc('get_profile_secure', { p_id: userId })
+      .single();
+
+    if (readErr) throw new Error(readErr.message);
     return data as Profile;
   },
 
