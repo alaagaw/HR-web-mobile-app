@@ -4,10 +4,13 @@ import type { Profile } from '@/types/models';
 import { RegistrationStatus, Role } from '@/types/enums';
 
 async function fetchProfile(userId: string): Promise<Profile> {
+  // get_profile_secure (migration 050) is SECURITY DEFINER and
+  // returns the FULL row for self (or HR). We always fetch our
+  // own profile here, so this is behaviour-identical to the old
+  // `select('*')` while the base table's sensitive PII columns
+  // get locked down (gap #1).
   const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', userId)
+    .rpc('get_profile_secure', { p_id: userId })
     .single();
 
   if (error) throw new Error(`Failed to fetch profile: ${error.message}`);

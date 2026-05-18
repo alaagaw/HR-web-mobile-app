@@ -45,8 +45,12 @@ export interface BulkImportSummary {
 export async function loadBulkContexts(opts?: {
   is_active?: boolean;
 }): Promise<EmployeeBulkContext[]> {
-  let q = supabase.from('profiles').select('*').order('full_name', { ascending: true });
-  if (opts?.is_active !== undefined) q = q.eq('is_active', opts.is_active);
+  // RPC (migration 050): bulk import/export is HR-only, so the
+  // caller gets full rows; base-table sensitive PII is locked
+  // down (gap #1).
+  const q = supabase.rpc('list_employees_secure', {
+    p_is_active: opts?.is_active ?? null,
+  });
 
   const [{ data: profiles, error: profErr }, codesRes, balancesRes] = await Promise.all([
     q,

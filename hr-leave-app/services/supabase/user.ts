@@ -4,10 +4,10 @@ import type { Profile, EmployeeFilters } from '@/types/models';
 
 export const userService: UserService = {
   async getProfile(userId) {
+    // RPC (migration 050): full row for self/HR only; sensitive
+    // PII on the base table is locked down (gap #1).
     const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
+      .rpc('get_profile_secure', { p_id: userId })
       .single();
 
     if (error) throw new Error(error.message);
@@ -37,21 +37,18 @@ export const userService: UserService = {
     // callers can read profile.emp_code regardless of who is signed in —
     // a timesheet keeper picking an existing employee from the search
     // dropdown gets the same staff number that HR would.
-    let profilesQuery = supabase
-      .from('profiles')
-      .select('*')
-      .order('full_name', { ascending: true });
-
-    if (filters?.role) profilesQuery = profilesQuery.eq('role', filters.role);
-    if (filters?.department) profilesQuery = profilesQuery.eq('department', filters.department);
-    if (filters?.is_active !== undefined) profilesQuery = profilesQuery.eq('is_active', filters.is_active);
-    if (filters?.search) {
-      const term = `%${filters.search}%`;
-      profilesQuery = profilesQuery.or(`full_name.ilike.${term},email.ilike.${term},department.ilike.${term},role.ilike.${term}`);
-    }
-
+    // RPC (migration 050) does the filter/search/order server-side
+    // and redacts sensitive PII per row: HR (or own row) → full;
+    // non-HR keepers → name/dept/role etc. with phone/nationality/
+    // start_date/etc. nulled. Pickers never used those anyway, and
+    // HR's Manage Employees still gets the full row. (gap #1)
     const [profilesRes, codesRes] = await Promise.all([
-      profilesQuery,
+      supabase.rpc('list_employees_secure', {
+        p_search: filters?.search ?? null,
+        p_role: filters?.role ?? null,
+        p_department: filters?.department ?? null,
+        p_is_active: filters?.is_active ?? null,
+      }),
       supabase.from('v_emp_codes').select('employee_id, emp_code'),
     ]);
 

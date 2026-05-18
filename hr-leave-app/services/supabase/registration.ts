@@ -138,11 +138,9 @@ export const registrationService: RegistrationService = {
       }
     }
 
-    // 4. Return updated profile
+    // 4. Return updated profile (RPC: full row for self/HR — gap #1)
     const { data: profile, error: fetchError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
+      .rpc('get_profile_secure', { p_id: userId })
       .single();
 
     if (fetchError) throw new Error(fetchError.message);
@@ -164,17 +162,25 @@ export const registrationService: RegistrationService = {
 
   async getPendingRegistrations() {
     const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .in('registration_status', ['pending_approval', 'pending_info'])
-      // Most recently submitted first. Backfill (migration 040)
-      // guarantees registration_submitted_at is set for all pending
-      // rows, so nullsFirst:false is just defensive.
-      .order('registration_submitted_at', { ascending: false, nullsFirst: false });
+      // RPC (migration 050): HR caller → full rows; sensitive PII
+      // on the base table is locked down (gap #1).
+      .rpc('list_employees_secure', {
+        p_reg_statuses: ['pending_approval', 'pending_info'],
+      });
 
     if (error) throw new Error(error.message);
 
-    const profiles = data as Profile[];
+    // Most recently submitted first. The RPC orders by full_name;
+    // re-sort here to preserve the prior behaviour. Backfill
+    // (migration 040) guarantees registration_submitted_at is set
+    // for all pending rows.
+    const profiles = ((data ?? []) as Profile[])
+      .slice()
+      .sort((a, b) =>
+        (b.registration_submitted_at ?? '').localeCompare(
+          a.registration_submitted_at ?? '',
+        ),
+      );
     const result: PendingRegistration[] = [];
 
     for (const profile of profiles) {
@@ -286,11 +292,9 @@ export const registrationService: RegistrationService = {
       }
     }
 
-    // 6. Return updated profile
+    // 6. Return updated profile (RPC: full row for self/HR — gap #1)
     const { data: profile, error: fetchError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
+      .rpc('get_profile_secure', { p_id: userId })
       .single();
 
     if (fetchError) throw new Error(fetchError.message);
@@ -374,11 +378,9 @@ export const registrationService: RegistrationService = {
       }
     }
 
-    // Return updated profile
+    // Return updated profile (RPC: full row for self/HR — gap #1)
     const { data: profile, error: fetchError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
+      .rpc('get_profile_secure', { p_id: userId })
       .single();
 
     if (fetchError) throw new Error(fetchError.message);
