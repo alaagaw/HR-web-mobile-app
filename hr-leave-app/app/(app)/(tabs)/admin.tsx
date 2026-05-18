@@ -141,7 +141,7 @@ const ADMIN_GROUPS: AdminGroup[] = [
 
 // ─── Web Components ──────────────────────────────────────────────────
 
-function WebAdminCard({
+export function WebAdminCard({
   title,
   description,
   icon: Icon,

@@ -39,7 +39,7 @@ const NAV_ITEMS = [
   { name: 'timeclock', title: 'Clock In/Out', Icon: Clock },
   { name: 'timesheet-entry', title: 'Timesheet', Icon: ClipboardList },
   { name: 'calendar', title: 'Calendar', Icon: CalendarDays },
-  { name: 'timesheet-management', title: 'Timesheet Management', Icon: Briefcase, route: '/(app)/admin/timesheet-management' },
+  { name: 'timesheet-management', title: 'Timesheet Management', Icon: Briefcase },
   { name: 'notifications', title: 'Notifications', Icon: Bell, route: '/(app)/notifications' },
   { name: 'hr-policies-documents', title: 'HR Policies and Documents', Icon: Library, route: '/(app)/admin/hr-policies-documents' },
   { name: 'admin', title: 'HR Admin', Icon: Settings },
@@ -318,6 +318,15 @@ export default function TabLayout() {
         options={{
           title: 'Calendar',
           tabBarIcon: ({ color, size }) => <CalendarDays size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="timesheet-management"
+        options={{
+          title: 'Timesheet Management',
+          ...(isWeb && { headerShown: false }),
+          tabBarIcon: ({ color, size }) => <Briefcase size={size} color={color} />,
+          href: canAccess('nav:timesheet-management') ? undefined : null,
         }}
       />
       <Tabs.Screen
