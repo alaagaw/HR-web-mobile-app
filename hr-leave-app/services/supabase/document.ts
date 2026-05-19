@@ -2,6 +2,52 @@ import { supabase } from './client';
 import type { DocumentService } from '../types';
 import type { EmployeeDocument } from '@/types/models';
 
+// ── Bulk-import merge policy ──────────────────────────────────────
+// Single source of truth for the document fields the Excel/CSV import
+// may write. Add a column here and the lookup, merge and payload all
+// pick it up automatically (open/closed — no other edits needed).
+const DOC_FIELDS = [
+  'passport_number',
+  'passport_expiry',
+  'iqama_number',
+  'iqama_expiry',
+  'insurance_number',
+  'insurance_expiry',
+  'occupation',
+  'birth_date',
+] as const;
+
+type DocField = (typeof DOC_FIELDS)[number];
+
+// A cell is "provided" only if it carries a real value. Blank /
+// whitespace / null means "leave the stored value untouched" — never
+// "erase it". Clearing a field is an explicit per-row action
+// (updateDocument), never a side effect of an empty spreadsheet cell.
+// This makes re-uploading a stale or partial export non-destructive.
+function isProvided(v: unknown): boolean {
+  return v !== null && v !== undefined && String(v).trim() !== '';
+}
+
+// Pure, side-effect-free merge: stored row + one incoming file row →
+// the final value set and whether anything actually changed. Provided
+// cells overwrite; blank cells fall back to the stored value. The
+// `changed` flag lets the caller skip no-op writes (fewer rows on the
+// wire, no trigger churn, honest updated_at).
+function mergeDocFields(
+  existing: Record<string, any>,
+  incoming: Record<string, any>
+): { merged: Record<DocField, any>; changed: boolean } {
+  const merged = {} as Record<DocField, any>;
+  let changed = false;
+  for (const f of DOC_FIELDS) {
+    const current = existing[f] ?? null;
+    const next = isProvided(incoming[f]) ? String(incoming[f]).trim() : current;
+    merged[f] = next;
+    if (next !== current) changed = true;
+  }
+  return { merged, changed };
+}
+
 export const documentService: DocumentService = {
   // ── Employee self-service ────────────────────────────────────
 
@@ -143,56 +189,64 @@ export const documentService: DocumentService = {
     }
     if (byCode.size === 0) return { success: 0, errors };
 
-    // 2. Resolve emp_code → employee_id. employee_documents is the ONLY
-    //    place emp_code exists (it is not on profiles), so an unmatched
-    //    code cannot be assigned to a profile and must be skipped — the
-    //    employee_documents row is created at employee creation, not here.
-    //    employee_id is NOT NULL with no default: Postgres validates it on
-    //    the candidate insert tuple *before* resolving the emp_code
-    //    conflict, so it must be supplied even for pure updates.
+    // 2. Resolve emp_code → the stored row (employee_id + current doc
+    //    values) in chunked .in() reads — fixed round-trips, no N+1.
+    //    employee_documents is the ONLY place emp_code exists (not on
+    //    profiles), so an unmatched code cannot be mapped to a profile
+    //    and is skipped — that row is created at employee onboarding,
+    //    not here. employee_id is NOT NULL with no default: Postgres
+    //    validates it on the candidate insert tuple *before* resolving
+    //    the emp_code conflict, so it must be supplied even for updates.
+    //    We also pull the current doc fields so blank cells can fall
+    //    back to the stored value instead of nulling it.
     const codes = [...byCode.keys()];
-    const empIdByCode = new Map<string, string>();
+    const existingByCode = new Map<string, Record<string, any>>();
+    const SELECT_COLS = `emp_code, employee_id, ${DOC_FIELDS.join(', ')}`;
     const LOOKUP_CHUNK = 200; // keep the .in() filter out of URL-length limits
     for (let i = 0; i < codes.length; i += LOOKUP_CHUNK) {
       const slice = codes.slice(i, i + LOOKUP_CHUNK);
       const { data, error } = await supabase
         .from('employee_documents')
-        .select('emp_code, employee_id')
+        .select(SELECT_COLS)
         .in('emp_code', slice);
       if (error) {
         errors.push(`Lookup failed: ${error.message}`);
         return { success: 0, errors };
       }
-      for (const r of data ?? []) empIdByCode.set(r.emp_code, r.employee_id);
+      for (const r of (data ?? []) as Record<string, any>[]) {
+        existingByCode.set(r.emp_code, r);
+      }
     }
 
-    // 3. Build the payload only for codes that resolved to an employee.
+    // 3. Merge each resolved row. Provided cells overwrite, blank cells
+    //    keep the stored value; no-op rows are skipped entirely so they
+    //    never hit the wire or bump updated_at.
     const payload: Array<Record<string, any>> = [];
+    let unchanged = 0;
     const updatedAt = new Date().toISOString();
     for (const [code, row] of byCode) {
-      const employeeId = empIdByCode.get(code);
-      if (!employeeId) {
+      const existing = existingByCode.get(code);
+      if (!existing) {
         errors.push(`emp_code "${code}" has no employee record — skipped`);
         continue;
       }
+      const { merged, changed } = mergeDocFields(existing, row);
+      if (!changed) {
+        unchanged++; // already in sync with the file — nothing to write
+        continue;
+      }
       payload.push({
-        employee_id: employeeId,
+        employee_id: existing.employee_id,
         emp_code: code,
-        passport_number: row.passport_number || null,
-        passport_expiry: row.passport_expiry || null,
-        iqama_number: row.iqama_number || null,
-        iqama_expiry: row.iqama_expiry || null,
-        insurance_number: row.insurance_number || null,
-        insurance_expiry: row.insurance_expiry || null,
-        occupation: row.occupation || null,
-        birth_date: row.birth_date || null,
+        ...merged,
         updated_at: updatedAt,
       });
     }
-    if (payload.length === 0) return { success: 0, errors };
+    if (payload.length === 0) return { success: unchanged, errors };
 
-    // 4. Single batch upsert — every row now carries employee_id, so the
-    //    NOT NULL check passes and onConflict(emp_code) performs the update.
+    // 4. Single atomic batch upsert. Every row carries employee_id (NOT
+    //    NULL satisfied) and a complete, intentional value set, so
+    //    onConflict(emp_code) updates exactly what changed.
     const { data, error } = await supabase
       .from('employee_documents')
       .upsert(payload as any, { onConflict: 'emp_code', ignoreDuplicates: false })
@@ -203,6 +257,8 @@ export const documentService: DocumentService = {
       return { success: 0, errors };
     }
 
-    return { success: data?.length ?? 0, errors };
+    // Unchanged rows are reconciled too — report them as successful so a
+    // re-uploaded clean file reads "238", not "0".
+    return { success: (data?.length ?? 0) + unchanged, errors };
   },
 };
