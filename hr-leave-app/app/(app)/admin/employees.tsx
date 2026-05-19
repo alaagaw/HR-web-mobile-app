@@ -24,6 +24,7 @@ import {
   canonicaliseNationality,
 } from '@/services';
 import { supabase } from '@/services/supabase/client';
+import { recoverOrSignOut } from '@/services/supabase/session';
 import { requiredSx } from '@/lib/required-field';
 import { useAuth } from '@/hooks/use-auth';
 import { getRoleLabel, getInitials } from '@/lib/utils';
@@ -2089,6 +2090,9 @@ function EmployeesScreenInner() {
   const [loading, setLoading] = useState(false);
   const [dialog, setDialog] = useState<EditDialogState>(INITIAL_DIALOG);
   const [successMsg, setSuccessMsg] = useState('');
+  // Non-blank failure surface for the list load (replaces the old
+  // silent "No rows" on a 401/network error).
+  const [listError, setListError] = useState('');
   const [invite, setInvite] = useState<InviteDialogState>(INITIAL_INVITE);
 
   // Drafts: form fields persist across navigation but clear on Cancel/Submit
@@ -2110,18 +2114,44 @@ function EmployeesScreenInner() {
         // Omit is_active when including inactive → returns the full set.
         is_active: includeInactive ? undefined : true,
       })
-      .then((rows) =>
+      .then((rows) => {
+        setListError('');
         // Preserve the previous reference when the data is unchanged so
         // a tab-refocus refetch doesn't reset the DataGrid page.
         setEmployees((prev) =>
           employeesSignature(prev) === employeesSignature(rows) ? prev : rows,
-        ),
-      )
+        );
+      })
+      .catch(async (err: any) => {
+        // Never blank silently (the old behaviour was "No rows" with no
+        // explanation, recoverable only by a hard refresh). Keep the
+        // rows we already show, tell the user, offer Retry. If it's an
+        // auth failure, escalate to the central recovery so they get a
+        // clean redirect to sign-in instead of a dead grid.
+        const msg = err?.message || 'Failed to load employees';
+        setListError(msg);
+        if (/jwt|token|401|unauthor|not authenticated/i.test(msg)) {
+          await recoverOrSignOut();
+        }
+      })
       .finally(() => setLoading(false));
   }, [search, includeInactive]);
 
   useEffect(() => { loadEmployees(); }, [loadEmployees]);
-  const { invalidate } = useAutoRefresh(() => { loadEmployees(); }, [loadEmployees]);
+  const { invalidate } = useAutoRefresh(
+    () => { loadEmployees(); },
+    [loadEmployees],
+    {
+      // Refresh-path failures: 'signed_out' already redirects; surface
+      // 'transient' so the user knows it's reconnecting (not frozen).
+      onError: (kind) =>
+        setListError(
+          kind === 'transient'
+            ? 'Connection problem — retrying automatically. Tap Retry to try now.'
+            : '',
+        ),
+    },
+  );
 
   // Lookup tables — canonical departments / designations seeded by
   // migration 023. Loaded once on mount and after any successful
@@ -3090,6 +3120,29 @@ function EmployeesScreenInner() {
                 >
                   <MuiAlert severity="success" onClose={() => setSuccessMsg('')} sx={{ fontWeight: 600 }}>
                     {successMsg}
+                  </MuiAlert>
+                </Snackbar>
+                <Snackbar
+                  open={!!listError}
+                  // Errors must NOT auto-dismiss — the user needs to see
+                  // it and act, not have it vanish like the old silence.
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+                >
+                  <MuiAlert
+                    severity="error"
+                    onClose={() => setListError('')}
+                    sx={{ fontWeight: 600 }}
+                    action={
+                      <MuiButton
+                        color="inherit"
+                        size="small"
+                        onClick={() => { setListError(''); loadEmployees(); }}
+                      >
+                        Retry
+                      </MuiButton>
+                    }
+                  >
+                    {listError}
                   </MuiAlert>
                 </Snackbar>
               </MuiThemeProvider>

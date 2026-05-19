@@ -1,7 +1,11 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { AppState, Platform, type AppStateStatus } from 'react-native';
-import { ensureFreshSession } from '@/services/supabase/session';
+import {
+  ensureFreshSession,
+  recoverOrSignOut,
+  type RecoveryOutcome,
+} from '@/services/supabase/session';
 
 const REFRESH_INTERVAL = 30_000; // 30 seconds
 const isWeb = Platform.OS === 'web';
@@ -30,18 +34,40 @@ const isWeb = Platform.OS === 'web';
  */
 export function useAutoRefresh(
   fetchFn: () => void,
-  deps: any[] = []
+  deps: any[] = [],
+  options: {
+    /**
+     * Called when a refresh could not produce a usable session.
+     * `'signed_out'` → the user is being redirected to sign-in.
+     * `'transient'`  → likely a network blip; the 30s poll keeps
+     * retrying — show a soft "reconnecting" hint + a Retry.
+     * `null`         → recovered; clear any error you were showing.
+     */
+    onError?: (kind: RecoveryOutcome | null) => void;
+  } = {}
 ): { invalidate: () => void } {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isFocusedRef = useRef(false);
   const lastFetchedAtRef = useRef(0);
 
+  // Keep the latest onError in a ref so it can fire without widening
+  // the doRefresh/effect dep arrays (callers pass inline closures).
+  const onErrorRef = useRef(options.onError);
+  onErrorRef.current = options.onError;
+
   // Refresh the token first, then fetch. If the session is genuinely
-  // unrecoverable, skip the fetch (don't hammer doomed 401s) and let
-  // supabase-js's SIGNED_OUT path handle teardown, exactly as before.
+  // unrecoverable we no longer silently skip (that was the "blank page
+  // until hard refresh" bug): recoverOrSignOut() either redirects to
+  // sign-in (dead session) or reports a transient failure so the screen
+  // can show a retry instead of nothing.
   const doRefresh = useCallback(() => {
-    ensureFreshSession().then((ok) => {
-      if (!ok) return;
+    ensureFreshSession().then(async (ok) => {
+      if (!ok) {
+        const outcome = await recoverOrSignOut();
+        onErrorRef.current?.(outcome);
+        return;
+      }
+      onErrorRef.current?.(null); // recovered — let callers clear stale errors
       fetchFn();
       lastFetchedAtRef.current = Date.now();
     });

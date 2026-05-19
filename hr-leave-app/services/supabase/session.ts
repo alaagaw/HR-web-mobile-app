@@ -57,3 +57,42 @@ export function ensureFreshSession(): Promise<boolean> {
 
   return inFlight;
 }
+
+export type RecoveryOutcome = 'signed_out' | 'transient';
+
+/**
+ * Last-resort recovery when `ensureFreshSession()` came back false.
+ *
+ * The old behaviour was a silent `return` — the screen just stayed
+ * blank until the user hard-refreshed. Instead:
+ *
+ *  - No session at all (refresh token dead / already signed out) →
+ *    force `signOut()`. supabase-js emits SIGNED_OUT → the auth
+ *    listener pushes user=null → AuthGuard redirects to sign-in. The
+ *    user sees the login screen, not a frozen empty page.
+ *
+ *  - A (stale) session object still exists → almost always a transient
+ *    network failure during refresh, NOT a dead session. Signing the
+ *    user out here would be a wrongful logout on a Wi-Fi blip, so we
+ *    do NOT; the caller surfaces a retry and the 30s poll keeps trying.
+ *
+ * Returns which path was taken so callers can show the right feedback.
+ */
+export async function recoverOrSignOut(): Promise<RecoveryOutcome> {
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session) {
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        /* best-effort — the SIGNED_OUT/redirect still happens on next tick */
+      }
+      return 'signed_out';
+    }
+    return 'transient';
+  } catch {
+    return 'transient';
+  }
+}

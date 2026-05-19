@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useThemeStore } from '@/stores/theme-store';
 import { supabase } from '@/services/supabase/client';
 import { ensureFreshSession } from '@/services/supabase/session';
+import { BUILD_ID } from '@/constants/build';
 import { RegistrationStatus } from '@/types/enums';
 import 'react-native-reanimated';
 import '../global.css';
@@ -15,6 +16,14 @@ import '../global.css';
 export { ErrorBoundary } from 'expo-router';
 
 SplashScreen.preventAutoHideAsync();
+
+// Boot marker — runs once when the bundle loads. Lets anyone confirm
+// (DevTools console / `window.__HR_BUILD__`) which build a given tab is
+// actually executing, since a tab switch never re-downloads the bundle.
+console.info(`[HR build] ${BUILD_ID}`);
+if (typeof window !== 'undefined') {
+  (window as any).__HR_BUILD__ = BUILD_ID;
+}
 
 // Auth pages that must remain reachable regardless of auth state.
 // reset-password handles Supabase's recovery flow — the user IS authenticated
