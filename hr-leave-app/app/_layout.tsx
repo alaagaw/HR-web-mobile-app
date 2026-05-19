@@ -1,10 +1,13 @@
 import { useEffect } from 'react';
+import { AppState, Platform } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useColorScheme } from 'nativewind';
 import { useAuth } from '@/hooks/use-auth';
 import { useThemeStore } from '@/stores/theme-store';
+import { supabase } from '@/services/supabase/client';
+import { ensureFreshSession } from '@/services/supabase/session';
 import { RegistrationStatus } from '@/types/enums';
 import 'react-native-reanimated';
 import '../global.css';
@@ -105,6 +108,43 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [isLoading]);
+
+  // Central session keep-alive. Browsers freeze supabase-js's
+  // auto-refresh ticker in a backgrounded tab, so after the user
+  // switches away and comes back the token can be stale. Revalidate
+  // the session the moment the surface becomes active again — app-wide,
+  // BEFORE the user's next click — instead of relying on each screen.
+  // The 401-aware fetch in client.ts is the backstop; this is the
+  // proactive layer so most requests never 401 in the first place.
+  useEffect(() => {
+    const onActive = () => {
+      supabase.auth.startAutoRefresh();
+      void ensureFreshSession();
+    };
+    const onInactive = () => {
+      supabase.auth.stopAutoRefresh();
+    };
+
+    onActive(); // foreground on mount
+
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const onVisibility = () =>
+        document.visibilityState === 'visible' ? onActive() : onInactive();
+      document.addEventListener('visibilitychange', onVisibility);
+      window.addEventListener('focus', onActive);
+      window.addEventListener('online', onActive);
+      return () => {
+        document.removeEventListener('visibilitychange', onVisibility);
+        window.removeEventListener('focus', onActive);
+        window.removeEventListener('online', onActive);
+      };
+    }
+
+    const sub = AppState.addEventListener('change', (s) =>
+      s === 'active' ? onActive() : onInactive()
+    );
+    return () => sub.remove();
+  }, []);
 
   return (
     <AuthGuard>
