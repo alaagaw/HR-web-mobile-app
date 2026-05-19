@@ -1,5 +1,6 @@
 import { AccessGate } from '@/components/access/access-gate';
 import { requiredSx } from '@/lib/required-field';
+import { todayDateOnly } from '@/lib/date-only';
 /**
  * HR Admin → Compensation
  *
@@ -126,7 +127,7 @@ function CompensationScreenInner() {
   const [busy, setBusy] = useState<null | 'export' | 'import'>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [importEffectiveFrom, setImportEffectiveFrom] = useState<string>(
-    new Date().toISOString().slice(0, 10),
+    todayDateOnly(),
   );
   const [importSummary, setImportSummary] = useState<CompensationBulkImportSummary | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -179,7 +180,7 @@ function CompensationScreenInner() {
       ...INITIAL_ADD,
       open: true,
       employee: emp,
-      effective_from: new Date().toISOString().slice(0, 10),
+      effective_from: todayDateOnly(),
       basic_salary: String(emp.comp_basic_salary || ''),
       hra: String(emp.comp_hra || ''),
       transportation: String(emp.comp_transportation || ''),
@@ -212,7 +213,7 @@ function CompensationScreenInner() {
     // the import immediately because HR must pick the effective date
     // that applies to every changed row.
     setPendingFile(file);
-    setImportEffectiveFrom(new Date().toISOString().slice(0, 10));
+    setImportEffectiveFrom(todayDateOnly());
     setImportSummary(null);
   };
 

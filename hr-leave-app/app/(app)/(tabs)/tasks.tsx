@@ -14,6 +14,7 @@ import { LeaveStatus, LeaveType, RenewalTaskStatus, Role } from '@/types/enums';
 import { projectHoursChangeService, profileCapabilitiesService } from '@/services';
 import type { ProjectHoursChangeRequest } from '@/types/models';
 import { getStatusLabel } from '@/lib/state-machine';
+import { daysUntil, todayDateOnly } from '@/lib/date-only';
 import { formatDateRange, formatHours, formatPendingSince } from '@/lib/utils';
 import type { LeaveRequest, RenewalTask } from '@/types/models';
 
@@ -279,13 +280,7 @@ function WebDocumentRenewalsTable({
   const [sortModel, setSortModel] = useViewState<any[]>('tabs/tasks.renewals.sort', []);
 
   function daysRemaining(expiry?: string | null): number | null {
-    if (!expiry) return null;
-    const d = new Date(expiry);
-    if (Number.isNaN(d.getTime())) return null;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    d.setHours(0, 0, 0, 0);
-    return Math.floor((d.getTime() - today.getTime()) / 86400000);
+    return daysUntil(expiry);
   }
 
   const openRenewDialog = (task: RenewalTask) => {
@@ -480,7 +475,7 @@ function WebDocumentRenewalsTable({
               onChange={(e: any) => setNewExpiry(e.target.value)}
               fullWidth
               InputLabelProps={{ shrink: true }}
-              inputProps={{ min: new Date().toISOString().split('T')[0] }}
+              inputProps={{ min: todayDateOnly() }}
             />
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -517,13 +512,7 @@ function RenewalTaskCard({
   const isActive = isPending || isInProgress;
 
   function daysLeft(): number | null {
-    if (!task.expiry_date) return null;
-    const d = new Date(task.expiry_date);
-    if (Number.isNaN(d.getTime())) return null;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    d.setHours(0, 0, 0, 0);
-    return Math.floor((d.getTime() - today.getTime()) / 86400000);
+    return daysUntil(task.expiry_date);
   }
 
   const days = daysLeft();

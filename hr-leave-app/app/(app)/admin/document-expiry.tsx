@@ -12,6 +12,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { documentService, userService, renewalTaskService } from '@/services';
 import type { EmployeeDocument, Profile, RenewalTask } from '@/types/models';
 import { Role, RenewalTaskStatus } from '@/types/enums';
+import { parseExcelDateCell, daysUntil, todayDateOnly } from '@/lib/date-only';
 
 const isWeb = Platform.OS === 'web';
 const WIDE_SCREEN_BREAKPOINT = 1280; // px — below this, use mobile layout on web
@@ -89,13 +90,8 @@ interface EnrichedRow extends EmployeeDocument {
 }
 
 function daysRemaining(expiry?: string | null): number | null {
-  if (!expiry) return null;
-  const d = new Date(expiry);
-  if (Number.isNaN(d.getTime())) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  d.setHours(0, 0, 0, 0);
-  return Math.floor((d.getTime() - today.getTime()) / 86400000);
+  // Riyadh-anchored, DST-immune whole-day count (see lib/date-only).
+  return daysUntil(expiry);
 }
 
 function enrichRows(rows: EmployeeDocument[], thresholdDays: number, tasks: RenewalTask[]): EnrichedRow[] {
@@ -220,17 +216,10 @@ function mapColumns(raw: Record<string, any>[]): Array<Record<string, any>> {
     const mapped: Record<string, any> = {};
     for (const [excelHeader, ourField] of Object.entries(mapping)) {
       let value = row[excelHeader];
-      // Normalize date values
+      // Normalize date-only values with NO timezone shift (toISOString
+      // would roll the calendar day — the bug this whole module fixes).
       if (ourField.includes('expiry') || ourField === 'birth_date') {
-        if (value instanceof Date) {
-          value = value.toISOString().split('T')[0];
-        } else if (typeof value === 'string' && value) {
-          // Try to parse various date formats
-          const d = new Date(value);
-          if (!Number.isNaN(d.getTime())) {
-            value = d.toISOString().split('T')[0];
-          }
-        }
+        value = parseExcelDateCell(value);
       }
       // Convert numbers to strings for document numbers
       if (typeof value === 'number') {
@@ -271,8 +260,7 @@ async function exportToExcel(rows: EnrichedRow[]) {
   }));
   worksheet['!cols'] = colWidths;
 
-  const today = new Date().toISOString().split('T')[0];
-  XLSX.writeFile(workbook, `document_expiry_${today}.xlsx`);
+  XLSX.writeFile(workbook, `document_expiry_${todayDateOnly()}.xlsx`);
 }
 
 // ============================================================

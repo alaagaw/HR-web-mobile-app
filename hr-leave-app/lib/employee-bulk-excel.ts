@@ -21,6 +21,7 @@ import {
   getKeyField,
 } from './employee-bulk-fields';
 import type { Profile } from '@/types/models';
+import { todayDateOnly } from '@/lib/date-only';
 
 export interface BulkRowResult {
   emp_code: string;
@@ -114,8 +115,7 @@ export async function exportEmployeesXlsx(opts?: { is_active?: boolean }): Promi
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Employees');
 
-  const today = new Date().toISOString().slice(0, 10);
-  const filename = `employees_bulk_${today}.xlsx`;
+  const filename = `employees_bulk_${todayDateOnly()}.xlsx`;
   XLSX.writeFile(wb, filename);
   return { count: rows.length, filename };
 }

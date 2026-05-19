@@ -10,6 +10,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { leaveService } from '@/services';
 import { LeaveStatus, LeaveType } from '@/types/enums';
 import { formatDateRange, formatHours } from '@/lib/utils';
+import { todayDateOnly } from '@/lib/date-only';
 import type { LeaveRequest } from '@/types/models';
 
 const isWeb = Platform.OS === 'web';
@@ -127,7 +128,7 @@ export default function TeamScreen() {
     leaveService
       .getAllRequests({ status: LeaveStatus.Approved })
       .then((data) => {
-        const today = new Date().toISOString().split('T')[0];
+        const today = todayDateOnly();
         const upcoming = data.filter((r) => r.end_date >= today);
         setTeamRequests(upcoming);
       })

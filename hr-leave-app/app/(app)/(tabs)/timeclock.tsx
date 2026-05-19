@@ -15,6 +15,7 @@ import { useViewState } from '@/hooks/use-view-state';
 import { useAuth } from '@/hooks/use-auth';
 import { useTimeTracking } from '@/hooks/use-time-tracking';
 import { formatDuration, formatElapsed, formatDate } from '@/lib/utils';
+import { todayDateOnly, addDaysToDateOnly, dateOnlyWeekday } from '@/lib/date-only';
 import { TimeEntryType } from '@/types/enums';
 import type { TimeEntry } from '@/types/models';
 import {
@@ -102,21 +103,18 @@ function tk(isDark: boolean) {
 // ─── Helpers ────────────────────────────────────────────────────────
 
 function getToday(): string {
-  return new Date().toISOString().split('T')[0];
+  return todayDateOnly();
 }
 
 function getWeekStart(dateStr?: string): string {
-  const d = dateStr ? new Date(dateStr) : new Date();
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday
-  const monday = new Date(d.setDate(diff));
-  return monday.toISOString().split('T')[0];
+  const base = dateStr || todayDateOnly();
+  const wd = dateOnlyWeekday(base); // 0=Sun … 6=Sat
+  const toMonday = wd === 0 ? -6 : 1 - wd;
+  return addDaysToDateOnly(base, toMonday);
 }
 
 function addDays(dateStr: string, days: number): string {
-  const d = new Date(dateStr);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().split('T')[0];
+  return addDaysToDateOnly(dateStr, days);
 }
 
 function formatTime(isoStr: string): string {

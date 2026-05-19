@@ -34,6 +34,7 @@ import { registrationService } from '@/services';
 import { Role, LeaveStatus, LeaveType, RenewalTaskStatus, RegistrationStatus } from '@/types/enums';
 import { getStatusLabel, getLeaveTypeLabel, getLeaveTypeMuiColor } from '@/lib/state-machine';
 import { formatHours, formatDaysHours, formatDateRange, formatPendingSince, getRoleLabel } from '@/lib/utils';
+import { todayDateOnly } from '@/lib/date-only';
 import type { LeaveRequest, AppNotification, RenewalTask, PendingRegistration } from '@/types/models';
 
 const isWeb = Platform.OS === 'web';
@@ -1245,7 +1246,7 @@ export default function DashboardScreen() {
                   onChange={(e: any) => setNewExpiry(e.target.value)}
                   fullWidth
                   InputLabelProps={{ shrink: true }}
-                  inputProps={{ min: new Date().toISOString().split('T')[0] }}
+                  inputProps={{ min: todayDateOnly() }}
                 />
               </DialogContent>
               <DialogActions sx={{ px: 3, pb: 2 }}>

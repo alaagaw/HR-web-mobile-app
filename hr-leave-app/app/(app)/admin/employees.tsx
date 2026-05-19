@@ -27,6 +27,7 @@ import { supabase } from '@/services/supabase/client';
 import { requiredSx } from '@/lib/required-field';
 import { useAuth } from '@/hooks/use-auth';
 import { getRoleLabel, getInitials } from '@/lib/utils';
+import { todayDateOnly } from '@/lib/date-only';
 import { rotateImageBlob } from '@/lib/image-rotation';
 import { Role } from '@/types/enums';
 import type { Profile } from '@/types/models';
@@ -2210,7 +2211,7 @@ function EmployeesScreenInner() {
           comp_transportation: draftFields.comp_transportation ?? t,
           comp_other_allowances: draftFields.comp_other_allowances ?? o,
           comp_currency: current?.currency || 'SAR',
-          comp_effective_from: draftFields.comp_effective_from ?? new Date().toISOString().slice(0, 10),
+          comp_effective_from: draftFields.comp_effective_from ?? todayDateOnly(),
           comp_notes: draftFields.comp_notes ?? '',
           // Snapshot of the loaded values — used at submit time to
           // tell whether HR actually changed anything.
@@ -2408,7 +2409,7 @@ function EmployeesScreenInner() {
         try {
           await compensationService.addNewRow({
             employee_id: employeeId,
-            effective_from: dialog.comp_effective_from || new Date().toISOString().slice(0, 10),
+            effective_from: dialog.comp_effective_from || todayDateOnly(),
             basic_salary: parseFloat(dialog.comp_basic_salary) || 0,
             hra: parseFloat(dialog.comp_hra) || 0,
             transportation: parseFloat(dialog.comp_transportation) || 0,

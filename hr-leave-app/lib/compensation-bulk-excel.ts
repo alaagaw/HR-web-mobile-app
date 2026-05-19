@@ -24,6 +24,7 @@ import {
   type CompensationBulkWriteSet,
 } from './compensation-bulk-fields';
 import type { Profile } from '@/types/models';
+import { todayDateOnly } from '@/lib/date-only';
 
 export interface CompensationBulkRowResult {
   emp_code: string;
@@ -89,8 +90,7 @@ export async function exportCompensationXlsx(opts?: { is_active?: boolean }): Pr
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Compensation');
 
-  const today = new Date().toISOString().slice(0, 10);
-  const filename = `compensation_${today}.xlsx`;
+  const filename = `compensation_${todayDateOnly()}.xlsx`;
   XLSX.writeFile(wb, filename);
   return { count: rows.length, filename };
 }

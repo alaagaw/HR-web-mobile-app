@@ -13,6 +13,7 @@
  * already loaded.
  */
 import type { Profile } from '@/types/models';
+import { parseExcelDateCell } from './date-only';
 
 export interface EmployeeBulkContext {
   /** Profile row from `profiles`. */
@@ -65,17 +66,10 @@ const str = (v: unknown): string | null => {
   return String(v).trim() || null;
 };
 
-const dateStr = (v: unknown): string | null => {
-  if (!v) return null;
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
-  const s = String(v).trim();
-  if (!s) return null;
-  // ISO yyyy-mm-dd already
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  // Try Date parse for excel string formats
-  const d = new Date(s);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
-};
+// Date-only cells (e.g. Joining Date) MUST NOT round-trip through
+// toISOString() — that shifts the calendar day. parseExcelDateCell
+// preserves the typed day with no timezone shift.
+const dateStr = (v: unknown): string | null => parseExcelDateCell(v);
 
 /**
  * The canonical bulk-edit column set. Order in this array = column

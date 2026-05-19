@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { timeTrackingService } from '@/services';
 import type { TimeEntry } from '@/types/models';
+import { todayDateOnly } from '@/lib/date-only';
 
 export function useTimeTracking() {
   const [activeEntry, setActiveEntry] = useState<TimeEntry | null>(null);
@@ -23,7 +24,7 @@ export function useTimeTracking() {
 
   const fetchTodayEntries = useCallback(async (employeeId: string) => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = todayDateOnly();
       const entries = await timeTrackingService.getEntriesByDate(employeeId, today);
       setTodayEntries(entries);
     } catch (err: any) {
@@ -69,7 +70,7 @@ export function useTimeTracking() {
         const entry = await timeTrackingService.clockIn(employeeId, notes);
         setActiveEntry(entry);
         // Refresh today's entries
-        const today = new Date().toISOString().split('T')[0];
+        const today = todayDateOnly();
         const entries = await timeTrackingService.getEntriesByDate(employeeId, today);
         setTodayEntries(entries);
         return entry;
@@ -87,7 +88,7 @@ export function useTimeTracking() {
         const entry = await timeTrackingService.clockOut(entryId, notes);
         setActiveEntry(null);
         // Refresh today's entries
-        const today = new Date().toISOString().split('T')[0];
+        const today = todayDateOnly();
         const entries = await timeTrackingService.getEntriesByDate(employeeId, today);
         setTodayEntries(entries);
         return entry;
@@ -109,7 +110,7 @@ export function useTimeTracking() {
           notes
         );
         // Refresh today's entries
-        const today = new Date().toISOString().split('T')[0];
+        const today = todayDateOnly();
         const entries = await timeTrackingService.getEntriesByDate(employeeId, today);
         setTodayEntries(entries);
         return entry;

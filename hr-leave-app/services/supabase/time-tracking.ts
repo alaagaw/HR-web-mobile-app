@@ -2,6 +2,7 @@ import { supabase } from './client';
 import type { TimeTrackingService } from '../types';
 import type { TimeEntry } from '@/types/models';
 import { TimeEntryType, TimeEntryStatus } from '@/types/enums';
+import { addDaysToDateOnly } from '@/lib/date-only';
 
 const ENTRY_SELECT =
   '*, employee:profiles!employee_id(id, full_name, role, department)';
@@ -136,9 +137,7 @@ export const timeTrackingService: TimeTrackingService = {
     const days: { date: string; totalMinutes: number; entries: TimeEntry[] }[] = [];
 
     for (let i = 0; i < 7; i++) {
-      const d = new Date(weekStart);
-      d.setDate(d.getDate() + i);
-      const dateStr = d.toISOString().split('T')[0];
+      const dateStr = addDaysToDateOnly(weekStart, i);
 
       const entries = await this.getEntriesByDate(employeeId, dateStr);
 

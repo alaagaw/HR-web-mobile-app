@@ -8,6 +8,7 @@
  */
 import { supabase } from './client';
 import type { EmployeeCompensation, LeavePayoutRow, PredictedPayoutRow } from '@/types/models';
+import { todayDateOnly } from '@/lib/date-only';
 
 export const compensationService = {
   /**
@@ -67,7 +68,7 @@ export const compensationService = {
     notes?: string;
     created_by?: string;
   }): Promise<EmployeeCompensation> {
-    const effective = input.effective_from || new Date().toISOString().slice(0, 10);
+    const effective = input.effective_from || todayDateOnly();
     const { data, error } = await supabase
       .from('employee_compensation')
       .insert({

@@ -1,6 +1,7 @@
 import { supabase } from './client';
 import type { DocumentService } from '../types';
 import type { EmployeeDocument } from '@/types/models';
+import { todayDateOnly, addDaysToDateOnly } from '@/lib/date-only';
 
 // ── Bulk-import merge policy ──────────────────────────────────────
 // Single source of truth for the document fields the Excel/CSV import
@@ -122,9 +123,8 @@ export const documentService: DocumentService = {
   },
 
   async getExpiringDocuments(withinDays) {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() + withinDays);
-    const cutoffStr = cutoff.toISOString().split('T')[0]; // YYYY-MM-DD
+    // Riyadh-anchored cutoff, no timezone shift at the day boundary.
+    const cutoffStr = addDaysToDateOnly(todayDateOnly(), withinDays);
 
     const { data, error } = await supabase
       .from('employee_documents')
