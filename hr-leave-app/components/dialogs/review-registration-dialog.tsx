@@ -43,11 +43,13 @@ import Box from '@mui/material/Box';
 import MuiAlert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
 
-import { registrationService, userService, lookupService } from '@/services';
+import { registrationService, userService, lookupService, canonicaliseNationality } from '@/services';
 import { supabase } from '@/services/supabase/client';
 import { Role } from '@/types/enums';
 import { getRoleLabel } from '@/lib/utils';
+import { QUALIFICATION_OPTIONS } from '@/lib/constants';
 import { rotateImageBlob } from '@/lib/image-rotation';
+import { ThemedAutocompleteField } from '@/components/web/themed-autocomplete-field';
 import { FilePreviewModal } from '@/components/ui/file-preview-modal';
 import type {
   Attachment,
@@ -161,6 +163,12 @@ export function ReviewRegistrationDialog({
   const orig = reg?.hr_original_values || {};
 
   const [employees, setEmployees] = useState<Profile[]>([]);
+  // Lookup options for the employee-supplied autocomplete fields, so HR
+  // edits the same searchable lists the employee saw on the registration
+  // form (instead of free-typing into a bare text box). Qualification is
+  // the fixed QUALIFICATION_OPTIONS constant — no DB lookup table.
+  const [natOptions, setNatOptions] = useState<string[]>([]);
+  const [specOptions, setSpecOptions] = useState<string[]>([]);
   const [idDocSignedUrl, setIdDocSignedUrl] = useState<string>('');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [docRotation, setDocRotation] = useState<number>(0);
@@ -242,6 +250,16 @@ export function ReviewRegistrationDialog({
       userService.getEmployees({ is_active: true })
         .then(setEmployees)
         .catch(() => { /* HR can still type role/dept manually */ });
+    }
+    if (natOptions.length === 0) {
+      lookupService.getNationalities()
+        .then((rows) => setNatOptions(rows.map((r) => r.name)))
+        .catch(() => { /* freeSolo — HR can still type a value */ });
+    }
+    if (specOptions.length === 0) {
+      lookupService.getSpecializations()
+        .then((rows) => setSpecOptions(rows.map((r) => r.name)))
+        .catch(() => { /* freeSolo — HR can still type a value */ });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, reg?.id]);
@@ -426,7 +444,23 @@ export function ReviewRegistrationDialog({
     const edits: RegistrationFieldEdits = {};
     if (editValues.full_name !== (reg.full_name || ''))            edits.full_name = editValues.full_name;
     if (editValues.phone !== (reg.phone || ''))                    edits.phone = editValues.phone;
-    if (editValues.nationality !== (reg.nationality || ''))        edits.nationality = editValues.nationality;
+    // Nationality is FK'd to lookup_nationalities. Canonicalise (same
+    // TitleCase rule the DB CHECK enforces) and ensure the lookup row
+    // exists before the RPC writes profiles.nationality — mirrors the
+    // employee registration form. Belt-and-suspenders: the 037 trigger
+    // also auto-registers, but doing it here keeps the audit log's new
+    // value canonical and the diff accurate.
+    if (editValues.nationality !== (reg.nationality || '')) {
+      const canonicalNat = canonicaliseNationality(editValues.nationality);
+      edits.nationality = canonicalNat;
+      if (canonicalNat) {
+        try {
+          await lookupService.addNationality(canonicalNat, reg.id);
+        } catch {
+          /* idempotent upsert; ignore races / already-exists */
+        }
+      }
+    }
     if (editValues.national_address !== (reg.national_address || '')) edits.national_address = editValues.national_address;
     if (editValues.qualification !== (reg.qualification || ''))    edits.qualification = editValues.qualification;
     if (editValues.specialization !== (reg.specialization || ''))  edits.specialization = editValues.specialization;
@@ -730,13 +764,47 @@ export function ReviewRegistrationDialog({
               />
             </Box>
 
-            {/* Personal info */}
+            {/* Personal info — same searchable lists the employee saw on
+                the registration form. Disabled until HR clicks "Edit". */}
             <SectionLabel>Personal Info (employee-supplied)</SectionLabel>
-            {renderEditableField('Nationality', 'nationality')}
+            <ThemedAutocompleteField
+              label="Nationality"
+              required
+              freeSolo
+              disabled={!editMode}
+              value={editValues.nationality}
+              onChange={(v) => setField('nationality', v)}
+              options={natOptions}
+              placeholder="Search or type…"
+              helper={editMode ? 'Pick from the list or type your own.' : undefined}
+            />
             {renderEditableField('National Address', 'national_address')}
             <Box sx={{ display: 'flex', gap: 1.5 }}>
-              {renderEditableField('Qualification', 'qualification')}
-              {renderEditableField('Specialization', 'specialization')}
+              <Box sx={{ flex: 1 }}>
+                <ThemedAutocompleteField
+                  label="Qualification"
+                  required
+                  freeSolo={false}
+                  disabled={!editMode}
+                  value={editValues.qualification}
+                  onChange={(v) => setField('qualification', v)}
+                  options={QUALIFICATION_OPTIONS as unknown as string[]}
+                  placeholder="Select highest qualification"
+                />
+              </Box>
+              <Box sx={{ flex: 1 }}>
+                <ThemedAutocompleteField
+                  label="Specialization"
+                  required
+                  freeSolo
+                  disabled={!editMode}
+                  value={editValues.specialization}
+                  onChange={(v) => setField('specialization', v)}
+                  options={specOptions}
+                  placeholder="Search or type the specialization"
+                  helper={editMode ? 'Pick from the list or type — HR confirms the spelling.' : undefined}
+                />
+              </Box>
             </Box>
             <Box
               sx={{

@@ -40,6 +40,8 @@ export interface ThemedAutocompleteFieldProps {
   placeholder?: string;
   helper?: string;
   error?: string;
+  /** Read-only display (used by the HR review dialog before "Edit"). */
+  disabled?: boolean;
 }
 
 export function ThemedAutocompleteField({
@@ -52,6 +54,7 @@ export function ThemedAutocompleteField({
   placeholder,
   helper,
   error,
+  disabled = false,
 }: ThemedAutocompleteFieldProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -66,6 +69,7 @@ export function ThemedAutocompleteField({
         value={value || ''}
         onChangeText={onChange}
         error={error}
+        editable={!disabled}
       />
     );
   }
@@ -76,6 +80,7 @@ export function ThemedAutocompleteField({
         <Autocomplete
           freeSolo={freeSolo}
           forcePopupIcon
+          disabled={disabled}
           options={options}
           value={value || null}
           onChange={(_: any, val: string | null) => onChange(val || '')}
