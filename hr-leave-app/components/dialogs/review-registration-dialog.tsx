@@ -43,12 +43,19 @@ import Box from '@mui/material/Box';
 import MuiAlert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
 
-import { registrationService, userService, lookupService, canonicaliseNationality } from '@/services';
+import {
+  registrationService,
+  userService,
+  lookupService,
+  canonicaliseNationality,
+  canonicaliseDepartment,
+} from '@/services';
 import { supabase } from '@/services/supabase/client';
 import { Role } from '@/types/enums';
 import { getRoleLabel } from '@/lib/utils';
 import { QUALIFICATION_OPTIONS } from '@/lib/constants';
 import { rotateImageBlob } from '@/lib/image-rotation';
+import { requiredSx } from '@/lib/required-field';
 import { ThemedAutocompleteField } from '@/components/web/themed-autocomplete-field';
 import { FilePreviewModal } from '@/components/ui/file-preview-modal';
 import type {
@@ -169,6 +176,9 @@ export function ReviewRegistrationDialog({
   // the fixed QUALIFICATION_OPTIONS constant — no DB lookup table.
   const [natOptions, setNatOptions] = useState<string[]>([]);
   const [specOptions, setSpecOptions] = useState<string[]>([]);
+  // Department lookup — same source the Edit Employee dialog uses, so
+  // HR picks from the canonical UPPERCASE list instead of free-typing.
+  const [deptOptions, setDeptOptions] = useState<string[]>([]);
   const [idDocSignedUrl, setIdDocSignedUrl] = useState<string>('');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [docRotation, setDocRotation] = useState<number>(0);
@@ -259,6 +269,11 @@ export function ReviewRegistrationDialog({
     if (specOptions.length === 0) {
       lookupService.getSpecializations()
         .then((rows) => setSpecOptions(rows.map((r) => r.name)))
+        .catch(() => { /* freeSolo — HR can still type a value */ });
+    }
+    if (deptOptions.length === 0) {
+      lookupService.getDepartments()
+        .then((rows) => setDeptOptions(rows.map((r) => r.name)))
         .catch(() => { /* freeSolo — HR can still type a value */ });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -483,12 +498,27 @@ export function ReviewRegistrationDialog({
     setSubmitting(true);
     try {
       await persistEdits();
+
+      // Canonicalise the typed department (UPPERCASE) so it matches
+      // the DB CHECK constraint on lookup_departments / profiles.
+      // Best-effort upsert into lookup_departments — same pattern
+      // the Edit Employee / New Employee dialogs follow, so a fresh
+      // value HR types here joins the shared dropdown next time.
+      const canonicalDept = canonicaliseDepartment(department);
+      if (canonicalDept) {
+        try {
+          await lookupService.addDepartment(canonicalDept, currentUserId);
+        } catch {
+          /* idempotent upsert; ignore races / already-exists */
+        }
+      }
+
       await registrationService.approveRegistration(
         reg.id,
         {
           emp_code: empCode.trim(),
           role,
-          department,
+          department: canonicalDept,
           supervisor_id: supervisorId,
           manager_id: managerId,
         },
@@ -1031,27 +1061,47 @@ export function ReviewRegistrationDialog({
                     fullWidth size="small" required
                     placeholder="e.g. 70150"
                   />
-                  <MuiTextField
-                    label="Role"
-                    select
-                    value={role}
-                    onChange={(e: any) => setRole(e.target.value as Role)}
-                    fullWidth size="small" required
-                  >
-                    {ROLE_OPTIONS.map((opt) => (
-                      <MenuItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </MenuItem>
-                    ))}
-                  </MuiTextField>
+                  {/* Role — Autocomplete to match Edit Employee form. */}
+                  <Autocomplete
+                    options={ROLE_OPTIONS}
+                    value={ROLE_OPTIONS.find((o) => o.value === role) || null}
+                    onChange={(_: any, val: any) => { if (val) setRole(val.value as Role); }}
+                    getOptionLabel={(opt: any) => opt.label}
+                    isOptionEqualToValue={(opt: any, val: any) => opt.value === val.value}
+                    renderInput={(params: any) => (
+                      <MuiTextField
+                        {...params}
+                        label="Role"
+                        size="small"
+                        required
+                        sx={requiredSx(role)}
+                      />
+                    )}
+                    fullWidth size="small" disableClearable
+                  />
                 </Box>
 
-                <MuiTextField
-                  label="Department"
-                  value={department}
-                  onChange={(e: any) => setDepartment(e.target.value)}
-                  fullWidth size="small" required
-                  placeholder="e.g. Engineering"
+                {/* Department — Autocomplete over lookup_departments,
+                    freeSolo so HR can add a new dept on the fly (it
+                    gets canonicalised + registered on Approve, same
+                    as the Edit Employee dialog). */}
+                <Autocomplete
+                  freeSolo forcePopupIcon
+                  options={deptOptions}
+                  value={department || null}
+                  onChange={(_: any, val: string | null) => setDepartment(val || '')}
+                  onInputChange={(_: any, val: string) => setDepartment(val)}
+                  renderInput={(params: any) => (
+                    <MuiTextField
+                      {...params}
+                      label="Department"
+                      size="small"
+                      required
+                      placeholder="Search or type..."
+                      sx={requiredSx(department)}
+                    />
+                  )}
+                  fullWidth size="small"
                 />
 
                 <Autocomplete
