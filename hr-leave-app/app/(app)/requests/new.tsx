@@ -23,6 +23,7 @@ import { EmergencyCounter } from '@/components/leave/emergency-counter';
 
 import { useAuth } from '@/hooks/use-auth';
 import { useBalance } from '@/hooks/use-balance';
+import { useBreakpoint } from '@/hooks/use-breakpoint';
 import { useLeaveRequest } from '@/hooks/use-leave-request';
 import { attachmentService } from '@/services';
 import { leaveRequestSchema, type LeaveRequestFormData } from '@/lib/validators';
@@ -88,6 +89,7 @@ export default function NewRequestScreen() {
   const { createAndSubmit, loading: submitLoading } = useLeaveRequest();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { isMobile } = useBreakpoint();
 
   const [files, setFiles] = useState<any[]>([]);
   const [impact, setImpact] = useState<BalanceImpact | null>(null);
@@ -201,8 +203,12 @@ export default function NewRequestScreen() {
       : format(new Date(watchedStartDate), 'MMMM d, yyyy')
     : 'No dates selected';
 
-  // ─── Web Layout ───────────────────────────────────────────────────
-  if (isWeb) {
+  // ─── Web Layout (desktop only, ≥1200px) ───────────────────────────
+  // Below 1200px we fall through to the single-column mobile layout,
+  // whose tappable DatePicker/TimePicker actually render — the two-
+  // column web layout hides the calendar in an off-screen right column
+  // on narrow screens (dates could not be picked on a phone browser).
+  if (isWeb && !isMobile) {
     const t = tk(isDark);
 
     return (

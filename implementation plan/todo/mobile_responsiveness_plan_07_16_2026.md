@@ -23,6 +23,39 @@ Wrap the old code — never delete or restyle it. Desktop must look identical af
 - **Dialogs:** `fullScreen={isMobile}` on every MUI `<Dialog>`.
 - **Single source of truth for the cutoff:** `hooks/use-breakpoint.ts`.
 
+## Key technique — "dual-layout gating" (cheapest win)
+Many pages already have BOTH a desktop web layout AND a separate mobile
+layout, written as:
+```ts
+if (isWeb) { return <DesktopWebLayout/> }   // <-- catches ALL web widths
+return <MobileLayout/>                        // native only today
+```
+On a phone browser `isWeb` is true, so the **desktop** layout renders on
+mobile — often hiding inputs (e.g. the calendar sat in an off-screen right
+column, so dates could not be picked). Fix = gate the web block behind the
+breakpoint so mobile web reuses the existing, already-working mobile layout:
+```ts
+if (isWeb && !isMobile) { return <DesktopWebLayout/> }   // ≥1200px only
+return <MobileLayout/>                                     // mobile web + native
+```
+This is often a ~3-line change (import `useBreakpoint`, add `!isMobile`) and
+needs **no** new UI — the mobile layout is RN-based and renders on web via
+react-native-web. **Prefer this** wherever a usable mobile layout already
+exists; only build card conversions where a page is web-only.
+
+**Audit (pages with `if (isWeb)` — confirm each has a working mobile layout, then gate behind `!isMobile`; ⚠️ some use `isWeb` only to lazy-load MUI, NOT a full dual-layout — do NOT blindly gate those):**
+- [x] `requests/new.tsx` — date + time picker now reachable on mobile web (07/16/2026)
+- [ ] `(tabs)/dashboard.tsx`  - [ ] `(tabs)/requests.tsx`  - [ ] `(tabs)/tasks.tsx`  - [ ] `(tabs)/team.tsx`
+- [ ] `(tabs)/timeclock.tsx`  - [ ] `(tabs)/timesheet-entry.tsx`  - [ ] `(tabs)/calendar.tsx`  - [ ] `(tabs)/profile.tsx`
+- [ ] `(tabs)/admin.tsx`  - [ ] `(tabs)/timesheet-management.tsx`
+- [ ] all `admin/*` and `timesheet/*` list pages  - [ ] `(auth)/registration-form.tsx`  - [ ] `(auth)/sign-up.tsx`
+
+## Every page must pass "input reachability" on mobile
+For each page below, after layout work, verify at 390px width that EVERY
+input is visible and usable — **date pickers, time pickers**, dropdowns,
+toggles, file upload, and submit/cancel buttons. A hidden/off-screen input
+is a blocker (this was the `requests/new.tsx` symptom).
+
 ## Project gotchas (must respect)
 - This layout code also runs on **native** → import MUI only via web-only `require()` (never top-level `import`).
 - Project has **no `SafeAreaProvider`** → use `SafeAreaView`, **not** the `useSafeAreaInsets` hook (it throws without a provider).
@@ -54,6 +87,7 @@ Wrap the old code — never delete or restyle it. Desktop must look identical af
 ## Phase 2 — Tab screens (per page)
 Each page: keep the current web layout at ≥1200px; stack/convert below 1200px.
 
+- [x] **requests/new.tsx** (Request Time Off form) — gated web layout behind `!isMobile`; date + time pickers now reachable on mobile web (07/16/2026)
 - [ ] **dashboard.tsx** — card grid `maxWidth:1400` → single column <1200px; task DataGrid → `ResponsiveTable`
 - [ ] **admin.tsx** (the screenshot page) — `maxWidth:960` card grid → 1 col <1200px (mostly fixed by Phase 0)
 - [ ] **requests.tsx** — DataGrid → `ResponsiveTable`
@@ -106,6 +140,7 @@ Each page: keep the current web layout at ≥1200px; stack/convert below 1200px.
 - [ ] `npx tsc --noEmit` — no **new** errors in touched files
 - [ ] `npx expo export --platform web` — exit 0
 - [ ] Device toolbar (iPhone XR / 390px) — nav works, no horizontal scroll
+- [ ] **Input reachability** — every date/time picker, dropdown, toggle, upload & button visible + usable at 390px
 - [ ] Window ≥1200px — desktop layout unchanged
 
 ## Notes / log
