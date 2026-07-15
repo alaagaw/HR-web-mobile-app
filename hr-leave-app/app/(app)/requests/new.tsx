@@ -164,6 +164,14 @@ export default function NewRequestScreen() {
   const emergencyBlocked = isEmergency && emergencyTier === EmergencyTier.Blocked;
   const showAdvanceNotice = watchedStartDate && !meetsAdvanceNotice(watchedStartDate) && !isEmergency;
 
+  // On web a modal route loaded/refreshed directly has no history, so
+  // router.back() is a no-op (the Back arrow and Cancel would do nothing).
+  // Fall back to the requests list in that case.
+  const goBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(app)/(tabs)/requests' as any);
+  };
+
   const onSubmit = async (data: LeaveRequestFormData) => {
     if (!user) return;
     if (emergencyBlocked) return;
@@ -226,7 +234,7 @@ export default function NewRequestScreen() {
           }}
         >
           <div
-            onClick={() => router.back()}
+            onClick={goBack}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -488,7 +496,7 @@ export default function NewRequestScreen() {
                 <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
                   <button
                     type="button"
-                    onClick={() => router.back()}
+                    onClick={goBack}
                     style={{
                       flex: 1,
                       padding: '10px 20px',
@@ -673,7 +681,7 @@ export default function NewRequestScreen() {
   // ─── Mobile Layout (unchanged) ────────────────────────────────────
   return (
     <SafeAreaView className="flex-1 bg-background dark:bg-slate-900" edges={['top']}>
-      <ScreenHeader title="Request Time Off" />
+      <ScreenHeader title="Request Time Off" onBack={goBack} />
 
       <ScrollView className="flex-1 px-4" keyboardShouldPersistTaps="handled">
         <View className="py-4">
@@ -836,7 +844,7 @@ export default function NewRequestScreen() {
 
           <View className="flex-row gap-3 mt-4 mb-8">
             <View className="flex-1">
-              <Button variant="secondary" onPress={() => router.back()} fullWidth>
+              <Button variant="secondary" onPress={goBack} fullWidth>
                 Cancel
               </Button>
             </View>
