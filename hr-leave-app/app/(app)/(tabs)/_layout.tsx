@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, Pressable, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Tabs, useRouter, usePathname } from 'expo-router';
 import {
   LayoutDashboard,
@@ -14,11 +15,13 @@ import {
   ClipboardList,
   Library,
   Briefcase,
+  Menu,
 } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
 import { useAuth } from '@/hooks/use-auth';
 import { useBalance } from '@/hooks/use-balance';
 import { useAccess } from '@/hooks/use-access';
+import { useBreakpoint } from '@/hooks/use-breakpoint';
 import { NotificationBell } from '@/components/layout/notification-bell';
 import { useNotificationStore } from '@/stores/notification-store';
 import { useTaskStore } from '@/stores/task-store';
@@ -26,6 +29,30 @@ import { notificationService, leaveApprovalService } from '@/services';
 import { formatHours } from '@/lib/utils';
 
 const isWeb = Platform.OS === 'web';
+
+// Lazy-load MUI (web-only) — this layout also runs on native, where
+// importing @mui would crash the bundle. Matches the require-guard
+// pattern used across the screen files (see dashboard.tsx).
+let MuiDrawer: any;
+if (isWeb) {
+  MuiDrawer = require('@mui/material/Drawer').default;
+}
+
+// Real tab screens eligible for the mobile bottom bar, in priority
+// order. We render the first 5 the current user can access; every
+// nav item (including these) is always reachable via the Drawer, so
+// the bottom bar is purely quick-access and nothing is ever lost.
+const PRIMARY_TAB_ORDER = [
+  'dashboard',
+  'requests',
+  'tasks',
+  'timeclock',
+  'timesheet-entry',
+  'team',
+  'calendar',
+  'profile',
+  'timesheet-management',
+] as const;
 
 // Visibility is governed by access_policies (key `nav:<name>`),
 // resolved via useAccess(). See lib/access/resources.ts for the
@@ -46,7 +73,7 @@ const NAV_ITEMS = [
   { name: 'profile', title: 'Profile', Icon: User },
 ] as const;
 
-function WebSidebar({ user, canAccess, isDark, pendingCount, unreadCount }: { user: any; canAccess: (key: string) => boolean; isDark: boolean; pendingCount: number; unreadCount: number }) {
+function WebSidebar({ user, canAccess, isDark, pendingCount, unreadCount, onNavigate }: { user: any; canAccess: (key: string) => boolean; isDark: boolean; pendingCount: number; unreadCount: number; onNavigate?: () => void }) {
   const router = useRouter();
   const pathname = usePathname();
   const { balances, fetchBalance } = useBalance();
@@ -135,7 +162,10 @@ function WebSidebar({ user, canAccess, isDark, pendingCount, unreadCount }: { us
         return (
           <Pressable
             key={item.name}
-            onPress={() => router.push(('route' in item && item.route ? item.route : `/(app)/(tabs)/${item.name}`) as any)}
+            onPress={() => {
+              router.push(('route' in item && item.route ? item.route : `/(app)/(tabs)/${item.name}`) as any);
+              onNavigate?.();
+            }}
             style={({ pressed }: { pressed: boolean }) => ({
               flexDirection: 'row',
               alignItems: 'center',
@@ -205,6 +235,104 @@ function WebSidebar({ user, canAccess, isDark, pendingCount, unreadCount }: { us
   );
 }
 
+// ── Mobile-web chrome (only rendered below 1200px on web) ──────────
+// Replaces the expo-router header. Shows the hamburger (opens the
+// Drawer with the full nav), the active screen title, and the bell.
+function MobileTopBar({ isDark, onMenu, onBell }: { isDark: boolean; onMenu: () => void; onBell: () => void }) {
+  const pathname = usePathname();
+  const title = NAV_ITEMS.find((item) => pathname.includes(`/${item.name}`))?.title ?? 'HR';
+
+  return (
+    <SafeAreaView
+      edges={['top']}
+      style={{
+        backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
+        borderBottomWidth: 1,
+        borderBottomColor: isDark ? '#334155' : '#E2E8F0',
+      }}
+    >
+      <View style={{ height: 56, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8 }}>
+        <Pressable
+          onPress={onMenu}
+          accessibilityLabel="Open menu"
+          hitSlop={8}
+          style={{ padding: 8, borderRadius: 8, cursor: 'pointer' } as any}
+        >
+          <Menu size={24} color={isDark ? '#E2E8F0' : '#0F172A'} />
+        </Pressable>
+        <Text
+          numberOfLines={1}
+          style={{ flex: 1, marginLeft: 4, fontSize: 17, fontWeight: '600', color: isDark ? '#FFFFFF' : '#0F172A' }}
+        >
+          {title}
+        </Text>
+        <NotificationBell onPress={onBell} />
+      </View>
+    </SafeAreaView>
+  );
+}
+
+// Bottom quick-access bar: first 5 accessible primary tabs.
+function MobileBottomBar({ canAccess, isDark, pendingCount }: { canAccess: (key: string) => boolean; isDark: boolean; pendingCount: number }) {
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const items = PRIMARY_TAB_ORDER
+    .filter((name) => canAccess(`nav:${name}`))
+    .slice(0, 5)
+    .map((name) => NAV_ITEMS.find((n) => n.name === name)!)
+    .filter(Boolean);
+
+  return (
+    <SafeAreaView
+      edges={['bottom']}
+      style={{
+        flexDirection: 'row',
+        backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
+        borderTopWidth: 1,
+        borderTopColor: isDark ? '#334155' : '#E2E8F0',
+      }}
+    >
+      {items.map((item) => {
+        const isActive = pathname.includes(`/${item.name}`);
+        const color = isActive ? '#2563EB' : isDark ? '#94A3B8' : '#64748B';
+        return (
+          <Pressable
+            key={item.name}
+            onPress={() => router.push(`/(app)/(tabs)/${item.name}` as any)}
+            style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, gap: 2, cursor: 'pointer' } as any}
+          >
+            <View>
+              <item.Icon size={22} color={color} />
+              {item.name === 'tasks' && pendingCount > 0 && (
+                <View
+                  style={{
+                    position: 'absolute',
+                    top: -4,
+                    right: -8,
+                    backgroundColor: '#DC2626',
+                    borderRadius: 8,
+                    minWidth: 16,
+                    height: 16,
+                    paddingHorizontal: 4,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '700', lineHeight: 16 }}>{pendingCount}</Text>
+                </View>
+              )}
+            </View>
+            <Text numberOfLines={1} style={{ fontSize: 10, fontWeight: isActive ? '700' : '500', color }}>
+              {item.title}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </SafeAreaView>
+  );
+}
+
 export default function TabLayout() {
   const router = useRouter();
   const { user } = useAuth();
@@ -229,10 +357,21 @@ export default function TabLayout() {
   // approver/HR behavior — so there is no regression or flash.
   const { canAccess } = useAccess();
 
+  // Below 1200px on web we render the mobile "app-like" chrome
+  // (top bar + Drawer + bottom bar). At/above 1200px, and on native,
+  // NOTHING here changes — the original layouts render verbatim.
+  const { isMobile } = useBreakpoint();
+  const isMobileWeb = isWeb && isMobile;
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
   const tabs = (
     <Tabs
-      tabBar={isWeb ? () => null : undefined}
+      tabBar={isWeb ? (isMobile ? () => <MobileBottomBar canAccess={canAccess} isDark={isDark} pendingCount={pendingCount} /> : () => null) : undefined}
       screenOptions={{
+        // On mobile web the MobileTopBar replaces the router header
+        // for every screen. `undefined` leaves desktop/native behavior
+        // exactly as it was (per-screen options still win).
+        headerShown: isMobileWeb ? false : undefined,
         tabBarActiveTintColor: '#2563EB',
         tabBarInactiveTintColor: isDark ? '#64748B' : '#94A3B8',
         tabBarStyle: isWeb
@@ -347,6 +486,36 @@ export default function TabLayout() {
     </Tabs>
   );
 
+  // ── Mobile web (< 1200px): top bar + slide-in Drawer + bottom bar ──
+  if (isMobileWeb) {
+    return (
+      <View style={{ flex: 1 }}>
+        <MobileTopBar
+          isDark={isDark}
+          onMenu={() => setDrawerOpen(true)}
+          onBell={() => router.push('/(app)/notifications' as any)}
+        />
+        <View style={{ flex: 1 }}>{tabs}</View>
+        <MuiDrawer
+          anchor="left"
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          PaperProps={{ sx: { backgroundColor: isDark ? '#0F172A' : '#FFFFFF', backgroundImage: 'none' } }}
+        >
+          <WebSidebar
+            user={user}
+            canAccess={canAccess}
+            isDark={isDark}
+            pendingCount={pendingCount}
+            unreadCount={unreadCount}
+            onNavigate={() => setDrawerOpen(false)}
+          />
+        </MuiDrawer>
+      </View>
+    );
+  }
+
+  // ── Desktop web (≥ 1200px): the original fixed-sidebar layout ──────
   if (isWeb) {
     return (
       <View style={{ flexDirection: 'row', flex: 1 }}>
