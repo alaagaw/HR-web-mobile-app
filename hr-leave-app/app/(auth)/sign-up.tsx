@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Banner } from '@/components/ui/banner';
 import { useAuth } from '@/hooks/use-auth';
+import { useBreakpoint } from '@/hooks/use-breakpoint';
 import { signUpSchema, type SignUpFormData } from '@/lib/validators';
 
 const isWeb = Platform.OS === 'web';
@@ -527,6 +528,7 @@ function WebSignUp({
 export default function SignUpScreen() {
   const { signUp } = useAuth();
   const router = useRouter();
+  const { isMobile } = useBreakpoint();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
@@ -559,7 +561,7 @@ export default function SignUpScreen() {
 
   // ─── Web ──────────────────────────────────────────────────
 
-  if (isWeb) {
+  if (isWeb && !isMobile) {
     if (emailSent) return <WebEmailSent onSignIn={goToSignIn} />;
     return (
       <WebSignUp

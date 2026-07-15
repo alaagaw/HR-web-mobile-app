@@ -3,6 +3,7 @@ import { View, Text, ScrollView, Pressable, Platform, Modal, TextInput, Alert, K
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
+import { useBreakpoint } from '@/hooks/use-breakpoint';
 import {
   Mail,
   Phone,
@@ -643,6 +644,7 @@ export default function ProfileScreen() {
   const setUser = require('@/stores/auth-store').useAuthStore.getState().setUser;
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { isMobile } = useBreakpoint();
   const { balances, emergencyCount, fetchBalance, fetchEmergencyCount } = useBalance();
   const { theme, setTheme } = useThemeStore();
   const [editOpen, setEditOpen] = useState(false);
@@ -712,7 +714,7 @@ export default function ProfileScreen() {
 
   // ─── Web Layout ──────────────────────────────────────────────────
 
-  if (isWeb) {
+  if (isWeb && !isMobile) {
     return (
       <div
         style={{

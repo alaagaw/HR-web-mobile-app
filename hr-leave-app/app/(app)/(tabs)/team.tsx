@@ -3,6 +3,7 @@ import { View, Text, FlatList, Platform } from 'react-native';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { useViewState } from '@/hooks/use-view-state';
 import { useColorScheme } from 'nativewind';
+import { useBreakpoint } from '@/hooks/use-breakpoint';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -119,6 +120,7 @@ export default function TeamScreen() {
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { isMobile } = useBreakpoint();
   const [teamRequests, setTeamRequests] = useState<LeaveRequest[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -137,7 +139,7 @@ export default function TeamScreen() {
 
   return (
     <View className="flex-1 bg-background dark:bg-slate-900">
-      {isWeb ? (
+      {isWeb && !isMobile ? (
         <View style={{ flex: 1, padding: 16 }}>
           {teamRequests.length > 0 || loading ? (
             <View style={{ flex: 1, borderRadius: 12, overflow: 'hidden' }}>

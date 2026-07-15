@@ -43,12 +43,26 @@ needs **no** new UI — the mobile layout is RN-based and renders on web via
 react-native-web. **Prefer this** wherever a usable mobile layout already
 exists; only build card conversions where a page is web-only.
 
-**Audit (pages with `if (isWeb)` — confirm each has a working mobile layout, then gate behind `!isMobile`; ⚠️ some use `isWeb` only to lazy-load MUI, NOT a full dual-layout — do NOT blindly gate those):**
-- [x] `requests/new.tsx` — date + time picker now reachable on mobile web (07/16/2026)
-- [ ] `(tabs)/dashboard.tsx`  - [ ] `(tabs)/requests.tsx`  - [ ] `(tabs)/tasks.tsx`  - [ ] `(tabs)/team.tsx`
-- [ ] `(tabs)/timeclock.tsx`  - [ ] `(tabs)/timesheet-entry.tsx`  - [ ] `(tabs)/calendar.tsx`  - [ ] `(tabs)/profile.tsx`
-- [ ] `(tabs)/admin.tsx`  - [ ] `(tabs)/timesheet-management.tsx`
-- [ ] all `admin/*` and `timesheet/*` list pages  - [ ] `(auth)/registration-form.tsx`  - [ ] `(auth)/sign-up.tsx`
+**Audit result (all 30 `if (isWeb)` pages classified 07/16/2026):**
+
+*Category A/B — GATED behind `!isMobile` (mobile web now uses the existing mobile layout):*
+- [x] `requests/new.tsx` — date + time picker reachable on mobile web
+- [x] `(tabs)/dashboard.tsx`  - [x] `(tabs)/profile.tsx`  - [x] `(tabs)/calendar.tsx`  - [x] `(tabs)/admin.tsx`  - [x] `(tabs)/timesheet-management.tsx`
+- [x] `(tabs)/requests.tsx`  - [x] `(tabs)/tasks.tsx`  - [x] `(tabs)/team.tsx` (inline `isWeb ?` ternary gated)
+- [x] `(auth)/sign-up.tsx`
+- [x] `admin/user-activity.tsx`  - [x] `admin/balance-ledger.tsx`  - [x] `admin/request-history.tsx`  - [x] `admin/renewal-history.tsx`  - [x] `admin/balances.tsx`
+
+*Already responsive (width-gated ≥1280/1366 — mobile web already gets mobile layout; SKIP, but consider normalizing breakpoint to 1200):*
+- `(tabs)/timeclock.tsx` (≥1366)  - `(tabs)/timesheet-entry.tsx` (≥1280, mobile is read-only)  - `admin/document-expiry.tsx`  - `timesheet/suppliers.tsx`  - `timesheet/projects.tsx`  - `timesheet/timesheet-assignments.tsx`
+
+*Category A but VIEW-ONLY mobile (data shows, but no CRUD actions on mobile) — needs user decision:*
+- [ ] `admin/employees.tsx` (search+list, no add/edit dialogs on mobile)
+- [ ] `admin/registrations.tsx` (list, no review/approve on mobile)
+
+*Category C — mobile fallback is a stub / desktop-redirect (NOT gated; need real mobile UI):*
+- [ ] `admin/compensation.tsx`  - [ ] `admin/leave-payouts.tsx`  - [ ] `admin/hr-policies-documents.tsx` (also currently `if(!isWeb)` → mobile web gets full desktop)
+- [ ] `timesheet/month-closures.tsx`  - [ ] `timesheet/project-hours-requests.tsx`  - [ ] `timesheet/employee-project-breakdown.tsx`  - [ ] `timesheet/timesheets.tsx`
+- [ ] `(auth)/registration-form.tsx` (single shared render; `isWeb` only for styling — needs responsive form work, not gating)
 
 ## Every page must pass "input reachability" on mobile
 For each page below, after layout work, verify at 390px width that EVERY

@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { useViewState } from '@/hooks/use-view-state';
 import { useColorScheme } from 'nativewind';
+import { useBreakpoint } from '@/hooks/use-breakpoint';
 import { ScreenHeader } from '@/components/layout/screen-header';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -56,6 +57,7 @@ function UserActivityScreenInner() {
   const router = useRouter();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { isMobile } = useBreakpoint();
 
   const [rows, setRows] = useState<UserActivityRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -117,7 +119,7 @@ function UserActivityScreenInner() {
 
   // ── Web Layout ──────────────────────────────────────────────
 
-  if (isWeb) {
+  if (isWeb && !isMobile) {
     const inputStyle = {
       width: '100%',
       padding: '5px 8px',

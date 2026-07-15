@@ -3,6 +3,7 @@ import { View, Text, ScrollView, Pressable, Platform, Alert } from 'react-native
 import { useRouter } from 'expo-router';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { useColorScheme } from 'nativewind';
+import { useBreakpoint } from '@/hooks/use-breakpoint';
 import {
   Clock,
   CalendarDays,
@@ -818,6 +819,7 @@ export default function DashboardScreen() {
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { isMobile } = useBreakpoint();
   const { balances, emergencyCount, fetchBalance, fetchEmergencyCount } = useBalance();
 
   // Overtime balance for the current calendar month. Reads
@@ -943,7 +945,7 @@ export default function DashboardScreen() {
 
   // ─── Web Layout ──────────────────────────────────────────────────
 
-  if (isWeb) {
+  if (isWeb && !isMobile) {
     const tk = t(isDark);
 
     const headerChips: { icon: any; label: string; value: string | number; color: string; textColor: string; bg: string }[] = [

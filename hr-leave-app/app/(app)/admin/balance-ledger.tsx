@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { useViewState } from '@/hooks/use-view-state';
 import { useColorScheme } from 'nativewind';
+import { useBreakpoint } from '@/hooks/use-breakpoint';
 import { ScreenHeader } from '@/components/layout/screen-header';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -326,6 +327,7 @@ function BalanceLedgerScreenInner() {
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { isMobile } = useBreakpoint();
   const [entries, setEntries] = useState<LedgerEntryWithDetails[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -342,7 +344,7 @@ function BalanceLedgerScreenInner() {
   useAutoRefresh(() => { loadData(); }, []);
 
   // --------------- Web render ---------------
-  if (isWeb) {
+  if (isWeb && !isMobile) {
     return (
       <View style={{ flex: 1, backgroundColor: isDark ? '#0F172A' : '#F8FAFC' }}>
         {/* Page header with back button */}

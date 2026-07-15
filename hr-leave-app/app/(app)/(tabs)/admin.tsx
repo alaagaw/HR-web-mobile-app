@@ -1,6 +1,7 @@
 import { View, Text, ScrollView, Pressable, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useColorScheme } from 'nativewind';
+import { useBreakpoint } from '@/hooks/use-breakpoint';
 import {
   Users,
   Wallet,
@@ -259,6 +260,7 @@ export default function AdminScreen() {
   const router = useRouter();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { isMobile } = useBreakpoint();
 
   const { canAccess } = useAccess();
   const handleNavigate = (path: string) => router.push(path as any);
@@ -276,7 +278,7 @@ export default function AdminScreen() {
 
   // ─── Web Layout ──────────────────────────────────────────────────
 
-  if (isWeb) {
+  if (isWeb && !isMobile) {
     return (
       <div
         style={{

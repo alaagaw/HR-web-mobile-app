@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { useViewState } from '@/hooks/use-view-state';
 import { useColorScheme } from 'nativewind';
+import { useBreakpoint } from '@/hooks/use-breakpoint';
 import { RequestCard } from '@/components/leave/request-card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useAuth } from '@/hooks/use-auth';
@@ -598,6 +599,7 @@ export default function TasksScreen() {
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { isMobile } = useBreakpoint();
   const {
     pendingApprovals,
     chainRequests,
@@ -734,7 +736,7 @@ export default function TasksScreen() {
       {/* Tab content — dispatch on the canonical TABS index */}
       {tabIndex <= 1 ? (
         /* Tab 0 & 1: Leave Requests */
-        isWeb ? (
+        isWeb && !isMobile ? (
           <View style={{ flex: 1, padding: 16, paddingTop: 8 }}>
             {getLeaveData().length > 0 || getIsLoading() ? (
               <View style={{ flex: 1, borderRadius: 12, overflow: 'hidden' }}>
@@ -830,7 +832,7 @@ export default function TasksScreen() {
         </View>
       ) : (
         /* Tab 2: Document Renewals */
-        isWeb ? (
+        isWeb && !isMobile ? (
           <View style={{ flex: 1, padding: 16, paddingTop: 8 }}>
             {renewalTasks.length > 0 || renewalLoading ? (
               <View style={{ flex: 1, borderRadius: 12, overflow: 'hidden' }}>

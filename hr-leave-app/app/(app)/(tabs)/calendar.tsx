@@ -3,6 +3,7 @@ import { View, Text, ScrollView, Pressable, Platform } from 'react-native';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { useViewState } from '@/hooks/use-view-state';
 import { useColorScheme } from 'nativewind';
+import { useBreakpoint } from '@/hooks/use-breakpoint';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/layout/screen-header';
 import { Card } from '@/components/ui/card';
@@ -969,6 +970,7 @@ export default function CalendarScreen() {
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { isMobile } = useBreakpoint();
 
   const [viewMode, setViewMode] = useViewState<ViewMode>('tabs/calendar.viewMode', 'month');
   const [currentDateIso, setCurrentDateIso] = useViewState(
@@ -1047,7 +1049,7 @@ export default function CalendarScreen() {
   };
 
   // ============ WEB RENDER ============
-  if (isWeb) {
+  if (isWeb && !isMobile) {
     return (
       <View style={{ flex: 1, backgroundColor: isDark ? '#0F172A' : '#F8FAFC' }}>
         <View style={{ flex: 1, padding: 16, display: 'flex' as any, flexDirection: 'column' as any }}>

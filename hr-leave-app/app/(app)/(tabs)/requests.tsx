@@ -5,6 +5,7 @@ import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { useViewState } from '@/hooks/use-view-state';
 import { Plus } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
+import { useBreakpoint } from '@/hooks/use-breakpoint';
 import { RequestCard } from '@/components/leave/request-card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useAuth } from '@/hooks/use-auth';
@@ -192,6 +193,7 @@ export default function RequestsScreen() {
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { isMobile } = useBreakpoint();
   const { requests, loading, fetchMyRequests } = useLeaveRequest();
   useAutoRefresh(() => {
     if (!user) return;
@@ -204,8 +206,8 @@ export default function RequestsScreen() {
 
   return (
     <View className="flex-1 bg-background dark:bg-slate-900">
-      {/* Web: DataGrid / Mobile: Card list */}
-      {isWeb ? (
+      {/* Web (>=1200px): DataGrid / Mobile: Card list */}
+      {isWeb && !isMobile ? (
         <View style={{ flex: 1, padding: 16 }}>
           {requests.length > 0 || loading ? (
             <View style={{ flex: 1, borderRadius: 12, overflow: 'hidden' }}>

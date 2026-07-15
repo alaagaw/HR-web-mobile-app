@@ -1,6 +1,7 @@
 import { View, Text, ScrollView, Pressable, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useColorScheme } from 'nativewind';
+import { useBreakpoint } from '@/hooks/use-breakpoint';
 import {
   Briefcase,
   FolderOpen,
@@ -35,10 +36,11 @@ function TimesheetManagementInner() {
   const router = useRouter();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { isMobile } = useBreakpoint();
   const go = (path: string) => router.push(path as any);
 
   // ─── Web (mirrors HR Admin: header + 2-col card grid) ──────────
-  if (isWeb) {
+  if (isWeb && !isMobile) {
     return (
       <div
         style={{
