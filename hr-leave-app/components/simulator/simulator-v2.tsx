@@ -19,6 +19,8 @@ import { View, Text, TextInput, Pressable, Platform } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { useBreakpoint } from '@/hooks/use-breakpoint';
 import { Button } from '@/components/ui/button';
+import { userService, compensationService } from '@/services';
+import type { EmployeeCompensation } from '@/types/models';
 import { getSimPalette, type SimPalette } from './palette';
 import { SimPanel } from './sim-panel';
 import { SimSlider } from './sim-slider';
@@ -253,6 +255,74 @@ export function SimulatorV2() {
     downloadFile(JSON.stringify(tpl, null, 2), 'saudization.template.json', 'application/json');
   };
 
+  // ── Load from database (roster + live compliance counts) ──
+  // README §4.4: pull the roster live from HR records. Salary is
+  // Basic + HRA from current compensation — the HRDF base per the
+  // program (Basic + Housing only). Works on web AND native
+  // (supabase client), unlike the file import which is web-gated.
+
+  const [dbOpen, setDbOpen] = useState(false);
+  const [dbLoading, setDbLoading] = useState(false);
+  const [dbSearch, setDbSearch] = useState('');
+  const [dbSaudisOnly, setDbSaudisOnly] = useState(false);
+  const [dbMsg, setDbMsg] = useState<string | null>(null);
+  const [ratioLoading, setRatioLoading] = useState(false);
+
+  const loadRosterFromDb = async () => {
+    setDbLoading(true);
+    setDbMsg(null);
+    try {
+      const [emps, comps] = await Promise.all([
+        userService.getEmployees({ is_active: true }),
+        compensationService.listCurrentForAll(),
+      ]);
+      const compByEmp = new Map<string, EmployeeCompensation>();
+      for (const c of comps) compByEmp.set(c.employee_id, c);
+      const q = dbSearch.trim().toLowerCase();
+      const picked = emps.filter((e: any) => {
+        if (dbSaudisOnly && !/saudi/i.test(e.nationality || '')) return false;
+        if (!q) return true;
+        return [e.full_name, e.job_title, e.department, e.emp_code].some(
+          (v: any) => (v || '').toLowerCase().includes(q),
+        );
+      });
+      const rows: RosterRow[] = picked.map((e: any) => {
+        const c = compByEmp.get(e.id);
+        const base = (Number(c?.basic_salary) || 0) + (Number(c?.hra) || 0);
+        return {
+          id: uid(),
+          role: /eng/i.test(e.job_title || '') ? 'Engineer' : 'Technician',
+          name: e.full_name,
+          salary: Math.round(base),
+          startMonth: 1,
+        };
+      });
+      const missingComp = rows.filter((r) => r.salary === 0).length;
+      setRoster(rows);
+      setDbMsg(
+        `Loaded ${rows.length} employee${rows.length === 1 ? '' : 's'} (salary = Basic + HRA)` +
+          (missingComp ? ` — ${missingComp} without compensation loaded at 0; edit or remove them.` : '.'),
+      );
+    } catch (err: any) {
+      setDbMsg(err?.message || 'Failed to load from database');
+    } finally {
+      setDbLoading(false);
+    }
+  };
+
+  const loadRatioFromDb = async () => {
+    setRatioLoading(true);
+    try {
+      const emps = await userService.getEmployees({ is_active: true });
+      const saudis = emps.filter((e: any) => /saudi/i.test(e.nationality || '')).length;
+      setP((pp) => ({ ...pp, curSaudi: saudis, totScope: emps.length }));
+    } catch {
+      // keep the manual values on failure
+    } finally {
+      setRatioLoading(false);
+    }
+  };
+
   // ── Derived display values ────────────────────────────────
 
   const netSign = m.netActive >= 0;
@@ -465,6 +535,7 @@ export function SimulatorV2() {
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
         <PillBtn label="+ Tech" onPress={() => addEmp('Technician')} palette={palette} />
         <PillBtn label="+ Eng" onPress={() => addEmp('Engineer')} palette={palette} />
+        <PillBtn label={dbOpen ? 'Close DB load' : 'Load from DB'} onPress={() => setDbOpen((v) => !v)} palette={palette} />
         {isWeb && (
           <>
             <PillBtn label={importOpen ? 'Close import' : 'Import'} onPress={() => setImportOpen((v) => !v)} palette={palette} />
@@ -473,6 +544,63 @@ export function SimulatorV2() {
           </>
         )}
       </View>
+
+      {/* Load-from-DB panel */}
+      {dbOpen && (
+        <View
+          style={{
+            backgroundColor: palette.cardAlt,
+            borderWidth: 1,
+            borderColor: palette.border,
+            borderRadius: 10,
+            padding: 12,
+            marginBottom: 12,
+          }}
+        >
+          <Text style={{ fontSize: 11.5, color: palette.dim, marginBottom: 8 }}>
+            Seed the roster from live employees — salary is{' '}
+            <Text style={{ fontWeight: '600', color: palette.text }}>Basic + HRA</Text> from current
+            compensation (the HRDF base). Replaces the current roster; start months default to 1.
+          </Text>
+          <TextInput
+            value={dbSearch}
+            onChangeText={setDbSearch}
+            placeholder="Filter by name, job title, department…"
+            placeholderTextColor={palette.mute}
+            style={{
+              backgroundColor: palette.card,
+              borderWidth: 1,
+              borderColor: palette.border,
+              borderRadius: 8,
+              padding: 9,
+              fontSize: 12.5,
+              color: palette.text,
+              marginBottom: 8,
+            }}
+          />
+          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+            <Pressable onPress={() => setDbSaudisOnly((v) => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View
+                style={{
+                  width: 16,
+                  height: 16,
+                  borderRadius: 4,
+                  borderWidth: 1,
+                  borderColor: dbSaudisOnly ? palette.blue : palette.borderStrong,
+                  backgroundColor: dbSaudisOnly ? palette.blue : 'transparent',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {dbSaudisOnly && <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '700' }}>✓</Text>}
+              </View>
+              <Text style={{ fontSize: 12, color: palette.dim }}>Saudi nationals only</Text>
+            </Pressable>
+            <PillBtn label={dbLoading ? 'Loading…' : 'Load employees'} onPress={loadRosterFromDb} palette={palette} solid />
+          </View>
+          {dbMsg && <Text style={{ fontSize: 11.5, color: palette.dim, marginTop: 8 }}>{dbMsg}</Text>}
+        </View>
+      )}
 
       {/* Import panel (web) */}
       {isWeb && importOpen && (
@@ -675,6 +803,13 @@ export function SimulatorV2() {
           <NumField label="Total in category" value={p.totScope} onChange={(v) => setParam('totScope', Math.max(1, v))} palette={palette} />
         </View>
       </View>
+      <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 4 }}>
+        <PillBtn
+          label={ratioLoading ? 'Loading…' : 'Use live counts (all active)'}
+          onPress={loadRatioFromDb}
+          palette={palette}
+        />
+      </View>
       <RatioBar projected={projRatio} target={p.target} meets={meets} palette={palette} />
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
         <Text style={{ fontSize: 11.5, color: palette.mute }}>
@@ -691,8 +826,10 @@ export function SimulatorV2() {
         </Text>
       </View>
       <NoteBox palette={palette}>
-        <Text style={{ fontWeight: '600', color: palette.dim }}>Example figures.</Text> Replace with live
-        Qiwa values for your Technician-category ratio.
+        <Text style={{ fontWeight: '600', color: palette.dim }}>Note:</Text> "Use live counts" pulls
+        ALL active employees from the app (company-wide, {'“'}Saudi{'”'} nationality) — a starting
+        point, not the official Qiwa category ratio. For the Technician-category calculation,
+        enter the Qiwa figures manually.
       </NoteBox>
     </SimPanel>
   );
