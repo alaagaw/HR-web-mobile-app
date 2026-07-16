@@ -90,6 +90,15 @@ data but was missing web ACTIONS. Fixed:
 **Theme consistency fixes (07/16/2026):**
 - [x] Review Registration dialog was light on dark mobile — was mounted without `MuiThemeProvider`; wrapped it (MUI theme flows through the Dialog portal via context). Verified every other mobile MUI dialog I added IS wrapped.
 - [x] `(auth)/registration-form.tsx` — labels used `isWeb ? light : dark` (invisible on web light mode); flipped 5 color ternaries to `isDark`. Width was already responsive.
+- [x] **App-wide theme audit (exhaustive)**: every MUI Dialog/Snackbar/Menu render site confirmed inside a `MuiThemeProvider` (0 unwrapped); 0 `isWeb ?` color ternaries left. 3 hardcoded-color bugs found & fixed:
+  - notification-bell: `#0F172A` icon invisible on dark header (every screen) → theme-aware
+  - project-hours-requests: desktop chrome always dark → `isDark`-aware
+  - month-closures: shell/cards/text always dark → `isDark`-aware
+  (Auth sign-in/sign-up are intentionally always-dark and internally consistent — left as designed.)
+
+**timesheet-entry FULL parity (07/16/2026):**
+- [x] Core: per-day editable inputs + Save + Submit for Approval (draft/rejected editable only)
+- [x] Extras: Copy Last Week, Auto-fill (fill-all-weekdays), Export CSV, inline Add Employee (search+add), Request Hours Change (HR/HRD/Manager: scope + hrs + reason)
 
 ### Status 07/16/2026: mobile-responsiveness initiative essentially COMPLETE.
 Only `registration-form.tsx` responsive polish remains (public sign-up form,
