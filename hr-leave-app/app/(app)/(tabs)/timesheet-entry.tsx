@@ -2383,6 +2383,41 @@ function MobileTimesheetEntry({ isDark }: { isDark: boolean }) {
     setFeedback(`Added ${profile.full_name}`);
   }, [gridRows, weekDays]);
 
+  // ── Request Hours Change (HR/HRD/Manager: retroactive/forward) ──
+  const canRequestHoursChange = !!user && (user.role === Role.HR || user.role === Role.HRDirector || user.role === Role.Manager);
+  const [hcOpen, setHcOpen] = useState(false);
+  const [hcScope, setHcScope] = useState<ProjectHoursChangeScope>(ProjectHoursChangeScope.ThisWeek);
+  const [hcValue, setHcValue] = useState('');
+  const [hcReason, setHcReason] = useState('');
+  const [hcSubmitting, setHcSubmitting] = useState(false);
+
+  const openHoursChange = useCallback(() => {
+    if (!selectedProject) return;
+    setHcScope(ProjectHoursChangeScope.ThisWeek);
+    setHcValue(String(selectedProject.regular_hours_per_day));
+    setHcReason('');
+    setHcOpen(true);
+  }, [selectedProject]);
+
+  const submitHoursChange = useCallback(async () => {
+    if (!selectedProject || !user) return;
+    const requested = parseFloat(hcValue);
+    if (Number.isNaN(requested) || requested <= 0 || requested > 24) { setFeedback('Requested hours must be between 0.5 and 24'); return; }
+    const reason = hcReason.trim();
+    if (!reason) { setFeedback('Reason is required'); return; }
+    setHcSubmitting(true);
+    try {
+      await projectHoursChangeService.create(
+        { project_id: selectedProject.id, scope: hcScope, week_start: weekStartStr, current_value: selectedProject.regular_hours_per_day, requested_value: requested, reason },
+        user.id,
+        user.role,
+      );
+      setHcOpen(false);
+      setFeedback('Change request submitted');
+    } catch (err: any) { setFeedback(err?.message || 'Failed to submit request'); }
+    finally { setHcSubmitting(false); }
+  }, [selectedProject, user, hcScope, hcValue, hcReason, weekStartStr]);
+
   return (
     <SafeAreaView className="flex-1 bg-background dark:bg-[#0F172A]" edges={['top']}>
       <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
@@ -2543,6 +2578,67 @@ function MobileTimesheetEntry({ isDark }: { isDark: boolean }) {
                     {addSearch.trim().length >= 2 && addResults.length === 0 && (
                       <Text className="text-xs text-text-muted dark:text-slate-400 mt-2 text-center">No matches</Text>
                     )}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Request Hours Change (HR/HRD/Manager) */}
+            {canRequestHoursChange && selectedProject && (
+              <View className="mb-3">
+                {!hcOpen ? (
+                  <Pressable onPress={openHoursChange} className="flex-row items-center justify-center rounded-lg border border-border dark:border-slate-700 py-2.5 active:opacity-80">
+                    <Text className="text-xs font-semibold text-text-primary dark:text-white">Request Hours Change</Text>
+                  </Pressable>
+                ) : (
+                  <View className="p-3 rounded-xl border border-border dark:border-slate-700 bg-surface dark:bg-slate-800">
+                    <Text className="text-xs font-semibold text-text-muted dark:text-slate-400 mb-2">SCOPE</Text>
+                    <View className="flex-row flex-wrap gap-2 mb-3">
+                      {[
+                        { s: ProjectHoursChangeScope.ThisWeek, l: 'This week' },
+                        { s: ProjectHoursChangeScope.FromWeekForward, l: 'From week forward' },
+                        { s: ProjectHoursChangeScope.RetroactiveWeek, l: 'Retroactive' },
+                      ].map((o) => (
+                        <Pressable
+                          key={o.s}
+                          onPress={() => setHcScope(o.s)}
+                          style={{
+                            paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1,
+                            borderColor: hcScope === o.s ? '#2563EB' : (isDark ? '#334155' : '#E2E8F0'),
+                            backgroundColor: hcScope === o.s ? (isDark ? 'rgba(37,99,235,0.15)' : '#EFF6FF') : 'transparent',
+                          }}
+                        >
+                          <Text style={{ fontSize: 11, fontWeight: '600', color: hcScope === o.s ? '#2563EB' : (isDark ? '#94A3B8' : '#64748B') }}>{o.l}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                    <View className="flex-row items-center gap-2 mb-3">
+                      <Text className="text-xs text-text-muted dark:text-slate-400">Requested h/day</Text>
+                      <TextInput
+                        value={hcValue}
+                        onChangeText={setHcValue}
+                        keyboardType="numeric"
+                        className="border border-border dark:border-slate-700 rounded-lg px-3 py-1.5 text-sm text-text-primary dark:text-white bg-background dark:bg-slate-900 text-center"
+                        style={{ width: 64 }}
+                      />
+                    </View>
+                    <TextInput
+                      value={hcReason}
+                      onChangeText={setHcReason}
+                      placeholder="Reason…"
+                      placeholderTextColor="#94A3B8"
+                      multiline
+                      className="border border-border dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-text-primary dark:text-white bg-background dark:bg-slate-900 mb-3"
+                      style={{ minHeight: 60, textAlignVertical: 'top' }}
+                    />
+                    <View className="flex-row gap-2">
+                      <Pressable onPress={() => setHcOpen(false)} className="flex-1 items-center py-2.5 rounded-lg border border-border dark:border-slate-700 active:opacity-80">
+                        <Text className="text-xs font-semibold text-text-primary dark:text-white">Cancel</Text>
+                      </Pressable>
+                      <Pressable onPress={submitHoursChange} disabled={hcSubmitting} className="flex-1 items-center py-2.5 rounded-lg bg-primary active:opacity-80" style={{ opacity: hcSubmitting ? 0.6 : 1 }}>
+                        <Text className="text-xs font-semibold text-white">{hcSubmitting ? 'Submitting…' : 'Submit Request'}</Text>
+                      </Pressable>
+                    </View>
                   </View>
                 )}
               </View>
