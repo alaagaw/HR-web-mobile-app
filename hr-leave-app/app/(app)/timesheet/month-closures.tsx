@@ -158,18 +158,18 @@ function MonthClosuresScreenInner() {
 
   if (!isWeb) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#0b1220' }} edges={['top']}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#0b1220' : '#F8FAFC' }} edges={['top']}>
         <ScreenHeader title="Month Closures" onBack={() => router.back()} />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#0b1220' }} edges={['top']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#0b1220' : '#F8FAFC' }} edges={['top']}>
       <ScreenHeader title="Month Closures" onBack={() => router.back()} />
       <MuiThemeProvider isDark={isDark}>
         <View style={{ padding: 16, flex: 1 }}>
-          <div style={{ fontSize: 13, color: '#94A3B8', marginBottom: 12 }}>
+          <div style={{ fontSize: 13, color: isDark ? '#94A3B8' : '#64748B', marginBottom: 12 }}>
             Closing a month blocks new <strong>retroactive</strong> project-hours change requests against it.
             Forward edits and current-week entries are unaffected. Close once payroll for the month is
             about to be processed (usually around the 22nd of the same month).
@@ -182,19 +182,19 @@ function MonthClosuresScreenInner() {
                 style={{
                   padding: 16,
                   borderRadius: 12,
-                  backgroundColor: '#111a2e',
-                  border: `1px solid ${cell.isClosed ? '#22c55e40' : cell.suggested ? '#F59E0B40' : '#1e293b'}`,
+                  backgroundColor: isDark ? '#111a2e' : '#FFFFFF',
+                  border: `1px solid ${cell.isClosed ? '#22c55e40' : cell.suggested ? '#F59E0B40' : isDark ? '#1e293b' : '#E2E8F0'}`,
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: '#F8FAFC' }}>{cell.monthLabel}</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: isDark ? '#F8FAFC' : '#0F172A' }}>{cell.monthLabel}</div>
                     {cell.isClosed ? (
                       Chip && <Chip label="Closed" size="small" color="success" sx={{ mt: 0.5, fontWeight: 700, fontSize: 11 }} />
                     ) : cell.suggested ? (
                       Chip && <Chip label="Suggested to close" size="small" color="warning" sx={{ mt: 0.5, fontWeight: 700, fontSize: 11 }} />
                     ) : (
-                      Chip && <Chip label="Open" size="small" sx={{ mt: 0.5, fontWeight: 700, fontSize: 11, backgroundColor: '#1e293b', color: '#94A3B8' }} />
+                      Chip && <Chip label="Open" size="small" sx={{ mt: 0.5, fontWeight: 700, fontSize: 11, backgroundColor: isDark ? '#1e293b' : '#F1F5F9', color: isDark ? '#94A3B8' : '#64748B' }} />
                     )}
                   </div>
                   {canClose && (
@@ -210,7 +210,7 @@ function MonthClosuresScreenInner() {
                   )}
                 </div>
                 {cell.closure && (
-                  <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 10, lineHeight: 1.5 }}>
+                  <div style={{ fontSize: 11, color: isDark ? '#94A3B8' : '#64748B', marginTop: 10, lineHeight: 1.5 }}>
                     {cell.closure.reopened_at ? (
                       <>
                         <div>Was closed at {format(new Date(cell.closure.closed_at), 'yyyy-MM-dd HH:mm')}</div>

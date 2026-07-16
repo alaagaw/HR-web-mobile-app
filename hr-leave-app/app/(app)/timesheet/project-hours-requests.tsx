@@ -223,14 +223,14 @@ function ProjectHoursRequestsScreenInner() {
 
   if (!isWeb || !DataGrid) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#0b1220' }} edges={['top']}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#0b1220' : '#F8FAFC' }} edges={['top']}>
         <ScreenHeader title="Project Hours Requests" onBack={() => router.back()} />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: isMobile ? (isDark ? '#0F172A' : '#F8FAFC') : '#0b1220' }} edges={['top']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? (isMobile ? '#0F172A' : '#0b1220') : '#F8FAFC' }} edges={['top']}>
       <ScreenHeader title="Project Hours Requests" onBack={() => router.back()} />
       <MuiThemeProvider isDark={isDark}>
         {isMobile ? (
@@ -252,7 +252,7 @@ function ProjectHoursRequestsScreenInner() {
           />
         ) : (
           <View style={{ padding: 16, flex: 1 }}>
-            <div style={{ height: 600, backgroundColor: '#111a2e', borderRadius: 12, padding: 8 }}>
+            <div style={{ height: 600, backgroundColor: isDark ? '#111a2e' : '#FFFFFF', borderRadius: 12, padding: 8 }}>
               <DataGrid
                 rows={rows}
                 columns={columns}
