@@ -63,10 +63,16 @@ exists; only build card conversions where a page is web-only.
 - Reusable `components/ui/mobile-card-list.tsx` built (07/16/2026) — DataGrid→stacked-cards on mobile.
 - [x] `timesheet/employee-project-breakdown.tsx` — month nav + card list (07/16/2026)
 - [x] `timesheet/project-hours-requests.tsx` — card list + fullScreen approve/reject dialog (07/16/2026)
-- [ ] `admin/leave-payouts.tsx` (dual-tab calculator + filters — bigger build)
-- [ ] `admin/compensation.tsx`  - [ ] `admin/hr-policies-documents.tsx` (also `if(!isWeb)` → mobile web currently gets full desktop 3-pane)
-- [ ] `timesheet/month-closures.tsx` (web card-grid already ~renders on mobile web; needs Dialog fullScreen polish)  - [ ] `timesheet/timesheets.tsx`
+- [x] `admin/leave-payouts.tsx` — mobile month nav + forecast/actual tabs + search + card list + export (07/16/2026)
+- [x] `admin/compensation.tsx` — card list (tap → history/add dialog), 3 dialogs fullScreen (07/16/2026)
+- [x] `timesheet/timesheets.tsx` — Monthly Consolidated per-employee card summary (07/16/2026)
+- [x] `timesheet/month-closures.tsx` — fullScreen dialog; card grid already reflows (07/16/2026)
+- [ ] `admin/hr-policies-documents.tsx` (also `if(!isWeb)` → mobile web currently gets full desktop 3-pane)
 - [ ] `(auth)/registration-form.tsx` (single shared render; `isWeb` only for styling — needs responsive form work, not gating)
+
+*Category A view-only → add mobile actions (parity):*
+- [ ] `admin/registrations.tsx` — gate desktop + wire mobile review/approve dialog
+- [ ] `admin/employees.tsx` — gate desktop + mobile add/edit
 
 ## Every page must pass "input reachability" on mobile
 For each page below, after layout work, verify at 390px width that EVERY

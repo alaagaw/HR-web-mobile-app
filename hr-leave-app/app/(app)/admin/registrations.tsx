@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { useViewState } from '@/hooks/use-view-state';
+import { useBreakpoint } from '@/hooks/use-breakpoint';
 import { useColorScheme } from 'nativewind';
 import { ScreenHeader } from '@/components/layout/screen-header';
 import { Card } from '@/components/ui/card';
@@ -60,6 +61,7 @@ function RegistrationsScreenInner() {
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { isMobile } = useBreakpoint();
 
   const [registrations, setRegistrations] = useState<PendingRegistration[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,9 +115,9 @@ function RegistrationsScreenInner() {
     [registrations, filters]
   );
 
-  // ── Web Layout ──────────────────────────────────────────────
+  // ── Web Layout (desktop only, ≥1200px) ──────────────────────
 
-  if (isWeb) {
+  if (isWeb && !isMobile) {
 
     const inputStyle = {
       width: '100%',
@@ -332,6 +334,13 @@ function RegistrationsScreenInner() {
             {new Date(item.registration_submitted_at ?? item.created_at).toLocaleDateString()}
           </Text>
         </View>
+        {isWeb && item.registration_status === 'pending_approval' && (
+          <View className="mt-3">
+            <Button onPress={() => setReviewing(item)} fullWidth>
+              Review
+            </Button>
+          </View>
+        )}
       </View>
     </Card>
     );
@@ -351,6 +360,17 @@ function RegistrationsScreenInner() {
           )
         }
       />
+      {/* Review/approve dialog — available on mobile web (MUI). It goes
+          full-screen below 1200px via its own media query. */}
+      {ReviewRegistrationDialog && (
+        <ReviewRegistrationDialog
+          open={!!reviewing}
+          registration={reviewing}
+          currentUserId={user?.id}
+          onClose={() => setReviewing(null)}
+          onProcessed={() => invalidate()}
+        />
+      )}
     </SafeAreaView>
   );
 }

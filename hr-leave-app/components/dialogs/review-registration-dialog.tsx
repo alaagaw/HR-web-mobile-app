@@ -42,6 +42,7 @@ import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import MuiAlert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
+import useMediaQuery from '@mui/material/useMediaQuery';
 
 import {
   registrationService,
@@ -165,6 +166,10 @@ export function ReviewRegistrationDialog({
   onClose,
   onProcessed,
 }: Props) {
+  // Below 1200px (mobile web) the dialog goes full-screen so the review
+  // form is usable on a phone. Matches MOBILE_BREAKPOINT (use-breakpoint).
+  const fullScreen = useMediaQuery('(max-width:1199.95px)');
+
   const reg = registration;
   const doc = reg?.employee_documents;
   const orig = reg?.hr_original_values || {};
@@ -1230,7 +1235,8 @@ export function ReviewRegistrationDialog({
         onClose={onClose}
         maxWidth="md"
         fullWidth
-        PaperProps={{ sx: { borderRadius: 3, backgroundImage: 'none' } }}
+        fullScreen={fullScreen}
+        PaperProps={{ sx: { borderRadius: fullScreen ? 0 : 3, backgroundImage: 'none' } }}
       >
         <DialogTitle
           sx={{
