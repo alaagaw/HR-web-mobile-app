@@ -1,6 +1,6 @@
 import { AccessGate } from '@/components/access/access-gate';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, FlatList, TextInput, Pressable, Platform } from 'react-native';
+import { View, Text, FlatList, TextInput, Pressable, ScrollView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
@@ -3188,32 +3188,80 @@ function EmployeesScreenInner() {
             <Text className="text-white font-semibold text-sm">+ New Employee</Text>
           </Pressable>
         )}
+        {isWeb && (
+          <Pressable onPress={() => setIncludeInactive(!includeInactive)} className="mt-3 flex-row items-center">
+            <View
+              className="w-5 h-5 rounded border items-center justify-center mr-2"
+              style={{ borderColor: includeInactive ? '#2563EB' : '#94A3B8', backgroundColor: includeInactive ? '#2563EB' : 'transparent' }}
+            >
+              {includeInactive && <Text className="text-white text-xs">✓</Text>}
+            </View>
+            <Text className="text-sm text-text-muted dark:text-slate-300">Include inactive</Text>
+          </Pressable>
+        )}
       </View>
+
+      {/* Bulk action bar — mobile web, when rows are selected */}
+      {isWeb && selectedIds.length > 0 && (
+        <View className="px-4 pb-2">
+          <Text className="text-xs text-text-muted dark:text-slate-400 mb-2">{selectedIds.length} selected</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View className="flex-row gap-2">
+              <Pressable onPress={() => handleSendInvites(selectedIds)} className="px-3 py-2 rounded-lg bg-green-600 active:opacity-80"><Text className="text-white text-xs font-semibold">Send Invites</Text></Pressable>
+              <Pressable onPress={() => openBulkDialog('reset', selectedIds)} className="px-3 py-2 rounded-lg bg-primary active:opacity-80"><Text className="text-white text-xs font-semibold">Reset Password</Text></Pressable>
+              <Pressable onPress={() => openBulkDialog('info_form', selectedIds)} className="px-3 py-2 rounded-lg bg-amber-600 active:opacity-80"><Text className="text-white text-xs font-semibold">Info Request</Text></Pressable>
+              <Pressable onPress={() => openBulkDialog('warning', selectedIds)} className="px-3 py-2 rounded-lg bg-red-600 active:opacity-80"><Text className="text-white text-xs font-semibold">Warning</Text></Pressable>
+              <Pressable onPress={() => setSelectedIds([])} className="px-3 py-2 rounded-lg border border-border dark:border-slate-700 active:opacity-80"><Text className="text-xs font-semibold text-text-muted dark:text-slate-300">Clear</Text></Pressable>
+            </View>
+          </ScrollView>
+        </View>
+      )}
 
       <FlatList
         data={employees}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ padding: 16, paddingTop: 0, flexGrow: 1 }}
-        renderItem={({ item }) => (
-          <Pressable
-            onPress={() => { if (isWeb) handleOpenEdit(item); }}
-            className="active:opacity-70"
-          >
+        renderItem={({ item }) => {
+          const selected = selectedIds.includes(item.id);
+          return (
             <Card className="mb-3">
               <View className="flex-row items-center">
-                <View className="w-10 h-10 rounded-full bg-primary-light dark:bg-blue-900/40 items-center justify-center mr-3">
-                  <Text className="text-sm font-bold text-primary dark:text-blue-400">{getInitials(item.full_name)}</Text>
-                </View>
-                <View className="flex-1">
-                  <Text className="text-sm font-semibold text-text-primary dark:text-white">{item.full_name}</Text>
-                  <Text className="text-xs text-text-muted dark:text-slate-400">{item.email}</Text>
-                  <Text className="text-xs text-text-muted dark:text-slate-400">{item.department || 'No department'}</Text>
-                </View>
-                <Badge variant="info">{getRoleLabel(item.role)}</Badge>
+                {isWeb && (
+                  <Pressable
+                    onPress={() => setSelectedIds((prev) => (selected ? prev.filter((id) => id !== item.id) : [...prev, item.id]))}
+                    hitSlop={8}
+                    className="mr-2 w-6 h-6 rounded-md border items-center justify-center"
+                    style={{ borderColor: selected ? '#2563EB' : '#94A3B8', backgroundColor: selected ? '#2563EB' : 'transparent' }}
+                  >
+                    {selected && <Text className="text-white text-xs font-bold">✓</Text>}
+                  </Pressable>
+                )}
+                <Pressable
+                  onPress={() => { if (isWeb) handleOpenEdit(item); }}
+                  className="flex-1 flex-row items-center active:opacity-70"
+                >
+                  <View className="w-10 h-10 rounded-full bg-primary-light dark:bg-blue-900/40 items-center justify-center mr-3">
+                    <Text className="text-sm font-bold text-primary dark:text-blue-400">{getInitials(item.full_name)}</Text>
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-sm font-semibold text-text-primary dark:text-white">{item.full_name}</Text>
+                    <Text className="text-xs text-text-muted dark:text-slate-400">{item.email}</Text>
+                    <Text className="text-xs text-text-muted dark:text-slate-400">{item.department || 'No department'}</Text>
+                  </View>
+                  <Badge variant="info">{getRoleLabel(item.role)}</Badge>
+                </Pressable>
               </View>
+              {isWeb && (
+                <Pressable
+                  onPress={() => handleSendInvites([item.id])}
+                  className="mt-2 flex-row items-center justify-center border border-border dark:border-slate-700 rounded-lg py-1.5 active:opacity-70"
+                >
+                  <Text className="text-xs font-semibold text-primary dark:text-blue-400">Send invite</Text>
+                </Pressable>
+              )}
             </Card>
-          </Pressable>
-        )}
+          );
+        }}
         ListEmptyComponent={
           !loading ? <EmptyState title="No employees found" /> : null
         }
@@ -3244,6 +3292,27 @@ function EmployeesScreenInner() {
             departments={lookupDepartments}
             designations={lookupDesignations}
             nationalities={lookupNationalities}
+          />
+          <ResendEmailDialog
+            open={resendDialog.open}
+            action={resendDialog.action}
+            rows={resendDialog.rows}
+            comment={resendDialog.comment}
+            submitting={bulkVerifying}
+            onChangeEmail={(id: string, email: string) =>
+              setResendDialog((prev) => ({
+                ...prev,
+                rows: prev.rows.map((r) =>
+                  r.id === id ? { ...r, email, emailDirty: email !== r.original_email } : r,
+                ),
+              }))
+            }
+            onChangeComment={(comment: string) => setResendDialog((prev) => ({ ...prev, comment }))}
+            onRemoveRow={(id: string) =>
+              setResendDialog((prev) => ({ ...prev, rows: prev.rows.filter((r) => r.id !== id) }))
+            }
+            onClose={() => setResendDialog({ open: false, action: 'reset', rows: [], comment: '' })}
+            onConfirm={() => runBulk(resendDialog.action, resendDialog.rows, resendDialog.comment)}
           />
           <Snackbar
             open={!!successMsg}
