@@ -1,7 +1,8 @@
 import { AccessGate } from '@/components/access/access-gate';
 import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
-import { View, Text, ScrollView, Platform } from 'react-native';
+import { View, Text, ScrollView, Pressable, TextInput, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MobileCardList } from '@/components/ui/mobile-card-list';
 import { useRouter } from 'expo-router';
 import { useColorScheme } from 'nativewind';
 import { ScreenHeader } from '@/components/layout/screen-header';
@@ -1190,23 +1191,67 @@ function TimesheetsScreenInner() {
   }
 
   // ============================================================
-  // MOBILE RENDER
+  // MOBILE RENDER (native + web < 1200px): month nav + card list
+  // Per-employee monthly summary (Regular / Overtime / Total). The
+  // per-day breakdown stays desktop-only — it can't fit legibly on a
+  // phone — but the totals HR needs are one card per employee.
   // ============================================================
+
+  const rowTotals = (r: any) => {
+    let reg = 0;
+    let ot = 0;
+    for (const md of monthDays) {
+      const { regular, overtime } = splitRegularOvertime(r.dailyHours[md.dateStr] || 0, regularLimit);
+      reg += regular;
+      ot += overtime;
+    }
+    return { regular: reg, overtime: ot, total: reg + ot };
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-background dark:bg-[#0F172A]" edges={['top']}>
       <ScreenHeader title="Monthly Consolidated" />
 
-      <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 8, flexGrow: 1 }}>
-        <View className="flex-1 items-center justify-center py-12">
-          <Text className="text-base font-semibold text-text-primary dark:text-white mb-2">
-            Monthly Consolidated View
-          </Text>
-          <Text className="text-sm text-text-muted dark:text-slate-400 text-center px-8">
-            This view is best experienced on a desktop. Open on a wide screen to see the full consolidated hours breakdown.
-          </Text>
-        </View>
-      </ScrollView>
+      <View className="px-3 pt-2 pb-1 flex-row items-center justify-between">
+        <Pressable onPress={goToPrevMonth} className="px-4 py-2 rounded-lg bg-surface dark:bg-slate-800 border border-border dark:border-slate-700 active:opacity-70">
+          <Text className="text-base font-bold text-text-primary dark:text-white">‹</Text>
+        </Pressable>
+        <Text className="text-base font-bold text-text-primary dark:text-white">{monthLabel}</Text>
+        <Pressable onPress={goToNextMonth} className="px-4 py-2 rounded-lg bg-surface dark:bg-slate-800 border border-border dark:border-slate-700 active:opacity-70">
+          <Text className="text-base font-bold text-text-primary dark:text-white">›</Text>
+        </Pressable>
+      </View>
+
+      <View className="px-3 pb-2">
+        <TextInput
+          value={monthlySearch}
+          onChangeText={setMonthlySearch}
+          placeholder="Search employee, number, designation…"
+          placeholderTextColor="#94A3B8"
+          className="border border-border dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-text-primary dark:text-white bg-surface dark:bg-slate-800"
+        />
+      </View>
+
+      <MobileCardList
+        data={filteredMonthlyRows}
+        keyExtractor={(r: any, i: number) => String(r.employee_number ?? r.employee_name ?? i)}
+        loading={consolidatedLoading}
+        emptyTitle="No timesheet data"
+        emptyDescription="No consolidated hours for this month."
+        title={(r: any) => r.employee_name}
+        subtitle={(r: any) => `${r.employee_number || '—'} · ${r.designation || '—'}`}
+        right={(r: any) => (
+          <Text style={{ color: '#3b82f6', fontWeight: '700', fontSize: 13 }}>{rowTotals(r).total}h</Text>
+        )}
+        rows={(r: any) => {
+          const t = rowTotals(r);
+          return [
+            { label: 'Regular', value: `${t.regular}h` },
+            { label: 'Overtime', value: `${t.overtime}h` },
+            { label: 'Supplier', value: r.supplier_name || '—' },
+          ];
+        }}
+      />
     </SafeAreaView>
   );
 }

@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useColorScheme } from 'nativewind';
 import { ScreenHeader } from '@/components/layout/screen-header';
+import { useBreakpoint } from '@/hooks/use-breakpoint';
 import { useAuth } from '@/hooks/use-auth';
 import { monthClosureService, profileCapabilitiesService } from '@/services';
 import { format, subMonths, startOfMonth } from 'date-fns';
@@ -64,6 +65,7 @@ function MonthClosuresScreenInner() {
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { isMobile } = useBreakpoint();
 
   const [closures, setClosures] = useState<MonthClosure[]>([]);
   const [loading, setLoading] = useState(false);
@@ -226,7 +228,7 @@ function MonthClosuresScreenInner() {
         </View>
 
         {target && mode && Dialog && (
-          <Dialog open onClose={() => !submitting && setTarget(null)} maxWidth="xs" fullWidth>
+          <Dialog open onClose={() => !submitting && setTarget(null)} maxWidth="xs" fullWidth fullScreen={isMobile}>
             <DialogTitle sx={{ pb: 1 }}>
               {mode === 'close' ? `Close ${target.monthLabel}?` : `Reopen ${target.monthLabel}?`}
             </DialogTitle>
