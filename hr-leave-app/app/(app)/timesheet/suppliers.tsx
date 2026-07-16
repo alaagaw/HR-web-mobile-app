@@ -16,7 +16,7 @@ import { useAuth } from '@/hooks/use-auth';
 import type { Supplier, SupplierDraft } from '@/types/models';
 
 const isWeb = Platform.OS === 'web';
-const WIDE_SCREEN_BREAKPOINT = 1280;
+const WIDE_SCREEN_BREAKPOINT = 1200; // keep in sync with MOBILE_BREAKPOINT (use-breakpoint.ts)
 
 function useWindowWidth() {
   const [width, setWidth] = useState(() => (isWeb ? window.innerWidth : 0));

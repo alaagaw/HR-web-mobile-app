@@ -15,7 +15,7 @@ import { Role, RenewalTaskStatus } from '@/types/enums';
 import { parseExcelDateCell, daysUntil, todayDateOnly } from '@/lib/date-only';
 
 const isWeb = Platform.OS === 'web';
-const WIDE_SCREEN_BREAKPOINT = 1280; // px — below this, use mobile layout on web
+const WIDE_SCREEN_BREAKPOINT = 1200; // keep in sync with MOBILE_BREAKPOINT (use-breakpoint.ts) — below this, mobile layout on web
 
 function useWindowWidth() {
   const [width, setWidth] = useState(() => (isWeb ? window.innerWidth : 0));

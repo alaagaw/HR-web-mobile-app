@@ -16,7 +16,7 @@ import type { TimesheetAssignment } from '@/types/models';
 import type { Profile, Project } from '@/types/models';
 
 const isWeb = Platform.OS === 'web';
-const WIDE_SCREEN_BREAKPOINT = 1280;
+const WIDE_SCREEN_BREAKPOINT = 1200; // keep in sync with MOBILE_BREAKPOINT (use-breakpoint.ts)
 
 function useWindowWidth() {
   const [width, setWidth] = useState(() => (isWeb ? window.innerWidth : 0));

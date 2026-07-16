@@ -1223,7 +1223,7 @@ export default function TimeClockScreen() {
   const { width } = useWindowDimensions();
 
   // On web with large screen → web layout; otherwise mobile
-  const useWebLayout = isWeb && width >= 1366;
+  const useWebLayout = isWeb && width >= 1200; // keep in sync with MOBILE_BREAKPOINT (use-breakpoint.ts)
 
   if (useWebLayout) {
     return <WebTimeClock isDark={isDark} />;

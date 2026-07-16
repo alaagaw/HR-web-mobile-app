@@ -23,7 +23,7 @@ import type { TimesheetEntry, TimesheetEntryDraft, Project, Profile, TimesheetAs
 import { TimesheetSubmissionStatus, Role, ProjectEntryMode } from '@/types/enums';
 
 const isWeb = Platform.OS === 'web';
-const WIDE_SCREEN_BREAKPOINT = 1280;
+const WIDE_SCREEN_BREAKPOINT = 1200; // keep in sync with MOBILE_BREAKPOINT (use-breakpoint.ts)
 
 // ── Lazy-load MUI components only on web ──────────────────────
 let MuiThemeProvider: any;
