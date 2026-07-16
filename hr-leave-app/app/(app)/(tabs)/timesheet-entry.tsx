@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
-import { View, Text, ScrollView, Platform, Pressable, useWindowDimensions } from 'react-native';
+import { View, Text, ScrollView, Platform, Pressable, TextInput, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import { useAuth } from '@/hooks/use-auth';
@@ -2155,12 +2155,18 @@ function MobileTimesheetEntry({ isDark }: { isDark: boolean }) {
     fetchMyAssignments,
     currentSubmission,
     fetchSubmissionForWeek,
+    upsertEntries,
+    submitForApproval,
   } = useTimesheets();
 
   const { projects, fetchAll: fetchAllProjects } = useProjects();
   const { suppliers, fetchAll: fetchAllSuppliers } = useSuppliers();
 
   const isHR = user?.role === Role.HR || user?.role === Role.HRDirector;
+
+  const [saving, setSaving] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
 
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [weekStart, setWeekStart] = useState<Date>(() => getWeekRange(new Date()).weekStart);
@@ -2238,6 +2244,56 @@ function MobileTimesheetEntry({ isDark }: { isDark: boolean }) {
   const goToNextWeek = useCallback(() => {
     setWeekStart((prev) => addDays(prev, 7));
   }, []);
+
+  // Editable only in draft/rejected/not-yet-submitted states — mirrors
+  // the web (WebTimesheetEntry.isEditable). Submitted/approved weeks are
+  // read-only until an approver sends them back.
+  const isEditable =
+    submissionStatus === null ||
+    submissionStatus === TimesheetSubmissionStatus.Draft ||
+    submissionStatus === TimesheetSubmissionStatus.Rejected;
+
+  const handleCellChange = useCallback((rowKey: string, dateStr: string, value: string) => {
+    if (isDayLocked(dateStr)) return;
+    const parsed = parseFloat(value);
+    const next = isNaN(parsed) ? 0 : Math.min(24, Math.max(0, parsed));
+    setGridRows((prev) =>
+      prev.map((r) => (r.key === rowKey ? { ...r, hours: { ...r.hours, [dateStr]: next } } : r)),
+    );
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    if (!selectedProjectId || !user) return;
+    setSaving(true);
+    setFeedback(null);
+    try {
+      const drafts = gridRowsToDrafts(gridRows, selectedProjectId, selectedProject?.regular_hours_per_day ?? 8, selectedProject?.entry_mode);
+      await upsertEntries(drafts, user.id);
+      await fetchEntriesForWeek(selectedProjectId, weekStartStr, weekEndStr);
+      setFeedback('Timesheet saved');
+    } catch (err: any) {
+      setFeedback(err?.message || 'Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  }, [selectedProjectId, selectedProject, user, gridRows, weekStartStr, weekEndStr, upsertEntries, fetchEntriesForWeek]);
+
+  const handleSubmit = useCallback(async () => {
+    if (!selectedProjectId || !user) return;
+    setSubmitting(true);
+    setFeedback(null);
+    try {
+      const drafts = gridRowsToDrafts(gridRows, selectedProjectId, selectedProject?.regular_hours_per_day ?? 8, selectedProject?.entry_mode);
+      await upsertEntries(drafts, user.id);
+      await submitForApproval(selectedProjectId, weekStartStr, weekEndStr, user.id, user.role);
+      await fetchSubmissionForWeek(selectedProjectId, weekStartStr);
+      setFeedback('Submitted for approval');
+    } catch (err: any) {
+      setFeedback(err?.message || 'Failed to submit');
+    } finally {
+      setSubmitting(false);
+    }
+  }, [selectedProjectId, selectedProject, user, gridRows, weekStartStr, weekEndStr, upsertEntries, submitForApproval, fetchSubmissionForWeek]);
 
   return (
     <SafeAreaView className="flex-1 bg-background dark:bg-[#0F172A]" edges={['top']}>
@@ -2322,15 +2378,19 @@ function MobileTimesheetEntry({ isDark }: { isDark: boolean }) {
               </View>
             </View>
 
-            {/* Desktop editing message */}
-            <View className="mb-3 p-4 rounded-xl border border-border dark:border-slate-700 bg-blue-900/20">
-              <Text className="text-sm text-blue-400 text-center font-semibold">
-                Open on desktop for full editing
-              </Text>
-              <Text className="text-xs text-slate-400 text-center mt-1">
-                The timesheet grid is best viewed on a wide screen
-              </Text>
-            </View>
+            {/* Editing status / feedback */}
+            {!isEditable && (
+              <View className="mb-3 p-3 rounded-xl border border-border dark:border-slate-700 bg-blue-900/20">
+                <Text className="text-xs text-blue-400 text-center font-semibold">
+                  This week is {getSubmissionStatusLabel(submissionStatus)} — editing is locked.
+                </Text>
+              </View>
+            )}
+            {feedback && (
+              <View className="mb-3 p-3 rounded-xl border border-border dark:border-slate-700 bg-surface dark:bg-slate-800">
+                <Text className="text-xs text-center font-semibold text-text-primary dark:text-white">{feedback}</Text>
+              </View>
+            )}
 
             {/* Read-only employee cards (mobile) */}
             {entriesLoading ? (
@@ -2390,16 +2450,35 @@ function MobileTimesheetEntry({ isDark }: { isDark: boolean }) {
                             >
                               {day.dayShort}
                             </Text>
-                            <Text
-                              style={{
-                                fontSize: 13,
-                                fontWeight: '700',
-                                color: h > 0 ? (isDark ? '#FFFFFF' : '#0f172a') : (isDark ? '#475569' : '#cbd5e1'),
-                                marginTop: 2,
-                              }}
-                            >
-                              {h}
-                            </Text>
+                            {isEditable && !isDayLocked(day.dateStr) ? (
+                              <TextInput
+                                value={h ? String(h) : ''}
+                                onChangeText={(v) => handleCellChange(row.key, day.dateStr, v)}
+                                keyboardType="numeric"
+                                placeholder="0"
+                                placeholderTextColor={isDark ? '#475569' : '#cbd5e1'}
+                                style={{
+                                  fontSize: 13,
+                                  fontWeight: '700',
+                                  color: isDark ? '#FFFFFF' : '#0f172a',
+                                  marginTop: 2,
+                                  textAlign: 'center',
+                                  width: '100%',
+                                  paddingVertical: 0,
+                                }}
+                              />
+                            ) : (
+                              <Text
+                                style={{
+                                  fontSize: 13,
+                                  fontWeight: '700',
+                                  color: h > 0 ? (isDark ? '#FFFFFF' : '#0f172a') : (isDark ? '#475569' : '#cbd5e1'),
+                                  marginTop: 2,
+                                }}
+                              >
+                                {h}
+                              </Text>
+                            )}
                           </View>
                         );
                       })}
@@ -2420,6 +2499,32 @@ function MobileTimesheetEntry({ isDark }: { isDark: boolean }) {
                     {grandTotal}h
                   </Text>
                 </View>
+              </View>
+            )}
+
+            {/* Save / Submit (editable weeks) */}
+            {isEditable && gridRows.length > 0 && (
+              <View className="flex-row gap-3 mb-8">
+                <Pressable
+                  onPress={handleSave}
+                  disabled={saving || submitting}
+                  className="flex-1 items-center justify-center rounded-xl py-3 border border-border dark:border-slate-700 bg-surface dark:bg-slate-800 active:opacity-80"
+                  style={{ opacity: saving || submitting ? 0.6 : 1 }}
+                >
+                  <Text className="text-sm font-semibold text-text-primary dark:text-white">
+                    {saving ? 'Saving…' : 'Save'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleSubmit}
+                  disabled={saving || submitting}
+                  className="flex-1 items-center justify-center rounded-xl py-3 bg-primary active:opacity-80"
+                  style={{ opacity: saving || submitting ? 0.6 : 1 }}
+                >
+                  <Text className="text-sm font-semibold text-white">
+                    {submitting ? 'Submitting…' : 'Submit for Approval'}
+                  </Text>
+                </Pressable>
               </View>
             )}
           </>
