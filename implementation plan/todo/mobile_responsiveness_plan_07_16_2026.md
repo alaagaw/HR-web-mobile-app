@@ -74,6 +74,19 @@ exists; only build card conversions where a page is web-only.
 - [x] `admin/registrations.tsx` — gated + mobile Review button → fullScreen review/approve dialog (07/16/2026)
 - [x] `admin/employees.tsx` — gated + tap-to-edit + New Employee button + fullScreen Edit/Invite dialogs (07/16/2026)
 
+## Action-parity audit + fixes (07/16/2026)
+After the layout work, a full audit found pages whose mobile view rendered
+data but was missing web ACTIONS. Fixed:
+- [x] `timesheet/projects.tsx` — search was a dead stub, edit silently no-op, no Add. Wired search + Add + mounted ProjectDialog/DeleteConfirmDialog.
+- [x] `admin/document-expiry.tsx` — added search, per-card Assign renewal (AssignDialog), Export/Upload Excel.
+- [x] `admin/employees.tsx` — added include-inactive toggle, checkbox select + bulk bar (Send Invites/Reset/Info/Warning), per-card Send invite, ResendEmailDialog.
+- [x] `admin/balances.tsx` — added Run Accruals / Export / Import.
+- [x] `timesheet/timesheets.tsx` — added Reg-hrs/day setter + Export.
+- [x] `(tabs)/tasks.tsx` — renew Modal was `!isWeb` (inert on mobile web); now renders on mobile web.
+- [x] `admin/hr-policies-documents.tsx` — added New Document/Folder + per-card Edit/New-version/Archive + mounted DocDialog/FolderDialog.
+- [x] `(tabs)/dashboard.tsx` — convenience gap only; every action reachable via nav (approvals→request detail, renewals→tasks tab, registrations→registrations page). No change needed.
+- [ ] **`(tabs)/timesheet-entry.tsx` — REMAINING. The core employee hours-entry tab is fully read-only on mobile** ("Open on desktop for full editing"). Needs mobile editing: per-day hour inputs + Save + Submit for Approval (core), then Copy Last Week / Auto-fill / Hours-Change / Add Employee / Export (extras). Largest + highest-risk build; do as a focused effort.
+
 ### Status 07/16/2026: mobile-responsiveness initiative essentially COMPLETE.
 Only `registration-form.tsx` responsive polish remains (public sign-up form,
 already usable). Reusable `MobileCardList` + `useBreakpoint` (1200px) power
