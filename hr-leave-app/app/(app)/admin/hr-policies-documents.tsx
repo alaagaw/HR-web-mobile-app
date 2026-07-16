@@ -661,6 +661,32 @@ export default function HRPoliciesDocumentsScreen() {
       }
     };
 
+    // Param-based openers (the desktop ones read selectedDoc, which is
+    // async to set from a card tap — build the dialog state directly).
+    const mobileEditDoc = (d: any) => setDialog({
+      ...EMPTY_DIALOG, open: true, mode: 'edit',
+      documentId: d.id, title: d.title, description: d.description ?? '',
+      tags: d.tags ?? [], folder_id: d.folder_id, visibility: d.visibility,
+    });
+    const mobileReplaceDoc = (d: any) => setDialog({
+      ...EMPTY_DIALOG, open: true, mode: 'replace',
+      documentId: d.id, title: d.title, description: d.description ?? '',
+      tags: d.tags ?? [], folder_id: d.folder_id, visibility: d.visibility,
+    });
+    const mobileArchiveDoc = async (d: any) => {
+      if (!user) return;
+      try {
+        if (d.status === HRDocumentStatus.Active) {
+          await hrPoliciesService.archiveDocument(d.id, user.id);
+          notify('Document archived');
+        } else {
+          await hrPoliciesService.reactivateDocument(d.id);
+          notify('Document reactivated');
+        }
+        await refresh();
+      } catch (e: any) { notify(e?.message || 'Action failed', 'error'); }
+    };
+
     return (
       <SafeAreaView className="flex-1 bg-background dark:bg-[#0F172A]" edges={['top']}>
         <ScreenHeader title="HR Policies & Documents" />
@@ -673,13 +699,23 @@ export default function HRPoliciesDocumentsScreen() {
             className="border border-border dark:border-slate-700 rounded-xl px-4 py-2.5 text-base text-text-primary dark:text-white bg-surface dark:bg-slate-800"
           />
         </View>
+        {isWeb && isHR && (
+          <View className="px-4 pb-2 flex-row gap-2">
+            <Pressable onPress={openCreate} className="flex-1 items-center justify-center bg-primary rounded-xl py-2.5 active:opacity-80">
+              <Text className="text-white text-xs font-semibold">+ New Document</Text>
+            </Pressable>
+            <Pressable onPress={handleNewFolder} className="flex-1 items-center justify-center bg-surface dark:bg-slate-800 border border-border dark:border-slate-700 rounded-xl py-2.5 active:opacity-80">
+              <Text className="text-text-primary dark:text-white text-xs font-semibold">+ New Folder</Text>
+            </Pressable>
+          </View>
+        )}
         <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 8, flexGrow: 1 }}>
           {visibleDocs.length === 0 ? (
             <EmptyState title="No documents" description="Nothing here yet." />
           ) : (
             visibleDocs.map((d) => (
-              <Pressable key={d.id} onPress={() => openDocFile(d)} className="mb-3 active:opacity-70">
-                <View className="p-4 rounded-xl border border-border dark:border-slate-700 bg-surface dark:bg-slate-800">
+              <View key={d.id} className="mb-3 p-4 rounded-xl border border-border dark:border-slate-700 bg-surface dark:bg-slate-800">
+                <Pressable onPress={() => openDocFile(d)} className="active:opacity-70">
                   <Text className="text-base font-bold text-text-primary dark:text-white">{d.title}</Text>
                   <Text className="text-xs text-text-muted dark:text-slate-400 mt-1">
                     {d.current_version ? fileKindLabel(d.current_version.file_type) : 'No file'} · Updated {formatDate(d.updated_at)}
@@ -687,11 +723,58 @@ export default function HRPoliciesDocumentsScreen() {
                   {d.current_version && isWeb && (
                     <Text className="text-xs font-medium text-primary dark:text-blue-400 mt-2">Tap to open ↗</Text>
                   )}
-                </View>
-              </Pressable>
+                </Pressable>
+                {isWeb && isHR && (
+                  <View className="flex-row gap-2 mt-3">
+                    <Pressable onPress={() => mobileEditDoc(d)} className="px-3 py-1.5 rounded-lg border border-border dark:border-slate-700 active:opacity-70">
+                      <Text className="text-xs font-semibold text-text-primary dark:text-white">Edit</Text>
+                    </Pressable>
+                    <Pressable onPress={() => mobileReplaceDoc(d)} className="px-3 py-1.5 rounded-lg border border-border dark:border-slate-700 active:opacity-70">
+                      <Text className="text-xs font-semibold text-text-primary dark:text-white">New version</Text>
+                    </Pressable>
+                    <Pressable onPress={() => mobileArchiveDoc(d)} className="px-3 py-1.5 rounded-lg border border-border dark:border-slate-700 active:opacity-70">
+                      <Text className="text-xs font-semibold text-amber-600 dark:text-amber-400">
+                        {d.status === HRDocumentStatus.Active ? 'Archive' : 'Reactivate'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
+              </View>
             ))
           )}
         </ScrollView>
+
+        {/* Create/Edit document + folder dialogs — mobile web (MUI) */}
+        {isWeb && MuiThemeProvider && (
+          <MuiThemeProvider isDark={isDark}>
+            <DocDialog
+              state={dialog}
+              folders={folders}
+              allTags={allTags}
+              onChange={(patch: any) => setDialog((s) => ({ ...s, ...patch }))}
+              onClose={() => !dialog.submitting && setDialog(EMPTY_DIALOG)}
+              onSubmit={submitDialog}
+            />
+            <FolderDialog
+              state={folderDialog}
+              onChange={(patch: any) => setFolderDialog((s) => ({ ...s, ...patch }))}
+              onClose={() => !folderDialog.submitting && setFolderDialog(EMPTY_FOLDER_DIALOG)}
+              onSubmit={submitFolderDialog}
+            />
+            {Snackbar && (
+              <Snackbar
+                open={snackbar.open}
+                autoHideDuration={4000}
+                onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+              >
+                <Alert onClose={() => setSnackbar((s) => ({ ...s, open: false }))} severity={snackbar.severity} variant="filled">
+                  {snackbar.message}
+                </Alert>
+              </Snackbar>
+            )}
+          </MuiThemeProvider>
+        )}
       </SafeAreaView>
     );
   }
