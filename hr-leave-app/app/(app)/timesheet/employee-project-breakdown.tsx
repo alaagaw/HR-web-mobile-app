@@ -1,9 +1,11 @@
 import { AccessGate } from '@/components/access/access-gate';
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Platform } from 'react-native';
+import { View, Text, Pressable, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import { ScreenHeader } from '@/components/layout/screen-header';
+import { MobileCardList } from '@/components/ui/mobile-card-list';
+import { useBreakpoint } from '@/hooks/use-breakpoint';
 import { overtimeService } from '@/services';
 import { format, addMonths, subMonths, startOfMonth } from 'date-fns';
 
@@ -42,6 +44,7 @@ export default function EmployeeProjectBreakdownScreen() {
 function EmployeeProjectBreakdownScreenInner() {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { isMobile } = useBreakpoint();
 
   const [anchor, setAnchor] = useState(() => startOfMonth(new Date()));
   const [rows, setRows] = useState<any[]>([]);
@@ -147,10 +150,60 @@ function EmployeeProjectBreakdownScreenInner() {
     },
   ], []);
 
-  if (!isWeb || !DataGrid) {
+  // Mobile (native, or web < 1200px): month nav + stacked cards.
+  // The DataGrid does not reflow, so below the breakpoint we render a
+  // scrollable card list from the same rows instead.
+  if (!isWeb || isMobile || !DataGrid) {
+    const monthNav = (
+      <View className="mb-3">
+        <View className="flex-row items-center justify-between mb-2">
+          <Pressable
+            onPress={() => setAnchor(subMonths(anchor, 1))}
+            className="px-4 py-2 rounded-lg bg-surface dark:bg-slate-800 border border-border dark:border-slate-700 active:opacity-70"
+          >
+            <Text className="text-base font-bold text-text-primary dark:text-white">‹</Text>
+          </Pressable>
+          <Text className="text-base font-bold text-text-primary dark:text-white">
+            {format(anchor, 'MMMM yyyy')}
+          </Text>
+          <Pressable
+            onPress={() => setAnchor(addMonths(anchor, 1))}
+            className="px-4 py-2 rounded-lg bg-surface dark:bg-slate-800 border border-border dark:border-slate-700 active:opacity-70"
+          >
+            <Text className="text-base font-bold text-text-primary dark:text-white">›</Text>
+          </Pressable>
+        </View>
+        <Text className="text-xs text-text-muted dark:text-slate-400 text-center">
+          R {grandTotals.regular} · OT {grandTotals.overtime} · Grand {grandTotals.total}
+        </Text>
+      </View>
+    );
+
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#0b1220' }} edges={['top']}>
+      <SafeAreaView className="flex-1 bg-background dark:bg-[#0F172A]" edges={['top']}>
         <ScreenHeader title="Employee × Project Breakdown" />
+        <MobileCardList
+          data={rows}
+          keyExtractor={(item) => String(item.id)}
+          loading={loading}
+          emptyTitle="No hours"
+          emptyDescription="No timesheet hours recorded for this month."
+          ListHeaderComponent={monthNav}
+          title={(item) => item.employee_name}
+          subtitle={(item) =>
+            item.kind === 'subtotal' ? item.project : `${item.employee_number || '—'} · ${item.project}`
+          }
+          right={(item) =>
+            item.kind === 'subtotal' ? (
+              <Text className="text-[10px] font-bold text-blue-400">SUBTOTAL</Text>
+            ) : null
+          }
+          rows={(item) => [
+            { label: 'Regular', value: String(item.regular) },
+            { label: 'Overtime', value: String(item.overtime) },
+            { label: 'Grand', value: String(item.total) },
+          ]}
+        />
       </SafeAreaView>
     );
   }
