@@ -1,6 +1,6 @@
 import { AccessGate } from '@/components/access/access-gate';
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
-import { View, Text, ScrollView, Platform, Pressable } from 'react-native';
+import { View, Text, ScrollView, Platform, Pressable, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
@@ -41,10 +41,12 @@ let Autocomplete: any;
 let TextField: any;
 let Snackbar: any;
 let Alert: any;
+let useMediaQuery: any;
 
 if (isWeb) {
   const dg = require('@mui/x-data-grid');
   DataGrid = dg.DataGrid;
+  useMediaQuery = require('@mui/material/useMediaQuery').default;
   MuiThemeProvider = require('@/components/web/mui-theme-provider').MuiThemeProvider;
   Chip = require('@mui/material/Chip').default;
   Dialog = require('@mui/material/Dialog').default;
@@ -439,7 +441,7 @@ function AssignDialog({
   if (!Dialog) return null;
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={useMediaQuery ? useMediaQuery('(max-width:1199.95px)') : false}>
       <DialogTitle sx={{ pb: 0.5 }}>
         Assign Renewal Tasks
         <div style={{ fontSize: 14, fontWeight: 400, opacity: 0.7, marginTop: 2 }}>
@@ -583,7 +585,7 @@ function ImportDialog({
   if (!Dialog) return null;
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth fullScreen={useMediaQuery ? useMediaQuery('(max-width:1199.95px)') : false}>
       <DialogTitle>
         Import from Excel
         <div style={{ fontSize: 14, fontWeight: 400, opacity: 0.7, marginTop: 2 }}>
@@ -1848,6 +1850,33 @@ function DocumentExpiryScreenInner() {
             );
           })}
         </View>
+
+        {/* Search */}
+        <TextInput
+          value={globalSearch}
+          onChangeText={setGlobalSearch}
+          placeholder="Search name, emp code…"
+          placeholderTextColor="#94A3B8"
+          className="border border-border dark:border-slate-700 rounded-xl px-4 py-2.5 text-base text-text-primary dark:text-white bg-surface dark:bg-slate-800 mb-3"
+        />
+
+        {/* Bulk actions (mobile web) */}
+        {isWeb && (
+          <View className="flex-row gap-2">
+            <Pressable
+              onPress={() => exportToExcel(filteredData)}
+              className="flex-1 flex-row items-center justify-center bg-surface dark:bg-slate-800 border border-border dark:border-slate-700 rounded-xl py-2.5 active:opacity-80"
+            >
+              <Text className="text-text-primary dark:text-white font-semibold text-sm">Export Excel</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setImportOpen(true)}
+              className="flex-1 flex-row items-center justify-center bg-surface dark:bg-slate-800 border border-border dark:border-slate-700 rounded-xl py-2.5 active:opacity-80"
+            >
+              <Text className="text-text-primary dark:text-white font-semibold text-sm">Upload Excel</Text>
+            </Pressable>
+          </View>
+        )}
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 0, flexGrow: 1 }}>
@@ -1937,10 +1966,63 @@ function DocumentExpiryScreenInner() {
                   </View>
                 );
               })}
+
+              {/* Assign renewal task to HR (mobile web) */}
+              {isWeb && row.risk !== 'OK' && (
+                <Pressable
+                  onPress={() => { setSelectedIds([row.id]); setAssignOpen(true); }}
+                  className="mt-3 flex-row items-center justify-center bg-primary rounded-lg py-2 active:opacity-80"
+                >
+                  <Text className="text-white font-semibold text-xs">Assign renewal to HR</Text>
+                </Pressable>
+              )}
             </View>
           ))
         )}
       </ScrollView>
+
+      {/* Dialogs — mobile web (MUI); fullScreen < 1200px */}
+      {isWeb && MuiThemeProvider && (
+        <MuiThemeProvider isDark={isDark}>
+          <AssignDialog
+            open={assignOpen}
+            selectedRows={selectedRows}
+            thresholdDays={thresholdDays}
+            isDark={isDark}
+            onClose={() => { setAssignOpen(false); setSelectedIds([]); }}
+            onAssigned={() => {
+              setSnackbar({ open: true, message: 'Renewal tasks assigned successfully!', severity: 'success' });
+              setSelectedIds([]);
+              invalidate();
+            }}
+          />
+          <ImportDialog
+            open={importOpen}
+            isDark={isDark}
+            onClose={() => setImportOpen(false)}
+            onImported={() => {
+              invalidate();
+              setSnackbar({ open: true, message: 'Excel data imported successfully!', severity: 'success' });
+            }}
+          />
+          {Snackbar && (
+            <Snackbar
+              open={snackbar.open}
+              autoHideDuration={4000}
+              onClose={() => setSnackbar((s: any) => ({ ...s, open: false }))}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+            >
+              <Alert
+                onClose={() => setSnackbar((s: any) => ({ ...s, open: false }))}
+                severity={snackbar.severity}
+                variant="filled"
+              >
+                {snackbar.message}
+              </Alert>
+            </Snackbar>
+          )}
+        </MuiThemeProvider>
+      )}
     </SafeAreaView>
   );
 }
