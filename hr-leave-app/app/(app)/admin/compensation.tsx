@@ -14,13 +14,15 @@ import { todayDateOnly } from '@/lib/date-only';
  * Web-only for now (MUI components, like the other admin pages).
  */
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { View, Platform } from 'react-native';
+import { View, Text, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useColorScheme } from 'nativewind';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { useAuth } from '@/hooks/use-auth';
+import { useBreakpoint } from '@/hooks/use-breakpoint';
 import { userService, compensationService } from '@/services';
 import { EmptyState } from '@/components/ui/empty-state';
+import { MobileCardList } from '@/components/ui/mobile-card-list';
 import {
   exportCompensationXlsx,
   importCompensationXlsx,
@@ -116,6 +118,7 @@ function CompensationScreenInner() {
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { isMobile } = useBreakpoint();
 
   const [rows, setRows] = useState<EmpWithComp[]>([]);
   const [loading, setLoading] = useState(false);
@@ -290,11 +293,12 @@ function CompensationScreenInner() {
       {/* Page header */}
       <div
         style={{
-          padding: '20px 24px 16px',
+          padding: isMobile ? '12px 12px 10px' : '20px 24px 16px',
           borderBottom: `1px solid ${isDark ? '#334155' : '#E2E8F0'}`,
           display: 'flex',
           alignItems: 'center',
-          gap: 16,
+          gap: isMobile ? 8 : 16,
+          flexWrap: 'wrap',
         }}
       >
         <div
@@ -400,24 +404,48 @@ function CompensationScreenInner() {
         ) : (
           <View style={{ flex: 1, borderRadius: 12, overflow: 'hidden' }}>
             <MuiThemeProvider isDark={isDark}>
-              <DataGrid
-                rows={rows}
-                columns={columns}
-                loading={loading}
-                getRowId={(r: any) => r.id}
-                onRowClick={(p: any) => openHistory(p.row as EmpWithComp)}
-                disableRowSelectionOnClick
-                density="compact"
-                pageSizeOptions={[25, 50, 100]}
-                initialState={{
-                  pagination: { paginationModel: { pageSize: 25, page: 0 } },
-                }}
-                sx={{
-                  border: 'none',
-                  '& .MuiDataGrid-row:hover': { cursor: 'pointer' },
-                  '& .comp-total-cell': { fontWeight: 700 },
-                }}
-              />
+              {isMobile ? (
+                <MobileCardList
+                  data={rows}
+                  keyExtractor={(r: any) => String(r.id)}
+                  loading={loading}
+                  onPress={(r: any) => openHistory(r)}
+                  emptyTitle="No active employees"
+                  title={(r: any) => r.full_name}
+                  subtitle={(r: any) => r.department || '—'}
+                  right={(r: any) => (
+                    <Text style={{ color: isDark ? '#93C5FD' : '#2563EB', fontWeight: '700', fontSize: 13 }}>
+                      {formatMoney(r.comp_total)}
+                    </Text>
+                  )}
+                  rows={(r: any) => [
+                    { label: 'Basic', value: formatMoney(r.comp_basic_salary) },
+                    { label: 'HRA', value: formatMoney(r.comp_hra) },
+                    { label: 'Transport', value: formatMoney(r.comp_transportation) },
+                    { label: 'Other', value: formatMoney(r.comp_other_allowances) },
+                    { label: 'Effective', value: r.comp_effective_from || '—' },
+                  ]}
+                />
+              ) : (
+                <DataGrid
+                  rows={rows}
+                  columns={columns}
+                  loading={loading}
+                  getRowId={(r: any) => r.id}
+                  onRowClick={(p: any) => openHistory(p.row as EmpWithComp)}
+                  disableRowSelectionOnClick
+                  density="compact"
+                  pageSizeOptions={[25, 50, 100]}
+                  initialState={{
+                    pagination: { paginationModel: { pageSize: 25, page: 0 } },
+                  }}
+                  sx={{
+                    border: 'none',
+                    '& .MuiDataGrid-row:hover': { cursor: 'pointer' },
+                    '& .comp-total-cell': { fontWeight: 700 },
+                  }}
+                />
+              )}
 
               {/* History dialog */}
               <Dialog
@@ -425,7 +453,8 @@ function CompensationScreenInner() {
                 onClose={() => setHistoryDialog(INITIAL_HISTORY)}
                 maxWidth="md"
                 fullWidth
-                PaperProps={{ sx: { borderRadius: 3, backgroundImage: 'none' } }}
+                fullScreen={isMobile}
+                PaperProps={{ sx: { borderRadius: isMobile ? 0 : 3, backgroundImage: 'none' } }}
               >
                 <DialogTitle sx={{ pb: 1, pt: 3, px: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
                   <div style={{ fontSize: 18, fontWeight: 700 }}>{historyDialog.employee?.full_name}</div>
@@ -493,7 +522,8 @@ function CompensationScreenInner() {
                 onClose={() => !addDialog.submitting && setAddDialog(INITIAL_ADD)}
                 maxWidth="sm"
                 fullWidth
-                PaperProps={{ sx: { borderRadius: 3, backgroundImage: 'none' } }}
+                fullScreen={isMobile}
+                PaperProps={{ sx: { borderRadius: isMobile ? 0 : 3, backgroundImage: 'none' } }}
               >
                 <DialogTitle sx={{ pb: 1, pt: 3, px: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
                   <div style={{ fontSize: 18, fontWeight: 700 }}>New pay row · {addDialog.employee?.full_name}</div>
@@ -561,7 +591,8 @@ function CompensationScreenInner() {
                 onClose={() => busy !== 'import' && setPendingFile(null)}
                 maxWidth="xs"
                 fullWidth
-                PaperProps={{ sx: { borderRadius: 3, backgroundImage: 'none' } }}
+                fullScreen={isMobile}
+                PaperProps={{ sx: { borderRadius: isMobile ? 0 : 3, backgroundImage: 'none' } }}
               >
                 <DialogTitle sx={{ pb: 1, pt: 3, px: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
                   <div style={{ fontSize: 18, fontWeight: 700 }}>Import compensation</div>

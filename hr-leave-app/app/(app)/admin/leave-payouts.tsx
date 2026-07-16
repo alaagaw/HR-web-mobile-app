@@ -25,13 +25,15 @@ import { AccessGate } from '@/components/access/access-gate';
  * Web-only (MUI DataGrid).
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Platform } from 'react-native';
+import { View, Text, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useColorScheme } from 'nativewind';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { useViewState } from '@/hooks/use-view-state';
+import { useBreakpoint } from '@/hooks/use-breakpoint';
 import { compensationService } from '@/services';
 import { EmptyState } from '@/components/ui/empty-state';
+import { MobileCardList } from '@/components/ui/mobile-card-list';
 import type { LeavePayoutRow, PredictedPayoutRow } from '@/types/models';
 
 const isWeb = Platform.OS === 'web';
@@ -116,6 +118,7 @@ function LeavePayoutsScreenInner() {
   const router = useRouter();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { isMobile } = useBreakpoint();
 
   const now = new Date();
   const [year, setYear] = useViewState<number>('admin/leave-payouts.year', now.getFullYear());
@@ -474,6 +477,131 @@ function LeavePayoutsScreenInner() {
         title="Web-only feature"
         description="Open Leave Payouts on a desktop browser to use the calculator."
       />
+    );
+  }
+
+  // ─── Mobile web (< 1200px): stacked controls + card list ──────────
+  if (isMobile) {
+    const isForecast = activeTab === 'forecast';
+    const data: any[] = isForecast ? filteredForecastRows : filteredRows;
+    const d = forecastDaysThisMonth;
+    const border = isDark ? '#334155' : '#E2E8F0';
+    const cardBg = isDark ? '#111a2e' : '#FFFFFF';
+    const textPrimary = isDark ? '#FFFFFF' : '#0F172A';
+    const textMuted = isDark ? '#94A3B8' : '#64748B';
+    const navBtn = { width: 34, height: 34, borderRadius: 8, border: `1px solid ${border}`, background: 'transparent', color: textPrimary, cursor: 'pointer', fontSize: 16, fontWeight: 700 } as const;
+    const inputStyle = { padding: '10px 12px', borderRadius: 10, border: `1px solid ${border}`, background: cardBg, color: textPrimary, fontSize: 14, outline: 'none', width: '100%', boxSizing: 'border-box' as const, fontFamily: 'inherit' };
+    const goBack = () => {
+      if (typeof window !== 'undefined' && window.history.length > 1) window.history.back();
+      else router.replace('/(app)/(tabs)/admin' as any);
+    };
+
+    return (
+      <View style={{ flex: 1, backgroundColor: isDark ? '#0F172A' : '#F8FAFC' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          {/* Header */}
+          <div style={{ padding: '10px 10px 8px', borderBottom: `1px solid ${border}`, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button onClick={goBack} aria-label="Back" style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 6, display: 'flex' }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={textPrimary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+            </button>
+            <div style={{ flex: 1, fontSize: 18, fontWeight: 700, color: textPrimary }}>Leave Payouts</div>
+          </div>
+
+          {/* Month nav + tabs */}
+          <div style={{ padding: '8px 12px', borderBottom: `1px solid ${border}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+              <button onClick={() => stepMonth(-1)} style={navBtn}>‹</button>
+              <div style={{ minWidth: 120, textAlign: 'center', fontWeight: 700, color: textPrimary }}>{monthLabel(year, month)}</div>
+              <button onClick={() => stepMonth(1)} style={navBtn}>›</button>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {(['forecast', 'actual'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setActiveTab(t)}
+                  style={{ flex: 1, padding: 8, borderRadius: 8, border: `1px solid ${activeTab === t ? '#2563EB' : border}`, background: activeTab === t ? (isDark ? 'rgba(37,99,235,0.15)' : '#EFF6FF') : 'transparent', color: activeTab === t ? '#2563EB' : textMuted, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+                >
+                  {t === 'forecast' ? 'Forecast' : 'Actual'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Filters */}
+          <div style={{ padding: '8px 12px', borderBottom: `1px solid ${border}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, emp code, department…" style={inputStyle} />
+            {isForecast && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input type="number" value={forecastDays || ''} onChange={(e) => setForecastDays(parseFloat(e.target.value) || 0)} placeholder="Days" style={{ ...inputStyle, flex: 1 }} />
+                <input type="date" value={forecastStartDate} onChange={(e) => setForecastStartDate(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+              </div>
+            )}
+          </div>
+
+          {/* Totals */}
+          <div style={{ padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${border}` }}>
+            <div style={{ fontSize: 12, color: textMuted }}>
+              {data.length} employees{isForecast ? ` · ${d.toFixed(d % 1 !== 0 ? 2 : 0)} days/each` : ` · ${totals.days.toFixed(totals.days % 1 !== 0 ? 2 : 0)} days`}
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#2563EB' }}>
+              {formatMoney(isForecast ? forecastTotals.total : totals.total)} SAR
+            </div>
+          </div>
+
+          {/* Card list */}
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <MobileCardList
+              data={data}
+              keyExtractor={(r: any) => String(r.employee_id)}
+              loading={isForecast ? forecastLoading : loading}
+              emptyTitle="No employees"
+              emptyDescription="Nobody matches the filters, or no compensation/leave data for this month."
+              title={(r: any) => r.full_name}
+              subtitle={(r: any) => `${r.emp_code || '—'} · ${r.department || '—'}`}
+              right={(r: any) => (
+                <Text style={{ color: '#2563EB', fontWeight: '700', fontSize: 13 }}>
+                  {formatMoney(isForecast ? Number(r.total_monthly) / 30 * d : Number(r.total_payable) || 0)}
+                </Text>
+              )}
+              rows={(r: any) =>
+                isForecast
+                  ? [
+                      { label: 'Available days', value: `${Number(r.pto_balance_days || 0).toFixed(Number(r.pto_balance_days) % 1 !== 0 ? 2 : 0)}` },
+                      { label: 'Basic pay', value: formatMoney(Number(r.basic_salary) / 30 * d) },
+                      { label: 'HRA pay', value: formatMoney(Number(r.hra) / 30 * d) },
+                      { label: 'Transport pay', value: formatMoney(Number(r.transportation) / 30 * d) },
+                    ]
+                  : [
+                      { label: 'Days off', value: `${Number(r.days_in_month || 0).toFixed(Number(r.days_in_month) % 1 !== 0 ? 2 : 0)}` },
+                      { label: 'Basic pay', value: formatMoney(Number(r.basic_payable) || 0) },
+                      { label: 'HRA pay', value: formatMoney(Number(r.hra_payable) || 0) },
+                      { label: 'Transport pay', value: formatMoney(Number(r.transport_payable) || 0) },
+                    ]
+              }
+            />
+          </div>
+
+          {/* Export */}
+          <div style={{ padding: 12, borderTop: `1px solid ${border}` }}>
+            <button
+              onClick={() => (isForecast ? handleExportForecast() : handleExport())}
+              disabled={exporting || data.length === 0}
+              style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: exporting || data.length === 0 ? '#94A3B8' : '#2563EB', color: '#fff', fontWeight: 700, fontSize: 14, cursor: exporting || data.length === 0 ? 'not-allowed' : 'pointer' }}
+            >
+              {exporting ? 'Exporting…' : isForecast ? 'Export Forecast' : 'Export Actual'}
+            </button>
+          </div>
+        </div>
+
+        {successMsg ? (
+          <div
+            onClick={() => setSuccessMsg('')}
+            style={{ position: 'fixed', bottom: 16, left: 16, right: 16, background: '#16A34A', color: '#fff', padding: '10px 14px', borderRadius: 8, fontWeight: 600, fontSize: 13, textAlign: 'center', zIndex: 1000, cursor: 'pointer' }}
+          >
+            {successMsg}
+          </div>
+        ) : null}
+      </View>
     );
   }
 
