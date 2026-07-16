@@ -1,7 +1,7 @@
 import { AccessGate } from '@/components/access/access-gate';
 import { requiredSx } from '@/lib/required-field';
 import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text, ScrollView, Platform, Pressable } from 'react-native';
+import { View, Text, ScrollView, Platform, Pressable, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
@@ -43,10 +43,12 @@ let Snackbar: any;
 let Alert: any;
 let MenuItem: any;
 let Autocomplete: any;
+let useMediaQuery: any;
 
 if (isWeb) {
   const dg = require('@mui/x-data-grid');
   DataGrid = dg.DataGrid;
+  useMediaQuery = require('@mui/material/useMediaQuery').default;
   MuiThemeProvider = require('@/components/web/mui-theme-provider').MuiThemeProvider;
   Chip = require('@mui/material/Chip').default;
   Dialog = require('@mui/material/Dialog').default;
@@ -435,6 +437,7 @@ function ProjectDialog({
   onChange: (field: string, value: any) => void;
   onSubmit: () => void;
 }) {
+  const fullScreen = useMediaQuery ? useMediaQuery('(max-width:1199.95px)') : false;
   if (!Dialog) return null;
 
   const isValid = state.project_number.trim().length > 0 && state.name.trim().length > 0;
@@ -450,9 +453,10 @@ function ProjectDialog({
       onClose={onClose}
       maxWidth="sm"
       fullWidth
+      fullScreen={fullScreen}
       PaperProps={{
         sx: {
-          borderRadius: 3,
+          borderRadius: fullScreen ? 0 : 3,
           backgroundImage: 'none',
         },
       }}
@@ -1138,25 +1142,28 @@ function ProjectsScreenInner() {
     <SafeAreaView className="flex-1 bg-background dark:bg-[#0F172A]" edges={['top']}>
       <ScreenHeader title="Projects" />
 
-      {/* Mobile search */}
+      {/* Mobile search + Add */}
       <View className="px-4 py-3">
         <View className="flex-row items-center bg-surface dark:bg-slate-800 border border-border dark:border-slate-700 rounded-xl px-4 py-2.5">
-          <View style={{ marginRight: 8 }}>
-            <Text className="text-text-muted dark:text-slate-400" style={{ fontSize: 18 }}>
-              {'\u{1F50D}'}
-            </Text>
-          </View>
-          <View className="flex-1">
-            <Pressable>
-              <Text
-                className="text-base text-text-primary dark:text-white"
-                style={{ minHeight: 24 }}
-              >
-                {/* Using a RN TextInput-like Pressable with state */}
-              </Text>
-            </Pressable>
-          </View>
+          <Text className="text-text-muted dark:text-slate-400" style={{ fontSize: 18, marginRight: 8 }}>
+            {'\u{1F50D}'}
+          </Text>
+          <TextInput
+            value={globalSearch}
+            onChangeText={setGlobalSearch}
+            placeholder="Search projects…"
+            placeholderTextColor="#94A3B8"
+            className="flex-1 text-base text-text-primary dark:text-white"
+          />
         </View>
+        {isWeb && (
+          <Pressable
+            onPress={handleOpenAdd}
+            className="mt-3 flex-row items-center justify-center bg-primary rounded-xl py-3 active:opacity-80"
+          >
+            <Text className="text-white font-semibold text-sm">+ Add Project</Text>
+          </Pressable>
+        )}
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 0, flexGrow: 1 }}>
@@ -1225,6 +1232,44 @@ function ProjectsScreenInner() {
           })
         )}
       </ScrollView>
+
+      {/* Dialogs — mobile web (MUI); Add/Edit form goes fullScreen < 1200px. */}
+      {isWeb && MuiThemeProvider && (
+        <MuiThemeProvider isDark={isDark}>
+          <ProjectDialog
+            state={dialog}
+            isDark={isDark}
+            employees={employees}
+            onClose={handleCloseDialog}
+            onCancel={handleCancelDialog}
+            onChange={handleDialogChange}
+            onSubmit={handleSubmitDialog}
+          />
+          <DeleteConfirmDialog
+            open={!!deleteTarget}
+            projectName={deleteTarget?.name || ''}
+            deleting={deleting}
+            onClose={() => setDeleteTarget(null)}
+            onConfirm={handleDelete}
+          />
+          {Snackbar && (
+            <Snackbar
+              open={snackbar.open}
+              autoHideDuration={4000}
+              onClose={() => setSnackbar((s: any) => ({ ...s, open: false }))}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+            >
+              <Alert
+                onClose={() => setSnackbar((s: any) => ({ ...s, open: false }))}
+                severity={snackbar.severity}
+                variant="filled"
+              >
+                {snackbar.message}
+              </Alert>
+            </Snackbar>
+          )}
+        </MuiThemeProvider>
+      )}
     </SafeAreaView>
   );
 }
