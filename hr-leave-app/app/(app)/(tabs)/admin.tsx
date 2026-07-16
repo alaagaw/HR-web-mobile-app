@@ -17,6 +17,7 @@ import {
   Calculator,
   Activity,
   Lock,
+  TrendingUp,
 } from 'lucide-react-native';
 import { Card } from '@/components/ui/card';
 import { useAccess } from '@/hooks/use-access';
@@ -122,6 +123,19 @@ const ADMIN_GROUPS: AdminGroup[] = [
         icon: Activity,
         iconColor: '#14B8A6',
         path: '/(app)/admin/user-activity',
+      },
+    ],
+  },
+  {
+    label: 'Planning',
+    description: 'Workforce planning and simulation tools',
+    items: [
+      {
+        title: 'Saudization & HRDF Simulator',
+        description: 'Model Saudi hires, HRDF salary support, approval delay, and shadow-employee savings. Cash timeline, period breakdown, and compliance projection.',
+        icon: TrendingUp,
+        iconColor: '#F59E0B',
+        path: '/(app)/admin/saudization-simulator',
       },
     ],
   },

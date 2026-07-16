@@ -21,6 +21,8 @@ const isApprover = (s: AccessSubject) =>
 const isHR = (s: AccessSubject) =>
   s.role === Role.HR || s.role === Role.HRDirector;
 
+const isHRDirector = (s: AccessSubject) => s.role === Role.HRDirector;
+
 const ALL = () => true;
 
 export interface AccessResource {
@@ -58,6 +60,7 @@ export const ACCESS_RESOURCES: AccessResource[] = [
   { key: 'page:admin/renewal-history',            label: 'Document Renewal History',     category: 'page', route: '/(app)/admin/renewal-history',            legacyDefault: isHR },
   { key: 'page:admin/balance-ledger',             label: 'Balance Ledger',               category: 'page', route: '/(app)/admin/balance-ledger',             legacyDefault: isHR },
   { key: 'page:admin/user-activity',              label: 'User Activity',                category: 'page', route: '/(app)/admin/user-activity',              legacyDefault: isHR },
+  { key: 'page:admin/saudization-simulator',      label: 'Saudization & HRDF Simulator', category: 'page', route: '/(app)/admin/saudization-simulator',      legacyDefault: isHRDirector },
   // The 7 Timesheet Management sub-pages are NOT separate resources:
   // they're governed by the single `nav:timesheet-management` policy
   // (their AccessGate uses that key), so granting Timesheet Management
