@@ -295,6 +295,7 @@ export function SimulatorV2() {
           name: e.full_name,
           salary: Math.round(base),
           startMonth: 1,
+          empCode: e.emp_code ?? null,
         };
       });
       const missingComp = rows.filter((r) => r.salary === 0).length;
@@ -321,6 +322,50 @@ export function SimulatorV2() {
     } finally {
       setRatioLoading(false);
     }
+  };
+
+  // ── Roster UX: collapse (roster is the workbench, shown LAST),
+  //    in-table search, capped rendering, and bulk carve tools. ──
+
+  const ROSTER_RENDER_CAP = 60;
+  const [rosterOpen, setRosterOpen] = useState(false);
+  const [rosterFilter, setRosterFilter] = useState('');
+  const rosterRef = useRef<View | null>(null);
+
+  const toggleRoster = () => {
+    setRosterOpen((open) => {
+      const next = !open;
+      if (next) {
+        // Smooth-scroll the roster into view once it has expanded
+        // (web; graceful no-op on native).
+        setTimeout(() => {
+          const node: any = rosterRef.current;
+          if (node && typeof node.scrollIntoView === 'function') {
+            node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }, 60);
+      }
+      return next;
+    });
+  };
+
+  const shownRoster = useMemo(() => {
+    const q = rosterFilter.trim().toLowerCase();
+    if (!q) return roster;
+    return roster.filter((e) =>
+      [e.name, e.empCode ?? '', e.role].some((v) => v.toLowerCase().includes(q)),
+    );
+  }, [roster, rosterFilter]);
+
+  const removeShown = () => {
+    const ids = new Set(shownRoster.map((e) => e.id));
+    setRoster((rs) => rs.filter((e) => !ids.has(e.id)));
+    setRosterFilter('');
+  };
+  const keepOnlyShown = () => {
+    const ids = new Set(shownRoster.map((e) => e.id));
+    setRoster((rs) => rs.filter((e) => ids.has(e.id)));
+    setRosterFilter('');
   };
 
   // ── Derived display values ────────────────────────────────
@@ -431,6 +476,12 @@ export function SimulatorV2() {
           }}
         >
           {rolePill}
+          <Text
+            numberOfLines={1}
+            style={{ width: 58, fontSize: 11.5, color: palette.mute, fontVariant: ['tabular-nums'] }}
+          >
+            {e.empCode || '—'}
+          </Text>
           {nameInput}
           <RowNum value={e.salary} onCommit={(v) => setEmp(e.id, { salary: v })} palette={palette} width={96} />
           <RowNum value={e.startMonth} onCommit={(v) => setEmp(e.id, { startMonth: Math.max(1, Math.round(v)) })} palette={palette} width={52} min={1} />
@@ -456,6 +507,9 @@ export function SimulatorV2() {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           {rolePill}
           {nameInput}
+          {e.empCode ? (
+            <Text style={{ fontSize: 10.5, color: palette.mute, fontVariant: ['tabular-nums'] }}>{e.empCode}</Text>
+          ) : null}
           {delBtn}
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -526,11 +580,7 @@ export function SimulatorV2() {
   );
 
   const rosterPanel = (
-    <SimPanel
-      title="Hiring roster — enter actual salaries"
-      palette={palette}
-      style={{ flex: isDesktop ? 1 : undefined }}
-    >
+    <SimPanel title="Hiring roster — enter actual salaries" palette={palette}>
       {/* Actions */}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
         <PillBtn label="+ Tech" onPress={() => addEmp('Technician')} palette={palette} />
@@ -660,10 +710,48 @@ export function SimulatorV2() {
         </View>
       )}
 
+      {/* In-table search + carve tools (find / remove / keep at scale) */}
+      {roster.length > 0 && (
+        <View style={{ marginBottom: 10 }}>
+          <TextInput
+            value={rosterFilter}
+            onChangeText={setRosterFilter}
+            placeholder={`Search ${roster.length} hires by name, emp code, role…`}
+            placeholderTextColor={palette.mute}
+            style={{
+              backgroundColor: palette.cardAlt,
+              borderWidth: 1,
+              borderColor: palette.border,
+              borderRadius: 8,
+              padding: 9,
+              fontSize: 12.5,
+              color: palette.text,
+            }}
+          />
+          {rosterFilter.trim() !== '' && (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 8 }}>
+              <Text style={{ fontSize: 11.5, color: palette.dim }}>
+                {shownRoster.length} match{shownRoster.length === 1 ? '' : 'es'}
+              </Text>
+              {shownRoster.length > 0 && shownRoster.length < roster.length && (
+                <>
+                  <PillBtn label={`Remove shown (${shownRoster.length})`} onPress={removeShown} palette={palette} />
+                  <PillBtn label={`Keep only shown (${shownRoster.length})`} onPress={keepOnlyShown} palette={palette} />
+                </>
+              )}
+              <Text style={{ fontSize: 11, color: palette.mute }}>
+                Filter affects this list only — the model still uses all {roster.length} hires.
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+
       {/* Column headers (desktop) */}
-      {isDesktop && roster.length > 0 && (
+      {isDesktop && shownRoster.length > 0 && (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: palette.border }}>
           <Text style={{ width: 52, fontSize: 10, color: palette.mute }}>ROLE</Text>
+          <Text style={{ width: 58, fontSize: 10, color: palette.mute }}>EMP #</Text>
           <Text style={{ flex: 1, fontSize: 10, color: palette.mute }}>NAME / ID</Text>
           <Text style={{ width: 96, fontSize: 10, color: palette.mute, textAlign: 'right' }}>SALARY (B+H)</Text>
           <Text style={{ width: 52, fontSize: 10, color: palette.mute, textAlign: 'right' }}>START</Text>
@@ -676,8 +764,20 @@ export function SimulatorV2() {
         <Text style={{ paddingVertical: 22, textAlign: 'center', color: palette.mute, fontSize: 12.5 }}>
           No hires yet. Add a row{isWeb ? ', import a scenario, or download the template to fill' : ''}.
         </Text>
+      ) : shownRoster.length === 0 ? (
+        <Text style={{ paddingVertical: 22, textAlign: 'center', color: palette.mute, fontSize: 12.5 }}>
+          No hires match “{rosterFilter.trim()}”.
+        </Text>
       ) : (
-        roster.map(renderHire)
+        <>
+          {shownRoster.slice(0, ROSTER_RENDER_CAP).map(renderHire)}
+          {shownRoster.length > ROSTER_RENDER_CAP && (
+            <Text style={{ paddingVertical: 10, textAlign: 'center', color: palette.mute, fontSize: 11.5 }}>
+              Showing {ROSTER_RENDER_CAP} of {shownRoster.length} — refine the search to see the rest
+              (all {roster.length} still count in the model).
+            </Text>
+          )}
+        </>
       )}
 
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
@@ -693,7 +793,7 @@ export function SimulatorV2() {
   );
 
   const chartPanel = (
-    <SimPanel title="Monthly cash timeline" palette={palette}>
+    <SimPanel title="Monthly cash timeline" palette={palette} style={{ flex: isDesktop ? 1 : undefined, minWidth: 0 }}>
       <View style={{ flexDirection: 'row', gap: 18, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
           <View style={{ width: 13, height: 13, borderRadius: 4, backgroundColor: palette.gold }} />
@@ -834,6 +934,44 @@ export function SimulatorV2() {
     </SimPanel>
   );
 
+  // Roster lives LAST as a collapsible workbench: a slim always-visible
+  // summary bar; expanding smooth-scrolls it into view. Decision data
+  // (KPIs, params, timeline, breakdown, ratio) stays uninterrupted above.
+  const techCount = roster.filter((e) => e.role === 'Technician').length;
+  const rosterSection = (
+    <View ref={rosterRef}>
+      <Pressable
+        onPress={toggleRoster}
+        style={({ pressed }) => ({
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+          backgroundColor: palette.card,
+          borderWidth: 1,
+          borderColor: palette.border,
+          borderRadius: 12,
+          paddingHorizontal: 16,
+          paddingVertical: 13,
+          opacity: pressed ? 0.85 : 1,
+        })}
+      >
+        <View style={{ flexShrink: 1 }}>
+          <Text style={{ fontSize: 12, letterSpacing: 1.2, color: palette.dim, fontWeight: '600', textTransform: 'uppercase' }}>
+            Hiring roster
+          </Text>
+          <Text style={{ fontSize: 11.5, color: palette.mute, marginTop: 2 }} numberOfLines={1}>
+            {roster.length} hires · {techCount} tech · {roster.length - techCount} eng · Gross {sar(m.grossMonthly)}/mo · HRDF {sar(m.hrdfMonthly)}/mo
+          </Text>
+        </View>
+        <Text style={{ fontSize: 12.5, fontWeight: '600', color: palette.blue }}>
+          {rosterOpen ? 'Hide ▴' : 'Edit roster ▾'}
+        </Text>
+      </Pressable>
+      {rosterOpen && <View style={{ marginTop: 12 }}>{rosterPanel}</View>}
+    </View>
+  );
+
   // ── Body ──────────────────────────────────────────────────
 
   return (
@@ -892,20 +1030,20 @@ export function SimulatorV2() {
         ))}
       </View>
 
-      {/* Params + roster */}
+      {/* Decision data first: parameters beside the cash timeline */}
       <View style={{ flexDirection: isDesktop ? 'row' : 'column', gap: 18, alignItems: isDesktop ? 'flex-start' : 'stretch' }}>
         <View style={{ width: isDesktop ? 340 : '100%' }}>{paramsPanel}</View>
-        {rosterPanel}
+        {chartPanel}
       </View>
-
-      {/* Chart */}
-      {chartPanel}
 
       {/* Breakdown + ratio */}
       <View style={{ flexDirection: isDesktop ? 'row' : 'column', gap: 18, alignItems: 'stretch' }}>
         {breakdownPanel}
         {ratioPanel}
       </View>
+
+      {/* Roster — the workbench: collapsed summary bar, last on the page */}
+      {rosterSection}
 
       {/* Footer */}
       <View style={{ paddingTop: 4, paddingBottom: 8, flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>

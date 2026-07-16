@@ -33,6 +33,9 @@ export interface RosterRow {
   salary: number;
   /** 1-indexed month the hire begins. */
   startMonth: number;
+  /** Optional employee code when seeded from the DB. Additive to
+   *  schema 1.0 (unknown fields are ignored on import per the spec). */
+  empCode?: string | null;
 }
 
 export interface ParamsV2 {
@@ -66,7 +69,7 @@ export interface ScenarioV2 {
     violations: { count: number; avgFine: number };
     compliance: { saudisInCategory: number; totalInCategory: number; targetRatio: number };
   };
-  roster: { role: string; name: string; approvedSalary: number; startMonth: number }[];
+  roster: { role: string; name: string; approvedSalary: number; startMonth: number; empCode?: string }[];
 }
 
 const num = (v: unknown, dv: number): number => {
@@ -120,6 +123,7 @@ export function buildScenario(roster: RosterRow[], p: ParamsV2, name: string): S
       name: e.name,
       approvedSalary: e.salary,
       startMonth: e.startMonth,
+      ...(e.empCode ? { empCode: e.empCode } : {}),
     })),
   };
 }
@@ -150,6 +154,7 @@ export function applyScenario(obj: Partial<ScenarioV2> | null | undefined): { pa
     // Contract key is approvedSalary; accept legacy `salary` on import.
     salary: num(r.approvedSalary != null ? r.approvedSalary : r.salary, 0),
     startMonth: Math.max(1, num(r.startMonth, 1)),
+    empCode: r.empCode != null ? String(r.empCode) : null,
   }));
   return { params, roster };
 }
