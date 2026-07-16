@@ -59,9 +59,13 @@ exists; only build card conversions where a page is web-only.
 - [ ] `admin/employees.tsx` (search+list, no add/edit dialogs on mobile)
 - [ ] `admin/registrations.tsx` (list, no review/approve on mobile)
 
-*Category C — mobile fallback is a stub / desktop-redirect (NOT gated; need real mobile UI):*
-- [ ] `admin/compensation.tsx`  - [ ] `admin/leave-payouts.tsx`  - [ ] `admin/hr-policies-documents.tsx` (also currently `if(!isWeb)` → mobile web gets full desktop)
-- [ ] `timesheet/month-closures.tsx`  - [ ] `timesheet/project-hours-requests.tsx`  - [ ] `timesheet/employee-project-breakdown.tsx`  - [ ] `timesheet/timesheets.tsx`
+*Category C — mobile fallback is a stub / desktop-redirect (need real mobile UI):*
+- Reusable `components/ui/mobile-card-list.tsx` built (07/16/2026) — DataGrid→stacked-cards on mobile.
+- [x] `timesheet/employee-project-breakdown.tsx` — month nav + card list (07/16/2026)
+- [x] `timesheet/project-hours-requests.tsx` — card list + fullScreen approve/reject dialog (07/16/2026)
+- [ ] `admin/leave-payouts.tsx` (dual-tab calculator + filters — bigger build)
+- [ ] `admin/compensation.tsx`  - [ ] `admin/hr-policies-documents.tsx` (also `if(!isWeb)` → mobile web currently gets full desktop 3-pane)
+- [ ] `timesheet/month-closures.tsx` (web card-grid already ~renders on mobile web; needs Dialog fullScreen polish)  - [ ] `timesheet/timesheets.tsx`
 - [ ] `(auth)/registration-form.tsx` (single shared render; `isWeb` only for styling — needs responsive form work, not gating)
 
 ## Every page must pass "input reachability" on mobile
