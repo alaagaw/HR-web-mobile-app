@@ -85,7 +85,11 @@ data but was missing web ACTIONS. Fixed:
 - [x] `(tabs)/tasks.tsx` — renew Modal was `!isWeb` (inert on mobile web); now renders on mobile web.
 - [x] `admin/hr-policies-documents.tsx` — added New Document/Folder + per-card Edit/New-version/Archive + mounted DocDialog/FolderDialog.
 - [x] `(tabs)/dashboard.tsx` — convenience gap only; every action reachable via nav (approvals→request detail, renewals→tasks tab, registrations→registrations page). No change needed.
-- [ ] **`(tabs)/timesheet-entry.tsx` — REMAINING. The core employee hours-entry tab is fully read-only on mobile** ("Open on desktop for full editing"). Needs mobile editing: per-day hour inputs + Save + Submit for Approval (core), then Copy Last Week / Auto-fill / Hours-Change / Add Employee / Export (extras). Largest + highest-risk build; do as a focused effort.
+- [x] **`(tabs)/timesheet-entry.tsx`** — CORE editing shipped: per-day editable hour inputs (0–24, locked days skipped) + Save + Submit for Approval, reusing web's gridRowsToDrafts/upsertEntries/submitForApproval; editable only in draft/rejected. Extras (Copy Last Week / Auto-fill / Add Employee / Export) still desktop-only.
+
+**Theme consistency fixes (07/16/2026):**
+- [x] Review Registration dialog was light on dark mobile — was mounted without `MuiThemeProvider`; wrapped it (MUI theme flows through the Dialog portal via context). Verified every other mobile MUI dialog I added IS wrapped.
+- [x] `(auth)/registration-form.tsx` — labels used `isWeb ? light : dark` (invisible on web light mode); flipped 5 color ternaries to `isDark`. Width was already responsive.
 
 ### Status 07/16/2026: mobile-responsiveness initiative essentially COMPLETE.
 Only `registration-form.tsx` responsive polish remains (public sign-up form,
