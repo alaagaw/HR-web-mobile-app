@@ -332,21 +332,27 @@ export function SimulatorV2() {
   const [rosterFilter, setRosterFilter] = useState('');
   const rosterRef = useRef<View | null>(null);
 
+  const scrollToRoster = () => {
+    // Smooth-scroll the employees section into view once it has
+    // rendered (web; graceful no-op on native).
+    setTimeout(() => {
+      const node: any = rosterRef.current;
+      if (node && typeof node.scrollIntoView === 'function') {
+        node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 60);
+  };
   const toggleRoster = () => {
     setRosterOpen((open) => {
       const next = !open;
-      if (next) {
-        // Smooth-scroll the roster into view once it has expanded
-        // (web; graceful no-op on native).
-        setTimeout(() => {
-          const node: any = rosterRef.current;
-          if (node && typeof node.scrollIntoView === 'function') {
-            node.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
-        }, 60);
-      }
+      if (next) scrollToRoster();
       return next;
     });
+  };
+  /** Top-of-page shortcut: expand the employees table and jump to it. */
+  const showEmployees = () => {
+    setRosterOpen(true);
+    scrollToRoster();
   };
 
   const shownRoster = useMemo(() => {
@@ -580,7 +586,7 @@ export function SimulatorV2() {
   );
 
   const rosterPanel = (
-    <SimPanel title="Hiring roster — enter actual salaries" palette={palette}>
+    <SimPanel title="Employees — enter actual salaries" palette={palette}>
       {/* Actions */}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
         <PillBtn label="+ Tech" onPress={() => addEmp('Technician')} palette={palette} />
@@ -608,9 +614,9 @@ export function SimulatorV2() {
           }}
         >
           <Text style={{ fontSize: 11.5, color: palette.dim, marginBottom: 8 }}>
-            Seed the roster from live employees — salary is{' '}
+            Seed the table from live employees — salary is{' '}
             <Text style={{ fontWeight: '600', color: palette.text }}>Basic + HRA</Text> from current
-            compensation (the HRDF base). Replaces the current roster; start months default to 1.
+            compensation (the HRDF base). Replaces the current list; start months default to 1.
           </Text>
           <TextInput
             value={dbSearch}
@@ -811,6 +817,9 @@ export function SimulatorV2() {
         windowStart={m.supStart}
         windowEnd={m.supEnd}
         palette={palette}
+        // Taller drawing on desktop so the chart fills its card beside
+        // the parameters panel (height stays width×aspect — responsive).
+        aspect={isDesktop ? 0.42 : undefined}
       />
     </SimPanel>
   );
@@ -958,14 +967,14 @@ export function SimulatorV2() {
       >
         <View style={{ flexShrink: 1 }}>
           <Text style={{ fontSize: 12, letterSpacing: 1.2, color: palette.dim, fontWeight: '600', textTransform: 'uppercase' }}>
-            Hiring roster
+            Employees
           </Text>
           <Text style={{ fontSize: 11.5, color: palette.mute, marginTop: 2 }} numberOfLines={1}>
             {roster.length} hires · {techCount} tech · {roster.length - techCount} eng · Gross {sar(m.grossMonthly)}/mo · HRDF {sar(m.hrdfMonthly)}/mo
           </Text>
         </View>
         <Text style={{ fontSize: 12.5, fontWeight: '600', color: palette.blue }}>
-          {rosterOpen ? 'Hide ▴' : 'Edit roster ▾'}
+          {rosterOpen ? 'Hide ▴' : 'Open table ▾'}
         </Text>
       </Pressable>
       {rosterOpen && <View style={{ marginTop: 12 }}>{rosterPanel}</View>}
@@ -987,7 +996,7 @@ export function SimulatorV2() {
       >
         <View style={{ flexShrink: 1 }}>
           <Text style={{ fontSize: 12.5, color: palette.dim }}>
-            Roster-based: per-hire salaries, phased starts, per-employee HRDF cap.
+            Per-hire salaries, phased starts, per-employee HRDF cap.
           </Text>
           <TextInput
             value={scenarioName}
@@ -1007,6 +1016,7 @@ export function SimulatorV2() {
           />
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <PillBtn label={`Employees (${roster.length}) ↓`} onPress={showEmployees} palette={palette} solid />
           <Segmented label="HRDF rate" options={RATE_OPTIONS} value={p.rate} onChange={(v) => setParam('rate', v)} palette={palette} />
           <Segmented label="Baseline" options={BASELINE_OPTIONS} value={p.baseline} onChange={(v) => setParam('baseline', v)} palette={palette} />
           <Button size="sm" variant="secondary" onPress={reset}>
@@ -1030,8 +1040,10 @@ export function SimulatorV2() {
         ))}
       </View>
 
-      {/* Decision data first: parameters beside the cash timeline */}
-      <View style={{ flexDirection: isDesktop ? 'row' : 'column', gap: 18, alignItems: isDesktop ? 'flex-start' : 'stretch' }}>
+      {/* Decision data first: parameters beside the cash timeline.
+          Stretch alignment + the taller chart aspect keep the two cards
+          the same height with no dead space. */}
+      <View style={{ flexDirection: isDesktop ? 'row' : 'column', gap: 18, alignItems: 'stretch' }}>
         <View style={{ width: isDesktop ? 340 : '100%' }}>{paramsPanel}</View>
         {chartPanel}
       </View>

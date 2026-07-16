@@ -14,13 +14,14 @@ import type { SimMonth } from '@/lib/saudization-sim';
 import { sar, kfmt } from '@/lib/saudization-sim';
 import type { SimPalette } from './palette';
 
-// Fixed viewBox geometry (same as the prototype); the SVG scales
-// to the measured container width, preserving aspect ratio.
+// ViewBox geometry: width is fixed (the prototype's 900) and the
+// drawing HEIGHT is parametric via the `aspect` prop (height ÷
+// width). The SVG always renders at measured-width × aspect, so
+// nothing is pixel-hardcoded and callers can pick a taller chart.
 const VB_W = 900;
-const VB_H = 320;
+const DEFAULT_ASPECT = 320 / 900; // = the original 900×320 drawing
 const PAD = { l: 52, r: 18, t: 18, b: 34 };
 const PLOT_W = VB_W - PAD.l - PAD.r;
-const PLOT_H = VB_H - PAD.t - PAD.b;
 const TIP_W = 165;
 
 /**
@@ -35,6 +36,7 @@ export function CashTimelineChart({
   palette,
   windowStart,
   windowEnd,
+  aspect,
 }: {
   months: SimMonth[];
   lag: number;
@@ -46,11 +48,17 @@ export function CashTimelineChart({
   /** Optional: month AFTER the last support window ends. Defaults to
    *  `lag + support + 1`. */
   windowEnd?: number;
+  /** Drawing height ÷ width. Defaults to the original 900×320 ratio;
+   *  pass a larger value for a taller chart (still fully responsive —
+   *  rendered height is always measured-width × aspect). */
+  aspect?: number;
 }) {
   const [width, setWidth] = useState(0);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
   const n = months.length;
+  const vbH = Math.round(VB_W * (aspect ?? DEFAULT_ASPECT));
+  const plotH = vbH - PAD.t - PAD.b;
 
   const geo = useMemo(() => {
     let yMax = 0;
@@ -64,7 +72,7 @@ export function CashTimelineChart({
     const range = yMax - yMin;
 
     const X = (t: number) => PAD.l + ((t - 1) / (n - 1)) * PLOT_W;
-    const Y = (v: number) => PAD.t + ((yMax - v) / range) * PLOT_H;
+    const Y = (v: number) => PAD.t + ((yMax - v) / range) * plotH;
 
     // y gridlines + labels
     const ticks: { y: number; label: string }[] = [];
@@ -99,7 +107,7 @@ export function CashTimelineChart({
     xLabels.push({ x: X(n), label: 'M' + n, anchor: 'end' });
 
     return { yMin, X, Y, ticks, area, areaTop: areaTop.trim(), line: line.trim(), xLabels };
-  }, [months, n]);
+  }, [months, n, plotH]);
 
   const { X, Y } = geo;
 
@@ -112,7 +120,7 @@ export function CashTimelineChart({
     setHoverIdx(Math.round(frac * (n - 1)));
   };
 
-  const height = width > 0 ? (width * VB_H) / VB_W : 0;
+  const height = width > 0 ? (width * vbH) / VB_W : 0;
   const pxScale = width > 0 ? width / VB_W : 1;
 
   const hovered = hoverIdx != null ? months[hoverIdx] : null;
@@ -151,7 +159,7 @@ export function CashTimelineChart({
           }
           onPointerLeave={() => setHoverIdx(null)}
         >
-          <Svg width={width} height={height} viewBox={`0 0 ${VB_W} ${VB_H}`}>
+          <Svg width={width} height={height} viewBox={`0 0 ${VB_W} ${vbH}`}>
             <Defs>
               <LinearGradient id="simGoldGrad" x1="0" y1="0" x2="0" y2="1">
                 <Stop offset="0" stopColor={palette.goldAreaTop} />
@@ -200,7 +208,7 @@ export function CashTimelineChart({
               x={xWinStart}
               y={PAD.t}
               width={Math.max(0, xWinEnd - xWinStart)}
-              height={PLOT_H}
+              height={plotH}
               fill={palette.supportWindowFill}
             />
 
@@ -224,7 +232,7 @@ export function CashTimelineChart({
                   x1={X(supStartT)}
                   y1={PAD.t}
                   x2={X(supStartT)}
-                  y2={PAD.t + PLOT_H}
+                  y2={PAD.t + plotH}
                   stroke={palette.borderStrong}
                   strokeWidth={1}
                   strokeDasharray="4 4"
@@ -240,7 +248,7 @@ export function CashTimelineChart({
                   x1={X(supEndT)}
                   y1={PAD.t}
                   x2={X(supEndT)}
-                  y2={PAD.t + PLOT_H}
+                  y2={PAD.t + plotH}
                   stroke={palette.borderStrong}
                   strokeWidth={1}
                   strokeDasharray="4 4"
@@ -256,7 +264,7 @@ export function CashTimelineChart({
               <SvgText
                 key={`x${i}`}
                 x={xl.x}
-                y={PAD.t + PLOT_H + 18}
+                y={PAD.t + plotH + 18}
                 textAnchor={xl.anchor}
                 fontSize={10}
                 fill={palette.mute}
@@ -272,7 +280,7 @@ export function CashTimelineChart({
                   x1={X(hovered.t)}
                   y1={PAD.t}
                   x2={X(hovered.t)}
-                  y2={PAD.t + PLOT_H}
+                  y2={PAD.t + plotH}
                   stroke={palette.borderStrong}
                   strokeWidth={1}
                   strokeDasharray="4 4"
