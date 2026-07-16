@@ -29,6 +29,7 @@ import { KpiCard } from './kpi-card';
 import { RatioBar } from './ratio-bar';
 import { NumField } from './num-field';
 import { CashTimelineChart } from './cash-timeline-chart';
+import { buildV2ReportHtml } from './v2-report';
 import {
   SCHEMA_VERSION,
   type ParamsV2,
@@ -382,6 +383,33 @@ export function SimulatorV2() {
   const curRatio = p.totScope > 0 ? p.curSaudi / p.totScope : 0;
   const projRatio = p.totScope + roster.length > 0 ? (p.curSaudi + roster.length) / (p.totScope + roster.length) : 0;
   const meets = projRatio >= p.target - 1e-9;
+
+  // ── Export report (web): print-optimized snapshot of the whole
+  //    page state — KPIs, params, timeline, breakdown, ratio, and
+  //    the FULL employees table. Opens print-ready; the user picks
+  //    "Save as PDF" in the browser dialog. ──
+  const exportReport = () => {
+    if (!isWeb || typeof window === 'undefined') return;
+    const html = buildV2ReportHtml({
+      scenarioName,
+      p,
+      m,
+      ps,
+      period,
+      periodLabel: PERIOD_LABELS[period],
+      roster,
+      curRatio,
+      projRatio,
+      meets,
+      generatedAt: new Date(),
+    });
+    const w = window.open('', '_blank');
+    if (!w) return; // popup blocked — nothing sensible to do silently
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 350);
+  };
 
   const kpiCards = [
     {
@@ -1017,6 +1045,7 @@ export function SimulatorV2() {
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <PillBtn label={`Employees (${roster.length}) ↓`} onPress={showEmployees} palette={palette} solid />
+          {isWeb && <PillBtn label="Export report" onPress={exportReport} palette={palette} />}
           <Segmented label="HRDF rate" options={RATE_OPTIONS} value={p.rate} onChange={(v) => setParam('rate', v)} palette={palette} />
           <Segmented label="Baseline" options={BASELINE_OPTIONS} value={p.baseline} onChange={(v) => setParam('baseline', v)} palette={palette} />
           <Button size="sm" variant="secondary" onPress={reset}>
