@@ -360,16 +360,20 @@ function RegistrationsScreenInner() {
           )
         }
       />
-      {/* Review/approve dialog — available on mobile web (MUI). It goes
-          full-screen below 1200px via its own media query. */}
-      {ReviewRegistrationDialog && (
-        <ReviewRegistrationDialog
-          open={!!reviewing}
-          registration={reviewing}
-          currentUserId={user?.id}
-          onClose={() => setReviewing(null)}
-          onProcessed={() => invalidate()}
-        />
+      {/* Review/approve dialog — available on mobile web (MUI). Wrapped in
+          MuiThemeProvider so it inherits the app's dark/light theme (without
+          it MUI falls back to its default light theme). Goes full-screen
+          below 1200px via its own media query. */}
+      {ReviewRegistrationDialog && MuiThemeProvider && (
+        <MuiThemeProvider isDark={isDark}>
+          <ReviewRegistrationDialog
+            open={!!reviewing}
+            registration={reviewing}
+            currentUserId={user?.id}
+            onClose={() => setReviewing(null)}
+            onProcessed={() => invalidate()}
+          />
+        </MuiThemeProvider>
       )}
     </SafeAreaView>
   );
