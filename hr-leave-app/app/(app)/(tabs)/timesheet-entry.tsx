@@ -2295,6 +2295,94 @@ function MobileTimesheetEntry({ isDark }: { isDark: boolean }) {
     }
   }, [selectedProjectId, selectedProject, user, gridRows, weekStartStr, weekEndStr, upsertEntries, submitForApproval, fetchSubmissionForWeek]);
 
+  const [autoFillHours, setAutoFillHours] = useState('');
+
+  // Copy the previous week's hours into the current week (skip locked days).
+  const handleCopyLastWeek = useCallback(async () => {
+    if (!selectedProjectId) return;
+    const prevWeekStart = subDays(weekStart, 7);
+    const prevStartStr = format(prevWeekStart, 'yyyy-MM-dd');
+    const prevEndStr = format(addDays(prevWeekStart, 6), 'yyyy-MM-dd');
+    try {
+      const prevEntries = await timesheetService.getEntriesForWeek(selectedProjectId, prevStartStr, prevEndStr);
+      if (prevEntries.length === 0) { setFeedback('No entries for previous week'); return; }
+      const prevWeekDays = getWeekDays(prevWeekStart);
+      const prevRows = buildGridRows(prevEntries, prevWeekDays, selectedProject?.entry_mode);
+      const newRows: GridRow[] = prevRows.map((prevRow) => {
+        const hours: Record<string, number> = {};
+        const overtimeHours: Record<string, number> = {};
+        weekDays.forEach((currentDay, idx) => {
+          const prevDay = prevWeekDays[idx];
+          if (isDayLocked(currentDay.dateStr)) { hours[currentDay.dateStr] = 0; overtimeHours[currentDay.dateStr] = 0; }
+          else { hours[currentDay.dateStr] = prevRow.hours[prevDay.dateStr] || 0; overtimeHours[currentDay.dateStr] = prevRow.overtimeHours[prevDay.dateStr] || 0; }
+        });
+        return { ...prevRow, hours, overtimeHours };
+      });
+      setGridRows(newRows);
+      setFeedback('Copied hours from previous week');
+    } catch (err: any) { setFeedback(err?.message || 'Failed to copy last week'); }
+  }, [selectedProjectId, selectedProject, weekStart, weekDays]);
+
+  // Fill every non-weekend, non-locked day with the given hours.
+  const handleAutoFill = useCallback(() => {
+    const h = parseFloat(autoFillHours);
+    if (isNaN(h) || h < 0 || h > 24) { setFeedback('Enter hours between 0 and 24'); return; }
+    setGridRows((prev) =>
+      prev.map((row) => {
+        const hours = { ...row.hours };
+        for (const day of weekDays) {
+          if (!isSaudiWeekend(day.dateStr) && !isDayLocked(day.dateStr)) hours[day.dateStr] = h;
+        }
+        return { ...row, hours };
+      }),
+    );
+    setFeedback(`Auto-filled ${h}h on weekdays`);
+  }, [autoFillHours, weekDays]);
+
+  const handleExport = useCallback(() => {
+    if (gridRows.length === 0) return;
+    exportGridToCSV(gridRows, weekDays, selectedProject?.name || 'project', weekLabel);
+  }, [gridRows, weekDays, selectedProject, weekLabel]);
+
+  // ── Add Employee (mobile: inline search + add) ────────────
+  const [addOpen, setAddOpen] = useState(false);
+  const [addSearch, setAddSearch] = useState('');
+  const [addResults, setAddResults] = useState<Profile[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (addSearch.trim().length < 2) { setAddResults([]); return; }
+    userService
+      .getEmployees({ search: addSearch.trim(), is_active: true })
+      .then((res) => { if (!cancelled) setAddResults(res); })
+      .catch(() => { if (!cancelled) setAddResults([]); });
+    return () => { cancelled = true; };
+  }, [addSearch]);
+
+  const addEmployeeRow = useCallback((profile: Profile) => {
+    if (gridRows.some((r) => r.employee_id === profile.id)) { setFeedback('Employee already in the timesheet'); return; }
+    const hours: Record<string, number> = {};
+    const overtimeHours: Record<string, number> = {};
+    for (const day of weekDays) { hours[day.dateStr] = 0; overtimeHours[day.dateStr] = 0; }
+    const newRow: GridRow = {
+      key: profile.id,
+      employee_id: profile.id,
+      employee_name: profile.full_name,
+      employee_number: (profile as any).emp_code ?? null,
+      designation: profile.department,
+      supplier_id: null,
+      supplier_name: null,
+      shift: 'D',
+      hours,
+      overtimeHours,
+    };
+    setGridRows((prev) => [...prev, newRow]);
+    setAddSearch('');
+    setAddResults([]);
+    setAddOpen(false);
+    setFeedback(`Added ${profile.full_name}`);
+  }, [gridRows, weekDays]);
+
   return (
     <SafeAreaView className="flex-1 bg-background dark:bg-[#0F172A]" edges={['top']}>
       <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
@@ -2389,6 +2477,74 @@ function MobileTimesheetEntry({ isDark }: { isDark: boolean }) {
             {feedback && (
               <View className="mb-3 p-3 rounded-xl border border-border dark:border-slate-700 bg-surface dark:bg-slate-800">
                 <Text className="text-xs text-center font-semibold text-text-primary dark:text-white">{feedback}</Text>
+              </View>
+            )}
+
+            {/* Quick actions */}
+            {gridRows.length > 0 && (
+              <View className="mb-3 flex-row flex-wrap items-center gap-2">
+                {isEditable && (
+                  <Pressable onPress={handleCopyLastWeek} className="px-3 py-2 rounded-lg border border-border dark:border-slate-700 bg-surface dark:bg-slate-800 active:opacity-80">
+                    <Text className="text-xs font-semibold text-text-primary dark:text-white">Copy Last Week</Text>
+                  </Pressable>
+                )}
+                {isEditable && (
+                  <View className="flex-row items-center gap-1 px-2 py-1 rounded-lg border border-border dark:border-slate-700 bg-surface dark:bg-slate-800">
+                    <TextInput
+                      value={autoFillHours}
+                      onChangeText={setAutoFillHours}
+                      keyboardType="numeric"
+                      placeholder="hrs"
+                      placeholderTextColor="#94A3B8"
+                      className="text-xs text-text-primary dark:text-white"
+                      style={{ width: 40, paddingVertical: 4, textAlign: 'center' }}
+                    />
+                    <Pressable onPress={handleAutoFill} className="px-2 py-1 rounded bg-primary active:opacity-80">
+                      <Text className="text-xs font-semibold text-white">Fill all</Text>
+                    </Pressable>
+                  </View>
+                )}
+                <Pressable onPress={handleExport} className="px-3 py-2 rounded-lg border border-border dark:border-slate-700 bg-surface dark:bg-slate-800 active:opacity-80">
+                  <Text className="text-xs font-semibold text-text-primary dark:text-white">Export CSV</Text>
+                </Pressable>
+              </View>
+            )}
+
+            {/* Add Employee (mobile: inline search) */}
+            {isEditable && (
+              <View className="mb-3">
+                <Pressable
+                  onPress={() => setAddOpen((v) => !v)}
+                  className="flex-row items-center justify-center rounded-lg border border-dashed border-border dark:border-slate-600 py-2.5 active:opacity-80"
+                >
+                  <Text className="text-xs font-semibold text-primary dark:text-blue-400">
+                    {addOpen ? 'Close' : '+ Add Employee'}
+                  </Text>
+                </Pressable>
+                {addOpen && (
+                  <View className="mt-2 p-3 rounded-xl border border-border dark:border-slate-700 bg-surface dark:bg-slate-800">
+                    <TextInput
+                      value={addSearch}
+                      onChangeText={setAddSearch}
+                      placeholder="Search employee (name or code)…"
+                      placeholderTextColor="#94A3B8"
+                      className="border border-border dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-text-primary dark:text-white bg-background dark:bg-slate-900"
+                    />
+                    {addResults.map((p) => (
+                      <Pressable
+                        key={p.id}
+                        onPress={() => addEmployeeRow(p)}
+                        className="mt-2 p-2 rounded-lg flex-row justify-between items-center active:opacity-70"
+                      >
+                        <Text className="text-sm text-text-primary dark:text-white flex-1">{p.full_name}</Text>
+                        <Text className="text-xs text-text-muted dark:text-slate-400 ml-2">{(p as any).emp_code || ''}</Text>
+                      </Pressable>
+                    ))}
+                    {addSearch.trim().length >= 2 && addResults.length === 0 && (
+                      <Text className="text-xs text-text-muted dark:text-slate-400 mt-2 text-center">No matches</Text>
+                    )}
+                  </View>
+                )}
               </View>
             )}
 
