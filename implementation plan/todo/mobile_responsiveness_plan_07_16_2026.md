@@ -67,12 +67,18 @@ exists; only build card conversions where a page is web-only.
 - [x] `admin/compensation.tsx` — card list (tap → history/add dialog), 3 dialogs fullScreen (07/16/2026)
 - [x] `timesheet/timesheets.tsx` — Monthly Consolidated per-employee card summary (07/16/2026)
 - [x] `timesheet/month-closures.tsx` — fullScreen dialog; card grid already reflows (07/16/2026)
-- [ ] `admin/hr-policies-documents.tsx` (also `if(!isWeb)` → mobile web currently gets full desktop 3-pane)
-- [ ] `(auth)/registration-form.tsx` (single shared render; `isWeb` only for styling — needs responsive form work, not gating)
+- [x] `admin/hr-policies-documents.tsx` — searchable single-column doc list on mobile, tap to open file (07/16/2026)
+- [ ] `(auth)/registration-form.tsx` (single shared render; `isWeb` only for styling — needs responsive form work, not gating) — OPTIONAL/remaining
 
 *Category A view-only → add mobile actions (parity):*
-- [ ] `admin/registrations.tsx` — gate desktop + wire mobile review/approve dialog
-- [ ] `admin/employees.tsx` — gate desktop + mobile add/edit
+- [x] `admin/registrations.tsx` — gated + mobile Review button → fullScreen review/approve dialog (07/16/2026)
+- [x] `admin/employees.tsx` — gated + tap-to-edit + New Employee button + fullScreen Edit/Invite dialogs (07/16/2026)
+
+### Status 07/16/2026: mobile-responsiveness initiative essentially COMPLETE.
+Only `registration-form.tsx` responsive polish remains (public sign-up form,
+already usable). Reusable `MobileCardList` + `useBreakpoint` (1200px) power
+the whole thing; every change gated so desktop ≥1200px is byte-for-byte
+unchanged. All batches verified: no new tsc errors + `expo export` exit 0.
 
 ## Every page must pass "input reachability" on mobile
 For each page below, after layout work, verify at 390px width that EVERY

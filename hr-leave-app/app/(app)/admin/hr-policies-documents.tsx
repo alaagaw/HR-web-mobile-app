@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, Platform } from 'react-native';
+import { View, Text, ScrollView, TextInput, Pressable, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useColorScheme } from 'nativewind';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/layout/screen-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useAuth } from '@/hooks/use-auth';
+import { useBreakpoint } from '@/hooks/use-breakpoint';
 import { hrPoliciesService } from '@/services';
 import { Role, HRDocumentStatus, HRDocumentVisibility } from '@/types/enums';
 import type {
@@ -432,6 +433,7 @@ export default function HRPoliciesDocumentsScreen() {
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { isMobile } = useBreakpoint();
   const isHR = user?.role === Role.HR || user?.role === Role.HRDirector;
 
   const [folders, setFolders] = useState<HRDocumentFolder[]>([]);
@@ -642,22 +644,51 @@ export default function HRPoliciesDocumentsScreen() {
     } catch (e: any) { notify(e?.message || 'Download failed', 'error'); }
   };
 
-  // ── Mobile (web-first feature: read-only notice) ───────────
-  if (!isWeb) {
+  // ── Mobile (native + web < 1200px): single-column browse ───────
+  // The 3-pane desktop layout (tree + list + preview) can't fit on a
+  // phone, so below 1200px we show a searchable document list; tapping
+  // a document opens its file. Folder-tree browsing + inline preview
+  // stay desktop-only.
+  if (!isWeb || isMobile) {
+    const openDocFile = async (d: any) => {
+      const versionId = d.current_version?.id;
+      if (!versionId) { notify('No file attached', 'error'); return; }
+      try {
+        const { url } = await hrPoliciesService.getFileUrl(versionId, true);
+        if (typeof window !== 'undefined') window.open(url, '_blank');
+      } catch (e: any) {
+        notify(e?.message || 'Could not open file', 'error');
+      }
+    };
+
     return (
       <SafeAreaView className="flex-1 bg-background dark:bg-[#0F172A]" edges={['top']}>
         <ScreenHeader title="HR Policies & Documents" />
-        <ScrollView contentContainerStyle={{ padding: 16 }}>
+        <View className="px-4 pt-3 pb-1">
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search title or contents…"
+            placeholderTextColor="#94A3B8"
+            className="border border-border dark:border-slate-700 rounded-xl px-4 py-2.5 text-base text-text-primary dark:text-white bg-surface dark:bg-slate-800"
+          />
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 8, flexGrow: 1 }}>
           {visibleDocs.length === 0 ? (
-            <EmptyState title="No documents" description="Open this section on the web app to manage documents." />
+            <EmptyState title="No documents" description="Nothing here yet." />
           ) : (
             visibleDocs.map((d) => (
-              <View key={d.id} className="mb-3 p-4 rounded-xl border border-border dark:border-slate-700 bg-surface dark:bg-slate-800">
-                <Text className="text-base font-bold text-text-primary dark:text-white">{d.title}</Text>
-                <Text className="text-xs text-text-muted dark:text-slate-400 mt-1">
-                  {d.current_version ? fileKindLabel(d.current_version.file_type) : 'No file'} · Updated {formatDate(d.updated_at)}
-                </Text>
-              </View>
+              <Pressable key={d.id} onPress={() => openDocFile(d)} className="mb-3 active:opacity-70">
+                <View className="p-4 rounded-xl border border-border dark:border-slate-700 bg-surface dark:bg-slate-800">
+                  <Text className="text-base font-bold text-text-primary dark:text-white">{d.title}</Text>
+                  <Text className="text-xs text-text-muted dark:text-slate-400 mt-1">
+                    {d.current_version ? fileKindLabel(d.current_version.file_type) : 'No file'} · Updated {formatDate(d.updated_at)}
+                  </Text>
+                  {d.current_version && isWeb && (
+                    <Text className="text-xs font-medium text-primary dark:text-blue-400 mt-2">Tap to open ↗</Text>
+                  )}
+                </View>
+              </Pressable>
             ))
           )}
         </ScrollView>
