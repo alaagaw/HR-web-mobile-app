@@ -34,6 +34,8 @@ const ID_TYPE_OPTIONS: { value: 'national_id' | 'iqama' | 'passport'; label: str
 export default function RegistrationFormScreen() {
   const router = useRouter();
   const { user, signOut } = useAuth();
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const setUser = useAuthStore((s) => s.setUser);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -596,7 +598,7 @@ export default function RegistrationFormScreen() {
 
               return (
                 <View style={{ marginBottom: 16 }}>
-                  <Text style={{ fontSize: 13, fontWeight: '600', marginBottom: 6, color: isWeb ? '#E2E8F0' : '#0F172A' }}>
+                  <Text style={{ fontSize: 13, fontWeight: '600', marginBottom: 6, color: isDark ? '#E2E8F0' : '#0F172A' }}>
                     ID Type
                   </Text>
                   <View style={{
@@ -729,7 +731,7 @@ export default function RegistrationFormScreen() {
             name="id_document_url"
             render={({ field: { value } }) => (
               <View style={{ marginBottom: 16 }}>
-                <Text style={{ fontSize: 13, fontWeight: '600', marginBottom: 6, color: isWeb ? '#E2E8F0' : '#0F172A' }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', marginBottom: 6, color: isDark ? '#E2E8F0' : '#0F172A' }}>
                   ID Document Upload
                 </Text>
                 {isWeb ? (
@@ -921,10 +923,10 @@ export default function RegistrationFormScreen() {
                 <Text style={{ fontSize: 16, fontWeight: '800', color: '#B45309', marginBottom: 8 }}>
                   Declaration
                 </Text>
-                <Text style={{ fontSize: 15, lineHeight: 22, color: isWeb ? '#FDE68A' : '#92400E', fontWeight: '600' }}>
+                <Text style={{ fontSize: 15, lineHeight: 22, color: isDark ? '#FDE68A' : '#92400E', fontWeight: '600' }}>
                   {REGISTRATION_DECLARATION_TEXT}
                 </Text>
-                <Text style={{ fontSize: 13, color: isWeb ? '#FCD34D' : '#B45309', marginTop: 8 }}>
+                <Text style={{ fontSize: 13, color: isDark ? '#FCD34D' : '#B45309', marginTop: 8 }}>
                   Date:{' '}
                   {(() => {
                     const d = new Date();
@@ -951,7 +953,7 @@ export default function RegistrationFormScreen() {
                   >
                     {value && <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '900' }}>✓</Text>}
                   </View>
-                  <Text style={{ flex: 1, fontSize: 14, fontWeight: '700', color: isWeb ? '#FDE68A' : '#92400E' }}>
+                  <Text style={{ flex: 1, fontSize: 14, fontWeight: '700', color: isDark ? '#FDE68A' : '#92400E' }}>
                     I have read and accept the declaration above. *
                   </Text>
                 </Pressable>
