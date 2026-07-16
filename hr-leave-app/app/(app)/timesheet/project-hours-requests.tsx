@@ -1,10 +1,12 @@
 import { AccessGate } from '@/components/access/access-gate';
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Platform } from 'react-native';
+import { View, Text, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useColorScheme } from 'nativewind';
 import { ScreenHeader } from '@/components/layout/screen-header';
+import { MobileCardList } from '@/components/ui/mobile-card-list';
+import { useBreakpoint } from '@/hooks/use-breakpoint';
 import { useAuth } from '@/hooks/use-auth';
 import { projectHoursChangeService, profileCapabilitiesService } from '@/services';
 import { format } from 'date-fns';
@@ -49,6 +51,22 @@ function statusChipColor(s: ProjectHoursChangeStatus): 'warning' | 'success' | '
   }
 }
 
+// RN status pill for the mobile card list (MUI Chip is web-DOM only).
+function StatusPill({ status }: { status: ProjectHoursChangeStatus }) {
+  const map: Record<string, { bg: string; text: string }> = {
+    [ProjectHoursChangeStatus.Pending]: { bg: 'rgba(245,158,11,0.15)', text: '#F59E0B' },
+    [ProjectHoursChangeStatus.Approved]: { bg: 'rgba(34,197,94,0.15)', text: '#22C55E' },
+    [ProjectHoursChangeStatus.Rejected]: { bg: 'rgba(239,68,68,0.15)', text: '#EF4444' },
+    [ProjectHoursChangeStatus.Cancelled]: { bg: 'rgba(148,163,184,0.15)', text: '#94A3B8' },
+  };
+  const c = map[status] ?? map[ProjectHoursChangeStatus.Cancelled];
+  return (
+    <View style={{ backgroundColor: c.bg, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 }}>
+      <Text style={{ color: c.text, fontSize: 11, fontWeight: '700' }}>{status}</Text>
+    </View>
+  );
+}
+
 function scopeLabel(s: ProjectHoursChangeScope): string {
   switch (s) {
     case ProjectHoursChangeScope.ThisWeek: return 'This week';
@@ -71,6 +89,7 @@ function ProjectHoursRequestsScreenInner() {
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { isMobile } = useBreakpoint();
 
   const [requests, setRequests] = useState<ProjectHoursChangeRequest[]>([]);
   const [loading, setLoading] = useState(false);
@@ -211,25 +230,44 @@ function ProjectHoursRequestsScreenInner() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#0b1220' }} edges={['top']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: isMobile ? (isDark ? '#0F172A' : '#F8FAFC') : '#0b1220' }} edges={['top']}>
       <ScreenHeader title="Project Hours Requests" onBack={() => router.back()} />
       <MuiThemeProvider isDark={isDark}>
-        <View style={{ padding: 16, flex: 1 }}>
-          <div style={{ height: 600, backgroundColor: '#111a2e', borderRadius: 12, padding: 8 }}>
-            <DataGrid
-              rows={rows}
-              columns={columns}
-              loading={loading}
-              onRowClick={(p: any) => handleOpenDetail(p.row.raw)}
-              pageSizeOptions={[10, 25, 50]}
-              initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
-              sx={{
-                '& .MuiDataGrid-row': { cursor: 'pointer' },
-                '& .MuiDataGrid-row:hover': { backgroundColor: 'rgba(59,130,246,0.08)' },
-              }}
-            />
-          </div>
-        </View>
+        {isMobile ? (
+          <MobileCardList
+            data={rows}
+            keyExtractor={(item) => String(item.id)}
+            loading={loading}
+            emptyTitle="No requests"
+            emptyDescription="No project-hours change requests yet."
+            onPress={(item) => handleOpenDetail(item.raw)}
+            title={(item) => item.project}
+            subtitle={(item) => `${item.scope} · Week ${item.week_start}`}
+            right={(item) => <StatusPill status={item.status} />}
+            rows={(item) => [
+              { label: 'Change', value: `${item.current} → ${item.requested} h/day` },
+              { label: 'Requester', value: item.requester },
+              { label: 'When', value: item.requested_at ? format(new Date(item.requested_at), 'yyyy-MM-dd HH:mm') : '—' },
+            ]}
+          />
+        ) : (
+          <View style={{ padding: 16, flex: 1 }}>
+            <div style={{ height: 600, backgroundColor: '#111a2e', borderRadius: 12, padding: 8 }}>
+              <DataGrid
+                rows={rows}
+                columns={columns}
+                loading={loading}
+                onRowClick={(p: any) => handleOpenDetail(p.row.raw)}
+                pageSizeOptions={[10, 25, 50]}
+                initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
+                sx={{
+                  '& .MuiDataGrid-row': { cursor: 'pointer' },
+                  '& .MuiDataGrid-row:hover': { backgroundColor: 'rgba(59,130,246,0.08)' },
+                }}
+              />
+            </div>
+          </View>
+        )}
 
         {/* Detail / decision dialog */}
         {selected && Dialog && (
@@ -238,7 +276,8 @@ function ProjectHoursRequestsScreenInner() {
             onClose={() => !submitting && setSelected(null)}
             maxWidth="sm"
             fullWidth
-            PaperProps={{ sx: { borderRadius: 3, backgroundImage: 'none' } }}
+            fullScreen={isMobile}
+            PaperProps={{ sx: { borderRadius: isMobile ? 0 : 3, backgroundImage: 'none' } }}
           >
             <DialogTitle sx={{ pb: 1, pt: 3, px: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
               <div style={{ fontSize: 18, fontWeight: 700 }}>Hours Change Request</div>
