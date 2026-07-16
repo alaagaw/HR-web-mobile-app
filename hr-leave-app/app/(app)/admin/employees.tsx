@@ -1,10 +1,11 @@
 import { AccessGate } from '@/components/access/access-gate';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, FlatList, TextInput, Platform } from 'react-native';
+import { View, Text, FlatList, TextInput, Pressable, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
 import { useViewState } from '@/hooks/use-view-state';
+import { useBreakpoint } from '@/hooks/use-breakpoint';
 import { useColorScheme } from 'nativewind';
 import { Search } from 'lucide-react-native';
 import { ScreenHeader } from '@/components/layout/screen-header';
@@ -54,10 +55,12 @@ let FormControlLabel: any;
 let Checkbox: any;
 let Menu: any;
 let IconButton: any;
+let useMediaQuery: any;
 
 if (isWeb) {
   const dg = require('@mui/x-data-grid');
   DataGrid = dg.DataGrid;
+  useMediaQuery = require('@mui/material/useMediaQuery').default;
   MuiThemeProvider = require('@/components/web/mui-theme-provider').MuiThemeProvider;
   Chip = require('@mui/material/Chip').default;
   Dialog = require('@mui/material/Dialog').default;
@@ -649,6 +652,7 @@ function EditEmployeeDialog({
   designations: string[];
   nationalities: string[];
 }) {
+  const fullScreen = useMediaQuery('(max-width:1199.95px)');
   const emp = state.employee;
   if (!emp) return null;
 
@@ -693,7 +697,8 @@ function EditEmployeeDialog({
       onClose={onClose}
       maxWidth="md"
       fullWidth
-      PaperProps={{ sx: { borderRadius: 3, backgroundImage: 'none' } }}
+      fullScreen={fullScreen}
+      PaperProps={{ sx: { borderRadius: fullScreen ? 0 : 3, backgroundImage: 'none' } }}
     >
       <DialogTitle sx={{ pb: 1, pt: 3, px: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
         <div style={{ fontSize: 18, fontWeight: 700 }}>Edit Employee</div>
@@ -1290,6 +1295,7 @@ function InviteEmployeeDialog({
   designations: string[];
   nationalities: string[];
 }) {
+  const fullScreen = useMediaQuery('(max-width:1199.95px)');
   const activeEmployees = employees.filter((e) => e.is_active);
 
   const supervisorOptions = state.show_all_supervisors
@@ -1325,7 +1331,8 @@ function InviteEmployeeDialog({
       onClose={onClose}
       maxWidth="md"
       fullWidth
-      PaperProps={{ sx: { borderRadius: 3, backgroundImage: 'none' } }}
+      fullScreen={fullScreen}
+      PaperProps={{ sx: { borderRadius: fullScreen ? 0 : 3, backgroundImage: 'none' } }}
     >
       <DialogTitle sx={{ pb: 1, pt: 3, px: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
         <div style={{ fontSize: 18, fontWeight: 700 }}>New Employee</div>
@@ -2081,6 +2088,7 @@ function EmployeesScreenInner() {
   const router = useRouter();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { isMobile } = useBreakpoint();
   const [employees, setEmployees] = useState<Profile[]>([]);
   const [search, setSearch] = useViewState('admin/employees.search', '');
   // Default ON so HR sees the full roster (incl. former employees) without
@@ -2803,8 +2811,8 @@ function EmployeesScreenInner() {
     }
   };
 
-  // --------------- Web render ---------------
-  if (isWeb) {
+  // --------------- Web render (desktop only, ≥1200px) ---------------
+  if (isWeb && !isMobile) {
     return (
       <View style={{ flex: 1, backgroundColor: isDark ? '#0F172A' : '#F8FAFC' }}>
         {/* Page header with back button */}
@@ -3160,7 +3168,7 @@ function EmployeesScreenInner() {
     <SafeAreaView className="flex-1 bg-background dark:bg-[#0F172A]" edges={['top']}>
       <ScreenHeader title="Employee Directory" />
 
-      {/* Search */}
+      {/* Search + New Employee */}
       <View className="px-4 py-3">
         <View className="flex-row items-center bg-surface dark:bg-slate-800 border border-border dark:border-slate-700 rounded-xl px-4 py-2.5">
           <Search size={18} color="#94A3B8" style={{ marginRight: 8 }} />
@@ -3172,6 +3180,14 @@ function EmployeesScreenInner() {
             placeholderTextColor="#94A3B8"
           />
         </View>
+        {isWeb && (
+          <Pressable
+            onPress={handleOpenInvite}
+            className="mt-3 flex-row items-center justify-center bg-primary rounded-xl py-3 active:opacity-80"
+          >
+            <Text className="text-white font-semibold text-sm">+ New Employee</Text>
+          </Pressable>
+        )}
       </View>
 
       <FlatList
@@ -3179,24 +3195,68 @@ function EmployeesScreenInner() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ padding: 16, paddingTop: 0, flexGrow: 1 }}
         renderItem={({ item }) => (
-          <Card className="mb-3">
-            <View className="flex-row items-center">
-              <View className="w-10 h-10 rounded-full bg-primary-light dark:bg-blue-900/40 items-center justify-center mr-3">
-                <Text className="text-sm font-bold text-primary dark:text-blue-400">{getInitials(item.full_name)}</Text>
+          <Pressable
+            onPress={() => { if (isWeb) handleOpenEdit(item); }}
+            className="active:opacity-70"
+          >
+            <Card className="mb-3">
+              <View className="flex-row items-center">
+                <View className="w-10 h-10 rounded-full bg-primary-light dark:bg-blue-900/40 items-center justify-center mr-3">
+                  <Text className="text-sm font-bold text-primary dark:text-blue-400">{getInitials(item.full_name)}</Text>
+                </View>
+                <View className="flex-1">
+                  <Text className="text-sm font-semibold text-text-primary dark:text-white">{item.full_name}</Text>
+                  <Text className="text-xs text-text-muted dark:text-slate-400">{item.email}</Text>
+                  <Text className="text-xs text-text-muted dark:text-slate-400">{item.department || 'No department'}</Text>
+                </View>
+                <Badge variant="info">{getRoleLabel(item.role)}</Badge>
               </View>
-              <View className="flex-1">
-                <Text className="text-sm font-semibold text-text-primary dark:text-white">{item.full_name}</Text>
-                <Text className="text-xs text-text-muted dark:text-slate-400">{item.email}</Text>
-                <Text className="text-xs text-text-muted dark:text-slate-400">{item.department || 'No department'}</Text>
-              </View>
-              <Badge variant="info">{getRoleLabel(item.role)}</Badge>
-            </View>
-          </Card>
+            </Card>
+          </Pressable>
         )}
         ListEmptyComponent={
           !loading ? <EmptyState title="No employees found" /> : null
         }
       />
+
+      {/* Edit / New Employee dialogs — MUI, mobile web only; each goes
+          fullScreen below 1200px via its own media query. */}
+      {MuiThemeProvider && (
+        <MuiThemeProvider isDark={isDark}>
+          <EditEmployeeDialog
+            state={dialog}
+            onClose={handleCloseDialog}
+            onCancel={handleCancelDialog}
+            onChange={handleChange}
+            onSubmit={handleSubmitEdit}
+            employees={employees}
+            departments={lookupDepartments}
+            designations={lookupDesignations}
+            nationalities={lookupNationalities}
+          />
+          <InviteEmployeeDialog
+            state={invite}
+            onClose={handleCloseInvite}
+            onCancel={handleCancelInvite}
+            onChange={handleInviteChange}
+            onSubmit={handleSubmitInvite}
+            employees={employees}
+            departments={lookupDepartments}
+            designations={lookupDesignations}
+            nationalities={lookupNationalities}
+          />
+          <Snackbar
+            open={!!successMsg}
+            autoHideDuration={4000}
+            onClose={() => setSuccessMsg('')}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+          >
+            <MuiAlert severity="success" onClose={() => setSuccessMsg('')} sx={{ fontWeight: 600 }}>
+              {successMsg}
+            </MuiAlert>
+          </Snackbar>
+        </MuiThemeProvider>
+      )}
     </SafeAreaView>
   );
 }
