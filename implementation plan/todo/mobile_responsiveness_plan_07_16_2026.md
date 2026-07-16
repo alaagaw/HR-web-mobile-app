@@ -100,6 +100,16 @@ data but was missing web ACTIONS. Fixed:
 - [x] Core: per-day editable inputs + Save + Submit for Approval (draft/rejected editable only)
 - [x] Extras: Copy Last Week, Auto-fill (fill-all-weekdays), Export CSV, inline Add Employee (search+add), Request Hours Change (HR/HRD/Manager: scope + hrs + reason)
 
+**Saudization Simulator V2 (07/16/2026):** second implementation added as a
+tab on the same page ("Quick model" = V1 untouched · "Roster-based" = V2 port
+of `SaudizationSimulator.jsx` per `SaudizationSimulator_README.md`). V2 =
+per-hire roster w/ per-employee HRDF cap, phased start months, canonical
+scenario contract (schema 1.0, import/export/template/CSV — web-gated),
+engine in `lib/saudization-sim-v2.ts` (pure), UI reuses the V1 simulator
+primitives + theme palette + 1200px breakpoints; chart reuses
+CashTimelineChart via new optional windowStart/windowEnd props (V1 default
+behavior unchanged). Both tabs stay mounted so switching never resets state.
+
 ### Status 07/16/2026: mobile-responsiveness initiative essentially COMPLETE.
 Only `registration-form.tsx` responsive polish remains (public sign-up form,
 already usable). Reusable `MobileCardList` + `useBreakpoint` (1200px) power

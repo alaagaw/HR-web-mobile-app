@@ -33,11 +33,19 @@ export function CashTimelineChart({
   lag,
   support,
   palette,
+  windowStart,
+  windowEnd,
 }: {
   months: SimMonth[];
   lag: number;
   support: number;
   palette: SimPalette;
+  /** Optional support-window override (first month support is received)
+   *  for phased hiring (V2). Defaults to the V1 derivation `lag + 1`. */
+  windowStart?: number;
+  /** Optional: month AFTER the last support window ends. Defaults to
+   *  `lag + support + 1`. */
+  windowEnd?: number;
 }) {
   const [width, setWidth] = useState(0);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
@@ -120,10 +128,10 @@ export function CashTimelineChart({
     tipTop = Math.max(4, Math.min(topAnchor - 78, height - 90));
   }
 
-  const supStartT = lag + 1;
-  const supEndT = lag + support + 1;
+  const supStartT = windowStart ?? lag + 1;
+  const supEndT = windowEnd ?? lag + support + 1;
   const xWinStart = X(supStartT);
-  const xWinEnd = X(Math.min(lag + support, n));
+  const xWinEnd = X(Math.min(supEndT - 1, n));
 
   return (
     <View

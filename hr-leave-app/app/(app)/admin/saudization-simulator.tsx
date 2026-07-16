@@ -30,6 +30,7 @@ import { KpiCard } from '@/components/simulator/kpi-card';
 import { RatioBar } from '@/components/simulator/ratio-bar';
 import { NumField } from '@/components/simulator/num-field';
 import { CashTimelineChart } from '@/components/simulator/cash-timeline-chart';
+import { SimulatorV2 } from '@/components/simulator/simulator-v2';
 import {
   SIM_DEFAULTS,
   computeSim,
@@ -56,6 +57,14 @@ const PERIOD_LABELS: Record<number, string> = {
 const RATE_OPTIONS = [
   { value: 0.4, label: '40%' },
   { value: 0.5, label: '50%' },
+];
+
+// Two implementations live side by side while HR/GM pick a winner:
+// V1 = the original quick what-if model, V2 = the roster-based port
+// of SaudizationSimulator.jsx (per-hire salaries + data contract).
+const VERSION_OPTIONS: { value: 'v1' | 'v2'; label: string }[] = [
+  { value: 'v1', label: 'Quick model' },
+  { value: 'v2', label: 'Roster-based' },
 ];
 
 // ── Small layout helpers ─────────────────────────────────────
@@ -133,6 +142,7 @@ function SimulatorInner() {
 
   const [s, setS] = useState<SimState>(SIM_DEFAULTS);
   const [period, setPeriod] = useState(3);
+  const [version, setVersion] = useState<'v1' | 'v2'>('v1');
   const patch = (p: Partial<SimState>) => setS((prev) => ({ ...prev, ...p }));
 
   const m = useMemo(() => computeSim(s), [s]);
@@ -757,6 +767,14 @@ function SimulatorInner() {
           alignSelf: 'center',
         }}
       >
+        {/* Version switcher. Both tabs stay MOUNTED (display toggle, not
+            conditional render) so flipping between them never resets a
+            scenario being edited. V1 below is unchanged. */}
+        <View style={{ flexDirection: 'row', marginBottom: 14 }}>
+          <Segmented options={VERSION_OPTIONS} value={version} onChange={setVersion} palette={palette} />
+        </View>
+
+        <View style={{ display: version === 'v1' ? 'flex' : 'none' }}>
         {/* Sub-header: intro + global actions */}
         <View
           style={{
@@ -795,6 +813,12 @@ function SimulatorInner() {
         >
           <View style={{ width: isDesktop ? 312 : '100%' }}>{controls}</View>
           {results}
+        </View>
+        </View>
+
+        {/* V2 — roster-based (per-hire salaries, phased starts, data contract) */}
+        <View style={{ display: version === 'v2' ? 'flex' : 'none' }}>
+          <SimulatorV2 />
         </View>
       </ScrollView>
     </View>
