@@ -872,8 +872,9 @@ export default function TasksScreen() {
         )
       )}
 
-      {/* Mobile Renew Modal */}
-      {!isWeb && (
+      {/* Renew Modal — native + mobile web (the RN Modal renders on web too;
+          desktop web uses the table's own renew flow) */}
+      {(!isWeb || isMobile) && (
         <Modal
           visible={!!mobileRenewTask}
           transparent

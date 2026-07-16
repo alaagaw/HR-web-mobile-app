@@ -1,6 +1,6 @@
 import { AccessGate } from '@/components/access/access-gate';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { View, Text, FlatList, Alert, Platform } from 'react-native';
+import { View, Text, FlatList, Alert, Pressable, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAutoRefresh } from '@/hooks/use-auto-refresh';
@@ -839,6 +839,30 @@ function BalancesScreenInner() {
   return (
     <SafeAreaView className="flex-1 bg-background dark:bg-[#0F172A]" edges={['top']}>
       <ScreenHeader title="Balance Management" />
+
+      {/* HR bulk actions (mobile web) */}
+      {isWeb && (
+        <>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            style={{ display: 'none' }}
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleImportFile(f); }}
+          />
+          <View className="px-4 pt-3 flex-row gap-2">
+            <Pressable onPress={handleRunAccruals} disabled={!!busy} className="flex-1 items-center justify-center bg-green-600 rounded-xl py-2.5 active:opacity-80">
+              <Text className="text-white text-xs font-semibold">{busy === 'accrue' ? 'Running…' : 'Run Accruals'}</Text>
+            </Pressable>
+            <Pressable onPress={handleExport} disabled={!!busy} className="flex-1 items-center justify-center bg-primary rounded-xl py-2.5 active:opacity-80">
+              <Text className="text-white text-xs font-semibold">{busy === 'export' ? 'Exporting…' : 'Export'}</Text>
+            </Pressable>
+            <Pressable onPress={handleImportPick} disabled={!!busy} className="flex-1 items-center justify-center bg-amber-600 rounded-xl py-2.5 active:opacity-80">
+              <Text className="text-white text-xs font-semibold">{busy === 'import' ? 'Importing…' : 'Import'}</Text>
+            </Pressable>
+          </View>
+        </>
+      )}
 
       <FlatList
         data={employees}

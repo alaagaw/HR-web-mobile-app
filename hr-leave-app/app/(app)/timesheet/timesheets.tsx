@@ -1232,6 +1232,24 @@ function TimesheetsScreenInner() {
         />
       </View>
 
+      {/* OT-split setting + export (HR tools) */}
+      <View className="px-3 pb-2 flex-row items-center gap-2">
+        <Text className="text-xs text-text-muted dark:text-slate-400">Reg hrs/day</Text>
+        <TextInput
+          value={regularHoursInput}
+          onChangeText={setRegularHoursInput}
+          keyboardType="numeric"
+          className="w-14 border border-border dark:border-slate-700 rounded-lg px-2 py-1.5 text-sm text-text-primary dark:text-white bg-surface dark:bg-slate-800 text-center"
+        />
+        <Pressable onPress={handleSetRegularHours} className="px-3 py-1.5 rounded-lg bg-primary active:opacity-80">
+          <Text className="text-white text-xs font-semibold">Set</Text>
+        </Pressable>
+        <View className="flex-1" />
+        <Pressable onPress={handleExportMonthlyExcel} className="px-3 py-1.5 rounded-lg bg-surface dark:bg-slate-800 border border-border dark:border-slate-700 active:opacity-80">
+          <Text className="text-text-primary dark:text-white text-xs font-semibold">Export</Text>
+        </Pressable>
+      </View>
+
       <MobileCardList
         data={filteredMonthlyRows}
         keyExtractor={(r: any, i: number) => String(r.employee_number ?? r.employee_name ?? i)}
